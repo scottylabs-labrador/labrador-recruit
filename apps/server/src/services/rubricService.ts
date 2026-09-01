@@ -20,6 +20,23 @@ export interface CriterionInput {
   active?: boolean;
 }
 
+/**
+ * A validation problem, keeping the criterion it concerns. `validateRubric`
+ * emits that key, but returning an inline shape made tsoa drop it, so the
+ * editor could list an issue without being able to attach it to the row it is
+ * about.
+ */
+export interface RubricIssue {
+  code: string;
+  message: string;
+  criterionKey: string | null;
+}
+
+export interface RubricValidationResponse {
+  valid: boolean;
+  issues: RubricIssue[];
+}
+
 export interface RubricVersionSummary {
   id: string;
   version: number;
@@ -246,7 +263,7 @@ export const rubricService = {
   validateDraft: (
     acUser: RecruitmentUser,
     criteria: CriterionInput[],
-  ): { valid: boolean; issues: Array<{ code: string; message: string }> } => {
+  ): RubricValidationResponse => {
     if (!canConfigureCycle({ user: acUser })) {
       throw new HttpError(403, "You are not allowed to configure rubrics");
     }
@@ -264,7 +281,11 @@ export const rubricService = {
 
     return {
       valid: result.valid,
-      issues: result.issues.map((issue) => ({ code: issue.code, message: issue.message })),
+      issues: result.issues.map((issue) => ({
+        code: issue.code,
+        message: issue.message,
+        criterionKey: issue.criterionKey ?? null,
+      })),
     };
   },
 };

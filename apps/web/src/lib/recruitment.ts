@@ -20,9 +20,9 @@ export type MyStanding =
   paths["/recruitment/cycles/{cycleId}/me"]["get"]["responses"][200]["content"]["application/json"];
 
 /* Spreadsheet import. */
-export type ImportPreview = components["schemas"]["ImportPreview"];
-export type ImportRowResult = components["schemas"]["ImportRowResult"];
-export type ImportRowError = components["schemas"]["ImportRowError"];
+export type ImportPreview = components["schemas"]["ImportPreviewSummary"];
+export type ImportRowFailure = components["schemas"]["ImportRowFailure"];
+export type ImportRowError = ImportRowFailure["errors"][number];
 export type ImportCommitReport = components["schemas"]["ImportCommitReport"];
 export type ImportSummary =
   paths["/recruitment/cycles/{cycleId}/imports"]["get"]["responses"][200]["content"]["application/json"][number];

@@ -4,7 +4,17 @@ import request from "supertest";
 import { describe, expect, it } from "vitest";
 
 import { app } from "../src/app.ts";
-import { adminAuth, adminUser, alice, aliceAuth, seedAdmin, seedAlice } from "./fixtures.ts";
+import {
+  adminAuth,
+  adminUser,
+  alice,
+  aliceAuth,
+  bob,
+  bobAuth,
+  seedAdmin,
+  seedAlice,
+  seedBob,
+} from "./fixtures.ts";
 import { testDb } from "./harness.ts";
 import {
   linkCommitteeToCycle,
@@ -122,6 +132,44 @@ describe("exports", () => {
     expect(reviewerRow.assigned).toBe(1);
     expect(reviewerRow.submitted).toBe(0);
     expect(reviewerRow.outstanding).toBe(1);
+  });
+
+  /**
+   * Reviewer coverage is the one export with no applicant data, so requiring
+   * placement rights inverted the privacy story: a lead could pull the
+   * PII-bearing ranking for their committee but not the PII-free report they
+   * need in order to ask for more reviewers.
+   */
+  it("lets a committee lead pull coverage, which carries no applicant data", async () => {
+    const { cycle, tech } = await setup();
+    await seedBob();
+    await seedMembership({
+      cycleId: cycle.id,
+      userId: bob.id,
+      role: "committee_lead",
+      committeeId: tech.id,
+    });
+
+    const coverage = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/exports/reviewer-load`)
+      .set(bobAuth());
+    expect(coverage.status).toBe(200);
+
+    // But decisions, which do carry applicant data, stay with placement rights.
+    const decisions = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/exports/decisions`)
+      .set(bobAuth());
+    expect(decisions.status).toBe(403);
+  });
+
+  it("still refuses coverage to an ordinary reviewer", async () => {
+    const { cycle } = await setup();
+
+    const res = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/exports/reviewer-load`)
+      .set(aliceAuth());
+
+    expect(res.status).toBe(403);
   });
 
   it("records every export in the audit log", async () => {

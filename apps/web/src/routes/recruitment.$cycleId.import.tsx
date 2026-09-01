@@ -22,7 +22,6 @@ import {
   formatDateTime,
   formatFileSize,
   type ImportPreview,
-  type ImportRowResult,
   type ImportSummary,
 } from "@/lib/recruitment.ts";
 
@@ -31,12 +30,6 @@ export const Route = createFileRoute("/recruitment/$cycleId/import")({
 });
 
 /** The `ok: false` half of the per-row union, which is the half that needs a table. */
-type FailedRow = Extract<ImportRowResult, { ok: false }>;
-
-function isFailedRow(result: ImportRowResult): result is FailedRow {
-  return !result.ok;
-}
-
 const STATUS_LABELS: Record<string, string> = {
   pending: "Parsed, not committed",
   previewed: "Previewed, not committed",
@@ -372,7 +365,7 @@ function ReportEntry({ label, value }: { label: string; value: number }) {
 }
 
 function PreviewSection({ preview }: { preview: ImportPreview }) {
-  const failedRows = preview.results.filter(isFailedRow);
+  const failedRows = preview.failures;
   const mappingBroken =
     preview.mapping.unmappedHeaders.length > 0 || preview.mapping.missingHeaders.length > 0;
 

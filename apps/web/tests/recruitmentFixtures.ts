@@ -312,7 +312,7 @@ export function cycleProgress(overrides: Partial<CycleProgress> = {}): CycleProg
 
 /* Spreadsheet import. */
 
-export type ImportPreview = components["schemas"]["ImportPreview"];
+export type ImportPreview = components["schemas"]["ImportPreviewSummary"];
 export type ImportCommitReport = components["schemas"]["ImportCommitReport"];
 export type ImportSummary =
   paths["/recruitment/cycles/{cycleId}/imports"]["get"]["responses"][200]["content"]["application/json"][number];
@@ -342,44 +342,20 @@ export function importPreview(overrides: Partial<ImportPreview> = {}): ImportPre
       missingHeaders: [],
     },
     duplicateEmails: [],
-    results: [
-      { ok: true, sourceRowNumber: 2, application: normalizedApplication() },
-      { ok: true, sourceRowNumber: 3, application: normalizedApplication() },
-    ],
+    failures: [],
     ...overrides,
   };
 }
 
 /**
- * The failing half of the per-row union. Written as a helper because the union
- * needs the `ok: false` literal, which a bare object literal widens to `boolean`.
+ * One rejected row as the preview reports it. The preview deliberately carries
+ * no parsed applications, only the row number and the columns at fault.
  */
 export function failedImportRow(
   sourceRowNumber: number,
   errors: Array<{ column: string; field: string; message: string; value: string | null }>,
-): ImportPreview["results"][number] {
-  return { ok: false, sourceRowNumber, rowHash: `hash-${sourceRowNumber}`, errors };
-}
-
-function normalizedApplication(): components["schemas"]["NormalizedApplication"] {
-  return {
-    sourceRowNumber: 2,
-    email: "robin@example.edu",
-    rawEmail: "Robin@example.edu",
-    fullName: "Robin Fixture",
-    major: "Information Systems",
-    year: "sophomore",
-    rawYear: "Sophomore",
-    submittedAtRaw: "2026-01-05 10:00:00",
-    rankingExplanation: null,
-    friendRequest: null,
-    heardAboutScottylabs: null,
-    committeePreferences: { tech: { rank: 1, rawLabel: "1st Choice" } },
-    subteamPreferences: [],
-    committeeOptIns: { tech: true },
-    answers: [],
-    rowHash: "hash-2",
-  };
+): ImportPreview["failures"][number] {
+  return { sourceRowNumber, errors };
 }
 
 export function importSummary(overrides: Partial<ImportSummary> = {}): ImportSummary {

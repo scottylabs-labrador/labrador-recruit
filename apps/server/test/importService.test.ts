@@ -93,6 +93,37 @@ describe("import preview", () => {
     expect(preview.mapping.fields.length).toBeGreaterThan(0);
   });
 
+  /**
+   * The preview screen renders counts and failures, so sending the parsed
+   * applications for every clean row would put every answer of every applicant
+   * on the wire for nothing.
+   */
+  it("keeps applicant answers out of the preview payload", async () => {
+    const { cycle } = await setupCycle();
+
+    const { preview } = await importService.createImport(
+      adminFor(cycle.id),
+      cycle.id,
+      "fall-2026-sample.xlsx",
+      fixtureBase64(),
+    );
+
+    expect(preview.okCount).toBeGreaterThan(0);
+    expect(preview.failures.length).toBe(preview.errorCount);
+
+    const serialised = JSON.stringify(preview);
+    // No parsed applications, so no answers and no preference maps.
+    expect(serialised).not.toContain('"answers"');
+    expect(serialised).not.toContain('"committeePreferences"');
+    expect("results" in preview).toBe(false);
+
+    // Two disclosures are deliberate and minimal, because the admin cannot
+    // repair the file without them: the duplicated address, and the cell that
+    // failed to parse. Both are scoped to rows that need fixing.
+    expect(preview.duplicateEmails.length).toBeGreaterThan(0);
+    expect(preview.failures.every((row) => row.errors.length > 0)).toBe(true);
+  });
+
   it("reports duplicate emails without resolving them", async () => {
     const { cycle } = await setupCycle();
 

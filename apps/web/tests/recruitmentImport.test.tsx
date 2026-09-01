@@ -73,7 +73,7 @@ describe("application import", () => {
           missingHeaders: ["Rank the committees"],
         },
         duplicateEmails: ["robin@example.edu"],
-        results: [
+        failures: [
           failedImportRow(4, [
             {
               column: "Email Address",

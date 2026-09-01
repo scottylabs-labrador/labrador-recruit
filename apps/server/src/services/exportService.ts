@@ -1,5 +1,5 @@
 import type { RecruitmentUser } from "@labrador/access-control";
-import { canDecidePlacement } from "@labrador/access-control";
+import { canAssignReviewers, canDecidePlacement } from "@labrador/access-control";
 import { candidacyVisibilityWhere } from "@labrador/access-control/visibility";
 import {
   applicant,
@@ -279,7 +279,12 @@ export const exportService = {
     acUser: RecruitmentUser,
     cycleId: string,
   ): Promise<ReviewerLoadExportRow[]> => {
-    if (!canDecidePlacement({ user: acUser })) {
+    // Gated on managing assignments rather than making placements. This is the
+    // one export carrying no applicant data at all, so requiring the higher
+    // permission inverted the privacy story: a committee lead could pull the
+    // PII-bearing ranking for their committee but not the PII-free coverage
+    // report they need to ask for more reviewers.
+    if (!canAssignReviewers({ user: acUser })) {
       throw new HttpError(403, "You are not allowed to export reviewer reports");
     }
 
