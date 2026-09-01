@@ -73,6 +73,9 @@ bun run dev:local                         # web on :3000, API on :8080
 bun run dev:login rjones --admin          # prints a cookie to paste in the browser
 ```
 
+The **"Sign In" button does not work locally** — it redirects to Keycloak, and the local
+environment ships a placeholder issuer that does not resolve. Use `dev:login` instead.
+
 `dev:login` is a script rather than an endpoint on purpose: a dev-login route would be one
 misconfigured environment variable away from letting anyone authenticate as an
 administrator in production.

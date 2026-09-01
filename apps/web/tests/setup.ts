@@ -16,6 +16,7 @@ import {
   setReview,
   setRubric,
   setSession,
+  setSignInFails,
   setStanding,
   setWorkloads,
 } from "./msw/handlers.ts";
@@ -52,6 +53,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   setSession(null);
+  setSignInFails(false);
   setAdminUsers([]);
   setCycles([]);
   setCommittees([]);

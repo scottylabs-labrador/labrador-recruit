@@ -138,8 +138,23 @@ function applySave(current: Review, body: SaveBody): Review {
   };
 }
 
+/**
+ * Simulates the identity provider being unreachable, which is what a
+ * misconfigured issuer or a Keycloak outage looks like from the browser.
+ */
+export let signInFails = false;
+export function setSignInFails(next: boolean) {
+  signInFails = next;
+}
+
 export const handlers = [
   http.get(`${API_URL}/api/auth/*`, () => {
+    return HttpResponse.json(session);
+  }),
+  http.post(`${API_URL}/api/auth/sign-in/*`, () => {
+    if (signInFails) {
+      return HttpResponse.json({ message: "provider unreachable" }, { status: 500 });
+    }
     return HttpResponse.json(session);
   }),
   http.post(`${API_URL}/api/auth/*`, () => {
