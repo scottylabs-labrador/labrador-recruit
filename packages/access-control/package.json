@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "dependencies": {
     "@casl/ability": "^7.0.1",
+    "@labrador/db": "workspace:*",
     "@ucast/core": "^2.0.0",
     "drizzle-orm": "^0.45.2"
   },
@@ -11,7 +12,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./drizzle": "./src/drizzle.ts"
+    "./drizzle": "./src/drizzle.ts",
+    "./visibility": "./src/visibility.ts"
   },
   "scripts": {
     "test": "vitest run"

@@ -5,6 +5,9 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
+      "@labrador/access-control": ["../../packages/access-control/src/index.ts"],
+      "@labrador/common": ["../../packages/common/src/index.ts"],
+      "@labrador/common/recruitment": ["../../packages/common/src/recruitment/index.ts"],
       "@labrador/db": ["../../packages/db/src/index.ts"],
       "@labrador/db/*": ["../../packages/db/src/*"]
     }
