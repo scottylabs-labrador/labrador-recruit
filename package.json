@@ -35,7 +35,7 @@
     "build:api": "cd apps/server && bun run build:api",
     "check": "bun run quality && turbo run test && bun run test:e2e",
     "db:migrate:local": "dotenv -e .env.local -- bunx drizzle-kit migrate --config=packages/db/drizzle.config.ts",
-    "db:seed:local": "dotenv -e .env.local -- bun run packages/db/src/seed.ts",
+    "db:seed:local": "dotenv -e .env.local -- bun run packages/db/src/seedCli.ts",
     "dev": "turbo run dev",
     "dev:local": "turbo run dev:local",
     "dev:login": "dotenv -e .env.local -- bun run apps/server/scripts/devLogin.ts",

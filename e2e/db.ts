@@ -154,6 +154,17 @@ export async function seedRecruitmentCycle(): Promise<{ cycleId: string }> {
   return { cycleId: summary.cycleId };
 }
 
+/** Every assignment on a candidacy, so a test can act as two reviewers on one. */
+export async function assignmentsForCandidacy(candidacyId: string) {
+  return db
+    .select({
+      assignmentId: reviewAssignment.id,
+      reviewerUserId: reviewAssignment.reviewerUserId,
+    })
+    .from(reviewAssignment)
+    .where(eq(reviewAssignment.candidacyId, candidacyId));
+}
+
 /** The first assignment belonging to a given reviewer, for deep-linking. */
 export async function firstAssignmentFor(reviewerUserId: string) {
   const rows = await db

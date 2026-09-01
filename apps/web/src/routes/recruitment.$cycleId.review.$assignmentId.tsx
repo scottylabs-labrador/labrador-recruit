@@ -168,7 +168,21 @@ function ReviewPage() {
 
   const locked = reviewData?.submittedAt != null;
   const conflicted = current?.status === "conflicted";
-  const criteria = rubric.data?.criteria ?? [];
+  /**
+   * Only reviewer-scored criteria are shown or required.
+   *
+   * A rubric also carries derived criteria — currently the applicant's own
+   * committee preference — which are computed from what the applicant
+   * submitted, never entered by a reviewer. Rendering one as an input asks for
+   * a score the server refuses with 422, and counting one as missing makes the
+   * form permanently unsubmittable.
+   */
+  const criteria = (rubric.data?.criteria ?? []).filter(
+    (criterion) => criterion.source === "reviewer",
+  );
+  const derivedCriteria = (rubric.data?.criteria ?? []).filter(
+    (criterion) => criterion.source !== "reviewer",
+  );
 
   function updateForm(patch: Partial<FormState>) {
     setForm((previousState) => {
@@ -387,6 +401,27 @@ function ReviewPage() {
                         }
                       />
                     ))
+                  )}
+
+                  {derivedCriteria.length === 0 ? null : (
+                    <div className="rounded-md border border-dashed border-border px-3 py-2">
+                      <p className="text-sm font-medium text-foreground">
+                        Also counted, but not yours to score
+                      </p>
+                      <ul className="mt-1 flex flex-col gap-1">
+                        {derivedCriteria.map((criterion) => (
+                          <li
+                            key={criterion.id}
+                            className="text-sm leading-6 text-muted-foreground"
+                          >
+                            <span className="font-medium">{criterion.label}</span>
+                            {" — "}
+                            {Math.round(criterion.weight * 100)}% of the total, derived from the
+                            ranking the applicant submitted themselves.
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
 
                   <div className="flex flex-col gap-1.5">

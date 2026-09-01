@@ -86,6 +86,29 @@ describe("review page", () => {
     expect(await screen.findByText("No committee-specific response submitted.")).toBeDefined();
   });
 
+  /**
+   * A derived criterion is part of the rubric and part of the score, but the
+   * reviewer never enters it and the server rejects any attempt to. Rendering
+   * one as an input made the form permanently unsubmittable, which only showed
+   * up end to end because the earlier fixture rubric had no derived criterion.
+   */
+  it("shows a derived criterion as context rather than as something to score", async () => {
+    seed();
+    await renderApp(REVIEW_PATH);
+
+    await screen.findByRole("button", { name: "Submit review" });
+
+    // The reviewer-scored criterion has radios.
+    expect(document.querySelector("#criterion-technical_depth-3")).not.toBeNull();
+    // The derived one does not.
+    expect(document.querySelector("#criterion-preference-3")).toBeNull();
+
+    expect(await screen.findByText("Also counted, but not yours to score")).toBeDefined();
+    expect(
+      await screen.findByText(/derived from the ranking the applicant submitted themselves/),
+    ).toBeDefined();
+  });
+
   it("refuses to submit without a rationale and explains why", async () => {
     const user = userEvent.setup();
     seed();
