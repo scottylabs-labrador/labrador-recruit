@@ -138,6 +138,55 @@ describe("review queue", () => {
   });
 });
 
+describe("own recruitment standing", () => {
+  it("tells a reviewer which committees they review for", async () => {
+    const { cycle, tech } = await setupScenario();
+
+    const res = await request(app).get(`/recruitment/cycles/${cycle.id}/me`).set(aliceAuth());
+
+    expect(res.status).toBe(200);
+    expect(res.body.userId).toBe(alice.id);
+    expect(res.body.memberships).toEqual([{ role: "reviewer", committeeId: tech.id }]);
+    expect(res.body.blindReviewEnabled).toBe(false);
+  });
+
+  it("tells an admin they hold a cycle-wide role, so the interface can offer admin actions", async () => {
+    const { cycle } = await setupScenario();
+
+    const res = await request(app).get(`/recruitment/cycles/${cycle.id}/me`).set(adminAuth());
+
+    expect(res.status).toBe(200);
+    expect(res.body.memberships).toContainEqual({
+      role: "recruitment_admin",
+      committeeId: null,
+    });
+  });
+
+  it("reports which candidacies the caller has already unblinded", async () => {
+    const { cycle, candidacy, aliceAssignment } = await setupScenario();
+
+    const before = await request(app).get(`/recruitment/cycles/${cycle.id}/me`).set(aliceAuth());
+    expect(before.body.unblindedCandidacyIds).toHaveLength(0);
+
+    await request(app)
+      .post(`/recruitment/assignments/${aliceAssignment.id}/review/submit`)
+      .set(aliceAuth())
+      .send(COMPLETE_REVIEW);
+
+    const after = await request(app).get(`/recruitment/cycles/${cycle.id}/me`).set(aliceAuth());
+    expect(after.body.unblindedCandidacyIds).toEqual([candidacy.id]);
+  });
+
+  it("hides a cycle the caller has no standing in", async () => {
+    await setupScenario();
+    const other = await seedCycle({ slug: "spring-2027", name: "Spring 2027" });
+
+    const res = await request(app).get(`/recruitment/cycles/${other.id}/me`).set(aliceAuth());
+
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("independent review", () => {
   it("shows a reviewer only their own review before they submit", async () => {
     const { candidacy, bobAssignment } = await setupScenario();

@@ -48,11 +48,26 @@ export interface RankingRow {
   applicantName: string | null;
   applicantRank: number | null;
   submittedCount: number;
+  /** So a row can render "2 of 3" without a second request. */
+  minimumReviews: number;
   mean: number | null;
   median: number | null;
   spread: number | null;
+  recommendationCounts: Record<string, number>;
   flagged: boolean;
   reasons: string[];
+}
+
+/** One review as the interface consumes it, with the numeric column parsed. */
+export interface CandidacyReviewSummary {
+  reviewId: string;
+  reviewerUserId: string;
+  /** Parsed from the numeric column, so it is never a string to the client. */
+  computedScore: number | null;
+  recommendation: string | null;
+  confidence: string | null;
+  rationale: string | null;
+  submittedAt: Date | null;
 }
 
 function countBy(values: Array<string | null>): Record<string, number> {
@@ -264,9 +279,11 @@ export const aggregateService = {
         applicantName: aggregate.applicantName,
         applicantRank: aggregate.applicantRank,
         submittedCount: aggregate.submittedCount,
+        minimumReviews: aggregate.minimumReviews,
         mean: aggregate.statistics.mean,
         median: aggregate.statistics.median,
         spread: aggregate.statistics.spread,
+        recommendationCounts: aggregate.recommendationCounts,
         flagged: aggregate.disagreement.flagged,
         reasons: aggregate.disagreement.reasons,
       };
@@ -288,7 +305,10 @@ export const aggregateService = {
    * derivation. Visibility still applies: a reviewer who has not submitted sees
    * only their own.
    */
-  getCandidacyReviews: async (acUser: RecruitmentUser, candidacyId: string) => {
+  getCandidacyReviews: async (
+    acUser: RecruitmentUser,
+    candidacyId: string,
+  ): Promise<CandidacyReviewSummary[]> => {
     const unblinded = acUser.recruitment.unblindedCandidacyIds ?? [];
     const isPrivileged = acUser.recruitment.memberships.some(
       (m) => m.role === "recruitment_admin" || m.role === "committee_lead",
@@ -315,10 +335,10 @@ export const aggregateService = {
           ),
         );
 
-      return own;
+      return own.map(toReviewSummary);
     }
 
-    return db
+    const rows = await db
       .select({
         reviewId: review.id,
         reviewerUserId: reviewAssignment.reviewerUserId,
@@ -338,5 +358,32 @@ export const aggregateService = {
           candidacyVisibilityWhere(acUser, committeeCandidacy),
         ),
       );
+
+    return rows.map(toReviewSummary);
   },
 };
+
+/**
+ * Drizzle returns a `numeric` column as a string to avoid float rounding. The
+ * conversion belongs here rather than in the interface, so a score is a number
+ * everywhere it crosses the API.
+ */
+function toReviewSummary(row: {
+  reviewId: string;
+  reviewerUserId: string;
+  computedScore: string | null;
+  recommendation: string | null;
+  confidence: string | null;
+  rationale: string | null;
+  submittedAt: Date | null;
+}): CandidacyReviewSummary {
+  return {
+    reviewId: row.reviewId,
+    reviewerUserId: row.reviewerUserId,
+    computedScore: row.computedScore === null ? null : Number(row.computedScore),
+    recommendation: row.recommendation,
+    confidence: row.confidence,
+    rationale: row.rationale,
+    submittedAt: row.submittedAt,
+  };
+}

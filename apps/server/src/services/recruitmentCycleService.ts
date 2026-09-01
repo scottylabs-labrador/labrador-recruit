@@ -206,6 +206,40 @@ export const recruitmentCycleService = {
     return updated;
   },
 
+  /**
+   * The caller's own recruitment standing in a cycle.
+   *
+   * Exists because the browser runs the same `can*` predicates the server does,
+   * and it cannot do that without knowing which memberships it holds. Without
+   * this the interface has to assume least privilege, which silently hides
+   * actions an admin is entitled to.
+   *
+   * Returns only the caller's own standing, so it needs no permission check
+   * beyond being able to see the cycle at all.
+   */
+  getMyStanding: async (
+    acUser: RecruitmentUser,
+    cycleId: string,
+  ): Promise<{
+    userId: string;
+    globalRole: string;
+    cycleId: string;
+    memberships: Array<{ role: string; committeeId: string | null }>;
+    unblindedCandidacyIds: string[];
+    blindReviewEnabled: boolean;
+  }> => {
+    await recruitmentCycleService.getCycle(acUser, cycleId);
+
+    return {
+      userId: acUser.id,
+      globalRole: acUser.role,
+      cycleId,
+      memberships: acUser.recruitment.memberships,
+      unblindedCandidacyIds: acUser.recruitment.unblindedCandidacyIds ?? [],
+      blindReviewEnabled: acUser.recruitment.blindReviewEnabled ?? false,
+    };
+  },
+
   listCommittees: async (acUser: RecruitmentUser, cycleId: string): Promise<CommitteeSummary[]> => {
     await recruitmentCycleService.getCycle(acUser, cycleId);
 
