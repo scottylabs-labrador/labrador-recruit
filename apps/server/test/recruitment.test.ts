@@ -1,3 +1,5 @@
+import { application as applicationTable } from "@labrador/db/schema";
+import { eq } from "drizzle-orm";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 
@@ -13,6 +15,7 @@ import {
   seedAlice,
   seedBob,
 } from "./fixtures.ts";
+import { testDb } from "./harness.ts";
 import {
   linkCommitteeToCycle,
   seedApplicant,
@@ -184,6 +187,35 @@ describe("own recruitment standing", () => {
     const res = await request(app).get(`/recruitment/cycles/${other.id}/me`).set(aliceAuth());
 
     expect(res.status).toBe(404);
+  });
+});
+
+describe("leadership-only context", () => {
+  /**
+   * The friend-placement answer is context for a placement conversation and is
+   * excluded from every scoring path. Withholding it at the server, rather than
+   * returning it and trusting the interface not to render it, is what makes
+   * that a rule instead of a convention.
+   */
+  it("withholds the friend request from an ordinary reviewer but sends it to leadership", async () => {
+    const { application } = await setupScenario();
+
+    await testDb
+      .update(applicationTable)
+      .set({ friendRequest: "I would like to be with Sam." })
+      .where(eq(applicationTable.id, application.id));
+
+    const reviewerView = await request(app)
+      .get(`/recruitment/applications/${application.id}`)
+      .set(aliceAuth());
+    expect(reviewerView.status).toBe(200);
+    expect(reviewerView.body.friendRequest).toBeNull();
+
+    const adminView = await request(app)
+      .get(`/recruitment/applications/${application.id}`)
+      .set(adminAuth());
+    expect(adminView.status).toBe(200);
+    expect(adminView.body.friendRequest).toBe("I would like to be with Sam.");
   });
 });
 

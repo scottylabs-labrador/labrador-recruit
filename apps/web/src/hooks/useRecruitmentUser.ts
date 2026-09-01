@@ -1,49 +1,78 @@
-import type { Membership, RecruitmentUser } from "@labrador/access-control";
+import type { Membership, RecruitmentRole, RecruitmentUser, Role } from "@labrador/access-control";
 
-import { useUser } from "@/hooks/useUser.ts";
+import { $api } from "@/lib/apiClient";
 
-interface RecruitmentUserOptions {
-  cycleId: string | null;
-  /** The cycle's blind-review setting, from `GET /recruitment/cycles/{cycleId}`. */
-  blindReviewEnabled?: boolean | undefined;
-  /** Candidacies where this reviewer has already submitted, so peers unblind. */
-  unblindedCandidacyIds?: string[] | undefined;
-  /** True once the caller is known to hold a membership in this cycle. */
-  isMember?: boolean | undefined;
+const GLOBAL_ROLES: readonly Role[] = ["admin", "user", "guest"];
+
+export interface RecruitmentStanding {
+  /** The caller as the `@labrador/access-control` predicates expect them. */
+  user: RecruitmentUser;
+  /** False while `/me` is still in flight, so callers can hold off on gating. */
+  isLoaded: boolean;
+  /**
+   * True when the caller holds no standing in this cycle. `/me` 404s in that
+   * case, which is an answer rather than a failure.
+   */
+  hasNoAccess: boolean;
+  /**
+   * True for a `committee_lead` or `recruitment_admin`. Read straight off the
+   * memberships the server sent, not re-derived from anything else.
+   */
+  isLeadership: boolean;
 }
 
 /**
- * Assembles the `RecruitmentUser` that `@labrador/access-control` predicates
- * take, so the browser asks the *same* questions the server asks rather than
- * reimplementing the rules.
+ * Loads the caller's own recruitment standing and assembles the
+ * `RecruitmentUser` that `@labrador/access-control` takes, so the browser
+ * evaluates the identical predicates the server evaluates rather than guessing.
  *
- * One caveat is worth stating plainly: the API exposes no endpoint returning the
- * caller's recruitment memberships, so the browser cannot know whether the
- * caller is a reviewer, a committee lead, or a recruitment admin. `GET
- * /recruitment/cycles` only returns cycles the caller holds *some* membership
- * in, so the least-privilege assumption — a cycle-wide `reviewer` — is the most
- * the browser can safely claim. Under-claiming is the safe direction: it can
- * only hide an affordance the server would have allowed, never reveal one it
- * would refuse. The server remains the enforcement point either way.
+ * While `/me` is in flight the caller is treated as having no standing at all.
+ * That direction is the safe one: it hides affordances that are about to
+ * appear, instead of flashing ones the server would refuse.
  */
-export function useRecruitmentUser({
-  cycleId,
-  blindReviewEnabled,
-  unblindedCandidacyIds,
-  isMember = true,
-}: RecruitmentUserOptions): RecruitmentUser {
-  const user = useUser();
+export function useRecruitmentUser(cycleId: string | null): RecruitmentStanding {
+  const standing = $api.useQuery(
+    "get",
+    "/recruitment/cycles/{cycleId}/me",
+    { params: { path: { cycleId: cycleId ?? "" } } },
+    { enabled: cycleId !== null, retry: false },
+  );
 
-  const memberships: Membership[] =
-    isMember && cycleId !== null && user.id !== "" ? [{ role: "reviewer", committeeId: null }] : [];
+  const data = standing.data;
+  const memberships = data === undefined ? [] : data.memberships.map(toMembership);
 
-  return {
-    ...user,
+  const user: RecruitmentUser = {
+    id: data?.userId ?? "",
+    role: toGlobalRole(data?.globalRole),
     recruitment: {
       cycleId,
       memberships,
-      unblindedCandidacyIds: unblindedCandidacyIds ?? [],
-      blindReviewEnabled: blindReviewEnabled ?? false,
+      unblindedCandidacyIds: data?.unblindedCandidacyIds ?? [],
+      blindReviewEnabled: data?.blindReviewEnabled ?? false,
     },
   };
+
+  return {
+    user,
+    isLoaded: data !== undefined,
+    hasNoAccess: standing.isError,
+    isLeadership: memberships.some(
+      (membership) =>
+        membership.role === "committee_lead" || membership.role === "recruitment_admin",
+    ),
+  };
+}
+
+/**
+ * The generated schema now carries `committeeId: string | null` and the role
+ * union, so this is a straight pass-through. It stays as a named function
+ * because it is the single place the wire shape becomes an access-control
+ * `Membership`, and that is worth keeping obvious.
+ */
+function toMembership(row: { role: RecruitmentRole; committeeId: string | null }): Membership {
+  return { role: row.role, committeeId: row.committeeId };
+}
+
+function toGlobalRole(role: Role | undefined): Role {
+  return GLOBAL_ROLES.find((known) => known === role) ?? "guest";
 }

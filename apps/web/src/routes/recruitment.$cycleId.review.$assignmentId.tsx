@@ -59,9 +59,6 @@ function ReviewPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const cycle = $api.useQuery("get", "/recruitment/cycles/{cycleId}", {
-    params: { path: { cycleId } },
-  });
   const queue = $api.useQuery("get", "/recruitment/cycles/{cycleId}/my-queue", {
     params: { path: { cycleId } },
   });
@@ -92,14 +89,13 @@ function ReviewPage() {
     { enabled: current !== undefined },
   );
 
-  const user = useRecruitmentUser({
-    cycleId,
-    blindReviewEnabled: cycle.data?.blindReviewEnabled,
-    unblindedCandidacyIds: queueItems
-      .filter((item) => item.submitted)
-      .map((item) => item.candidacyId),
-  });
-  const identityVisible = canReadApplicantIdentity({ user, cycleId });
+  // `/me` carries the caller's memberships, blind-review setting, and the
+  // candidacies they have already submitted on, so both predicates below are the
+  // server's own, evaluated over the server's own inputs.
+  const { user, isLoaded: standingLoaded } = useRecruitmentUser(cycleId);
+  // Only claim identity is being withheld once the standing is actually known,
+  // so the notice never flashes on a cycle that is not running blind review.
+  const identityHidden = standingLoaded && !canReadApplicantIdentity({ user, cycleId });
   const mayReopen = canReopenReview({ user });
 
   const [form, setForm] = useState<FormState | null>(null);
@@ -277,12 +273,12 @@ function ReviewPage() {
             {current.year}
             {current.major === null ? "" : ` · ${current.major}`}
           </p>
-          {identityVisible ? null : (
+          {identityHidden ? (
             <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <EyeOff className="size-3.5" aria-hidden />
               Blind review is on for this cycle, so applicant identity is withheld.
             </p>
-          )}
+          ) : null}
         </div>
 
         <nav aria-label="Queue navigation" className="flex items-center gap-2">

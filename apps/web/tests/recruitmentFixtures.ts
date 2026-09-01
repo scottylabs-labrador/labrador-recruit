@@ -1,4 +1,4 @@
-import type { components } from "@labrador/server/build/swagger";
+import type { components, paths } from "@labrador/server/build/swagger";
 
 /**
  * Synthetic recruitment fixtures. Shapes are taken straight from the generated
@@ -14,22 +14,17 @@ export type Aggregate = components["schemas"]["CandidacyAggregate"];
 export type RankingEntry = components["schemas"]["RankingRow"];
 export type ApplicationDetail = components["schemas"]["ApplicationDetail"];
 export type RubricCriterion = components["schemas"]["RubricCriterionSummary"];
+export type PeerReview = components["schemas"]["CandidacyReviewSummary"];
+export type MyStanding =
+  paths["/recruitment/cycles/{cycleId}/me"]["get"]["responses"][200]["content"]["application/json"];
+export type CycleProgress =
+  paths["/recruitment/cycles/{cycleId}/progress"]["get"]["responses"][200]["content"]["application/json"];
 
 export interface Rubric {
   id: string;
   name: string;
   version: number;
   criteria: RubricCriterion[];
-}
-
-export interface PeerReview {
-  reviewId: string;
-  reviewerUserId: string;
-  recommendation: "strong_yes" | "yes" | "unsure" | "no" | "strong_no";
-  confidence: "high" | "medium" | "low";
-  rationale: string;
-  computedScore: string;
-  submittedAt: string;
 }
 
 export type Application = components["schemas"]["ApplicationListItem"] & {
@@ -257,8 +252,46 @@ export function peerReview(overrides: Partial<PeerReview> = {}): PeerReview {
     recommendation: "yes",
     confidence: "medium",
     rationale: "Solid project experience and clear writing.",
-    computedScore: "4.00",
+    computedScore: 4,
     submittedAt: "2026-02-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+/**
+ * The caller's own standing. `committeeId` is typed `string` by the generated
+ * client but is `null` on the wire for a cycle-wide membership, so the
+ * cycle-wide fixtures below cast deliberately to reproduce what the server
+ * actually sends.
+ */
+export function myStanding(overrides: Partial<MyStanding> = {}): MyStanding {
+  return {
+    userId: "alice",
+    globalRole: "user",
+    cycleId: CYCLE_ID,
+    memberships: [{ role: "reviewer", committeeId: null as unknown as string }],
+    unblindedCandidacyIds: [],
+    blindReviewEnabled: false,
+    ...overrides,
+  };
+}
+
+export function leadStanding(committeeId = COMMITTEE_TECH): MyStanding {
+  return myStanding({ memberships: [{ role: "committee_lead", committeeId }] });
+}
+
+export function adminStanding(): MyStanding {
+  return myStanding({
+    globalRole: "admin",
+    memberships: [{ role: "recruitment_admin", committeeId: null as unknown as string }],
+  });
+}
+
+export function cycleProgress(overrides: Partial<CycleProgress> = {}): CycleProgress {
+  return {
+    applicationCount: 1,
+    candidacyCount: 1,
+    placementCount: 0,
     ...overrides,
   };
 }

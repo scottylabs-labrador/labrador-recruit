@@ -63,6 +63,29 @@ function RecruitmentLayout() {
 
   const activeCycle = list.find((cycle) => cycle.id === cycleId);
 
+  // `/recruitment/cycles` returns only cycles the caller holds standing in, so a
+  // cycle id that is absent from it is a cycle they have no access to. Saying so
+  // once here is clearer than letting every child screen fail its own request.
+  if (cycleId !== undefined && activeCycle === undefined) {
+    return (
+      <div className="mx-auto w-full max-w-[1400px] px-6 py-10">
+        <h1 className="mb-4 text-xl font-semibold">Recruitment</h1>
+        <EmptyState title="You do not have access to this cycle">
+          <p className="max-w-[62ch] text-[0.95rem] leading-7 text-muted-foreground">
+            You hold no recruitment membership in this cycle, so none of its applicants, reviews, or
+            rankings are visible to you.
+          </p>
+          <Link
+            to="/recruitment"
+            className="text-primary-strong underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            See the cycles you can open
+          </Link>
+        </EmptyState>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col px-6 py-5">
       <header className="flex flex-col gap-3 border-b border-border pb-3">

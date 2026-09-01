@@ -1,6 +1,7 @@
-import type { components } from "@labrador/server/build/swagger";
+import type { components, paths } from "@labrador/server/build/swagger";
 
 export type QueueItem = components["schemas"]["QueueItem"];
+export type CandidacyReviewSummary = components["schemas"]["CandidacyReviewSummary"];
 export type ReviewDetail = components["schemas"]["ReviewDetail"];
 export type CycleSummary = components["schemas"]["CycleSummary"];
 export type CommitteeSummary = components["schemas"]["CommitteeSummary"];
@@ -14,15 +15,37 @@ export type RecommendationValue = components["schemas"]["RecommendationValue"];
 export type ConfidenceValue = "high" | "medium" | "low";
 export type SaveReviewRequest = components["schemas"]["SaveReviewRequest"];
 
-/** Assignment statuses, as the server's `status` query parameter accepts them. */
-export type AssignmentStatus = "assigned" | "in_progress" | "submitted" | "conflicted";
+/** The caller's own recruitment standing in one cycle. */
+export type MyStanding =
+  paths["/recruitment/cycles/{cycleId}/me"]["get"]["responses"][200]["content"]["application/json"];
 
-export const QUEUE_STATUS_OPTIONS: ReadonlyArray<{ value: AssignmentStatus; label: string }> = [
+/**
+ * The assignment statuses `/my-queue` can return. `cancelled` is deliberately
+ * absent: the server excludes those rows, so offering it as a filter would only
+ * ever produce an empty table.
+ *
+ * The spec types both `QueueItem.status` and the `status` query parameter as a
+ * bare `string`, so this union is the only place the four values are checked.
+ * Everything that filters or labels a queue row goes through it.
+ */
+export type QueueStatus = "assigned" | "in_progress" | "submitted" | "conflicted";
+
+export type QueueStatusLabel = "Not started" | "Draft" | "Submitted" | "Conflicted";
+
+export const QUEUE_STATUS_OPTIONS: ReadonlyArray<{
+  value: QueueStatus;
+  label: QueueStatusLabel;
+}> = [
   { value: "assigned", label: "Not started" },
   { value: "in_progress", label: "Draft" },
   { value: "submitted", label: "Submitted" },
   { value: "conflicted", label: "Conflicted" },
 ];
+
+/** Narrows the spec's untyped `status` string before it is used as a filter. */
+export function isQueueStatus(value: string): value is QueueStatus {
+  return QUEUE_STATUS_OPTIONS.some((option) => option.value === value);
+}
 
 export const RECOMMENDATION_OPTIONS: ReadonlyArray<{
   value: RecommendationValue;
@@ -58,7 +81,7 @@ export function confidenceLabel(value: string | null): string {
   return CONFIDENCE_OPTIONS.find((option) => option.value === value)?.label ?? value;
 }
 
-export function queueStatusLabel(item: QueueItem): string {
+export function queueStatusLabel(item: QueueItem): QueueStatusLabel {
   if (item.status === "conflicted") return "Conflicted";
   if (item.submitted || item.status === "submitted") return "Submitted";
   if (item.hasDraft || item.status === "in_progress") return "Draft";

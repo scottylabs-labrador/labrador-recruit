@@ -23,9 +23,12 @@ code {
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  /* ScottyLabs brand blue #0e96d1. `--primary-foreground` is a dark neutral rather
-     than white because white on the brand blue is only 3.3:1; the dark neutral
-     reaches 5.9:1, so solid primary controls stay readable without shifting the hue. */
+  /*
+   * ScottyLabs brand blue #0e96d1. `--primary-foreground` is a dark neutral
+   * rather than white because white on the brand blue is only 3.3:1; the dark
+   * neutral reaches 5.9:1, so solid primary controls stay readable without
+   * shifting the hue.
+   */
   --primary: oklch(0.637 0.134 236);
   --primary-foreground: oklch(0.205 0 0);
   /* A darkened brand blue reserved for text and links, where 4.5:1 is required. */
@@ -63,8 +66,10 @@ code {
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  /* Lifted brand blue so it separates from the dark surface; the dark neutral
-     foreground stays 7:1 against it. */
+  /*
+   * Lifted brand blue so it separates from the dark surface; the dark neutral
+   * foreground stays 7:1 against it.
+   */
   --primary: oklch(0.72 0.12 236);
   --primary-foreground: oklch(0.145 0 0);
   --primary-strong: oklch(0.8 0.1 236);

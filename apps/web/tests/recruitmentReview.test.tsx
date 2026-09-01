@@ -13,12 +13,15 @@ import {
   setReview,
   setRubric,
   setSession,
+  setStanding,
 } from "./msw/handlers.ts";
 import {
+  adminStanding,
   application,
   ASSIGNMENT_ID,
   committee,
   cycle,
+  myStanding,
   peerReview,
   queueEntry,
   review,
@@ -38,6 +41,7 @@ function seed() {
   setRubric(rubric());
   setReview(review());
   setPeerReviews([peerReview()]);
+  setStanding(myStanding());
 }
 
 async function fillValidReview(user: ReturnType<typeof userEvent.setup>) {
@@ -147,6 +151,22 @@ describe("review page", () => {
     expect(requestsMatching("POST", "/review/submit")).toHaveLength(1);
 
     expect(await screen.findByText("Solid project experience and clear writing.")).toBeDefined();
+  });
+
+  it("offers Reopen to a recruitment admin on a locked review, but not to a reviewer", async () => {
+    seed();
+    setReview(review({ submittedAt: "2026-02-01T00:00:00.000Z", computedScore: 4 }));
+    setQueue([queueEntry({ status: "submitted", submitted: true })]);
+
+    const reviewerView = await renderApp(REVIEW_PATH);
+    expect(await screen.findByText(/This review is locked/)).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Reopen this review" })).toBeNull();
+    reviewerView.unmount();
+
+    setStanding(adminStanding());
+    await renderApp(REVIEW_PATH);
+
+    expect(await screen.findByRole("button", { name: "Reopen this review" })).toBeDefined();
   });
 
   it("requires a confirmation step before declaring a conflict, and never asks for a reason", async () => {

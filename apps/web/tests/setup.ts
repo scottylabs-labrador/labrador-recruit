@@ -10,11 +10,13 @@ import {
   setCycles,
   setDisagreements,
   setPeerReviews,
+  setProgress,
   setQueue,
   setRanking,
   setReview,
   setRubric,
   setSession,
+  setStanding,
   setWorkloads,
 } from "./msw/handlers.ts";
 import { server } from "./msw/server.ts";
@@ -58,6 +60,8 @@ beforeEach(() => {
   setDisagreements([]);
   setPeerReviews([]);
   setWorkloads([]);
+  setStanding(null);
+  setProgress(null);
   resetRecordedRequests();
 });
 

@@ -91,6 +91,7 @@ what to provision before `bun run dev` will resolve.
 
 | Document                                                 | Contents                                             |
 | -------------------------------------------------------- | ---------------------------------------------------- |
+| [`docs/running-a-cycle.md`](docs/running-a-cycle.md)     | Operational runbook: import, assign, review, decide  |
 | [`docs/architecture.md`](docs/architecture.md)           | Where recruitment code lives and how a request flows |
 | [`docs/product-rules.md`](docs/product-rules.md)         | The no-AI-evaluation rule and privacy constraints    |
 | [`docs/local-development.md`](docs/local-development.md) | Setup, secrets, database, troubleshooting            |

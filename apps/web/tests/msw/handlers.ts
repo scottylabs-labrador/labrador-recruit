@@ -6,6 +6,8 @@ import type {
   Application,
   Committee,
   Cycle,
+  CycleProgress,
+  MyStanding,
   PeerReview,
   QueueEntry,
   RankingEntry,
@@ -27,8 +29,10 @@ export function setAdminUsers(next: typeof adminUsers) {
   adminUsers = next;
 }
 
-/* Recruitment state. Mutable module-level values with setters, matching the
-   pattern the existing dashboard handlers established. */
+/**
+ * Recruitment state. Mutable module-level values with setters, matching the
+ * pattern the existing dashboard handlers established.
+ */
 
 export let cycles: Cycle[] = [];
 export let committees: Committee[] = [];
@@ -40,6 +44,9 @@ export let aggregates: Aggregate[] = [];
 export let ranking: RankingEntry[] = [];
 export let disagreements: Aggregate[] = [];
 export let peerReviews: PeerReview[] = [];
+/** Null means `/me` 404s, which is how "no standing in this cycle" arrives. */
+export let standing: MyStanding | null = null;
+export let progress: CycleProgress | null = null;
 export let workloads: Array<{
   userId: string;
   assigned: number;
@@ -83,6 +90,12 @@ export function setPeerReviews(next: PeerReview[]) {
 }
 export function setWorkloads(next: typeof workloads) {
   workloads = next;
+}
+export function setStanding(next: MyStanding | null) {
+  standing = next;
+}
+export function setProgress(next: CycleProgress | null) {
+  progress = next;
 }
 export function resetRecordedRequests() {
   recordedRequests = [];
@@ -145,6 +158,20 @@ export const handlers = [
     await record("GET", request);
     const match = cycles.find((cycle) => cycle.id === params["cycleId"]);
     return match === undefined ? new HttpResponse(null, { status: 404 }) : HttpResponse.json(match);
+  }),
+
+  http.get(`${RECRUITMENT}/cycles/:cycleId/me`, async ({ request }) => {
+    await record("GET", request);
+    return standing === null
+      ? new HttpResponse(null, { status: 404 })
+      : HttpResponse.json(standing);
+  }),
+
+  http.get(`${RECRUITMENT}/cycles/:cycleId/progress`, async ({ request }) => {
+    await record("GET", request);
+    return progress === null
+      ? new HttpResponse(null, { status: 404 })
+      : HttpResponse.json(progress);
   }),
 
   http.get(`${RECRUITMENT}/cycles/:cycleId/committees`, async ({ request }) => {

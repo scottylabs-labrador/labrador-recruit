@@ -15,6 +15,7 @@
     "@playwright/test": "^1.62.1",
     "dotenv-cli": "^11.0.0",
     "drizzle-orm": "^0.45.2",
+    "editorconfig-checker": "^6",
     "husky": "^9.1.7",
     "markdownlint-cli2": "^0.22.1",
     "oxfmt": "^0.41.0",

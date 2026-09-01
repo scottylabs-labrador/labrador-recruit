@@ -1,5 +1,6 @@
-import { account, session, user } from "@labrador/db/schema";
-import { sql } from "drizzle-orm";
+import { account, reviewAssignment, session, user } from "@labrador/db/schema";
+import { seedRecruitmentData } from "@labrador/db/seed";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 
 import { ADMIN_GROUP, DATABASE_URL } from "./config.ts";
@@ -105,4 +106,64 @@ export async function seedAlice() {
 
 export async function seedAdmin() {
   await seedUser({ ...adminUser, groups: [ADMIN_GROUP] });
+}
+
+/**
+ * The staff the development seed creates. Reusing `seedRecruitmentData` rather
+ * than rebuilding a scenario here means the end-to-end tests exercise the exact
+ * data a new contributor gets from `bun run db:seed`, so a seed that drifts
+ * from the schema fails here too.
+ */
+export const seededStaff = {
+  admin: { id: "radmin", name: "Robin Admin", sessionToken: "radmin-session" },
+  techLead: { id: "techlead", name: "Tessa Lead", sessionToken: "techlead-session" },
+  reviewer: { id: "rev1", name: "Rae Reviewer", sessionToken: "rev1-session" },
+  reviewer2: { id: "rev2", name: "Ravi Reviewer", sessionToken: "rev2-session" },
+} as const;
+
+/**
+ * Populates a full recruitment cycle and gives the seeded staff the account and
+ * session rows Better Auth would have written, so a test can sign in as any of
+ * them without touching Keycloak.
+ */
+export async function seedRecruitmentCycle(): Promise<{ cycleId: string }> {
+  const summary = await seedRecruitmentData(db);
+
+  const now = new Date();
+  for (const person of Object.values(seededStaff)) {
+    await db.insert(account).values({
+      id: `${person.id}-account`,
+      accountId: `${person.id}-sub`,
+      providerId: "keycloak",
+      userId: person.id,
+      accessToken: accessToken(`${person.id}-sub`),
+      accessTokenExpiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(session).values({
+      id: `${person.id}-session-row`,
+      token: person.sessionToken,
+      userId: person.id,
+      expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  return { cycleId: summary.cycleId };
+}
+
+/** The first assignment belonging to a given reviewer, for deep-linking. */
+export async function firstAssignmentFor(reviewerUserId: string) {
+  const rows = await db
+    .select({
+      assignmentId: reviewAssignment.id,
+      candidacyId: reviewAssignment.candidacyId,
+    })
+    .from(reviewAssignment)
+    .where(eq(reviewAssignment.reviewerUserId, reviewerUserId))
+    .limit(1);
+
+  return rows[0] ?? null;
 }

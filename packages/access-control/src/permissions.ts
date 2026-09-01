@@ -52,6 +52,26 @@ export function canReadApplicantIdentity({
   return getRecruitmentAbility(user).can("readIdentity", subject("Identity", { cycleId }));
 }
 
+/**
+ * Whether the caller may see context leadership weighs in discussion but that
+ * never contributes to a score — currently the applicant's request to be placed
+ * with friends.
+ *
+ * Distinct from `canReadApplicantIdentity`, which an ordinary reviewer holds
+ * whenever blind review is off. This one is committee leads and recruitment
+ * admins only, so the server can withhold the field rather than returning it to
+ * everyone and relying on the interface not to render it.
+ */
+export function canReadLeadershipContext({
+  user,
+  application,
+}: UserInput & { application: ApplicationSubject }): boolean {
+  return getRecruitmentAbility(user).can(
+    "readLeadershipContext",
+    subject("Application", application),
+  );
+}
+
 export function canReadCandidacy({
   user,
   candidacy,

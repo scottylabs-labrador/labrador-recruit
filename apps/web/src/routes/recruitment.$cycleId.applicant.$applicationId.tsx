@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { ApplicationView } from "@/components/recruitment/ApplicationView.tsx";
 import { ErrorState } from "@/components/recruitment/StateViews.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { useRecruitmentUser } from "@/hooks/useRecruitmentUser.ts";
 import { $api } from "@/lib/apiClient";
 
 export const Route = createFileRoute("/recruitment/$cycleId/applicant/$applicationId")({
@@ -12,6 +13,7 @@ export const Route = createFileRoute("/recruitment/$cycleId/applicant/$applicati
 
 function ApplicantDetailPage() {
   const { cycleId, applicationId } = Route.useParams();
+  const { isLeadership } = useRecruitmentUser(cycleId);
 
   const application = $api.useQuery("get", "/recruitment/applications/{applicationId}", {
     params: { path: { applicationId } },
@@ -38,12 +40,14 @@ function ApplicantDetailPage() {
       ) : (
         <div className="max-w-4xl">
           {/*
-            `showLeadershipContext` stays off. The API exposes no endpoint for the
-            caller's recruitment memberships, so the browser cannot tell leadership
-            from an ordinary reviewer, and `friendRequest` is leadership-only
-            context that must never reach a scoring path.
+            `friendRequest` is leadership-only context that must never reach a
+            scoring path, so it is shown here — away from the rubric — and only to
+            a committee lead or recruitment admin. There is no `readLeadershipContext`
+            action in `@labrador/access-control` to ask for this, so the roles the
+            server sent on `/me` are read directly rather than repurposing an
+            unrelated predicate.
           */}
-          <ApplicationView application={application.data} showLeadershipContext={false} />
+          <ApplicationView application={application.data} showLeadershipContext={isLeadership} />
         </div>
       )}
     </div>
