@@ -1,9 +1,11 @@
+import { canConfigureCycle, canImportApplications } from "@labrador/access-control";
 import { createFileRoute, Link, Outlet, useNavigate, useParams } from "@tanstack/react-router";
 
 import { EmptyState, ErrorState } from "@/components/recruitment/StateViews.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Label, Select } from "@/components/ui/field.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { type RecruitmentStanding, useRecruitmentUser } from "@/hooks/useRecruitmentUser.ts";
 import { $api } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
 
@@ -11,18 +13,73 @@ export const Route = createFileRoute("/recruitment")({
   component: RecruitmentLayout,
 });
 
-const NAV_ITEMS = [
-  { to: "/recruitment/$cycleId", label: "Overview", exact: true },
-  { to: "/recruitment/$cycleId/queue", label: "My Queue", exact: false },
-  { to: "/recruitment/$cycleId/applicants", label: "Applicants", exact: false },
-  { to: "/recruitment/$cycleId/ranking", label: "Ranking", exact: false },
-  { to: "/recruitment/$cycleId/disagreements", label: "Disagreements", exact: false },
-] as const;
+/**
+ * `visible` is evaluated against the caller's own standing, using the very
+ * predicates the server checks. An administrative screen is therefore absent
+ * from the navigation for a reviewer rather than present and refused — the
+ * server still refuses it, but a reviewer is never shown a door they cannot
+ * open.
+ */
+type NavPath =
+  | "/recruitment/$cycleId"
+  | "/recruitment/$cycleId/queue"
+  | "/recruitment/$cycleId/applicants"
+  | "/recruitment/$cycleId/ranking"
+  | "/recruitment/$cycleId/disagreements"
+  | "/recruitment/$cycleId/import"
+  | "/recruitment/$cycleId/rubric"
+  | "/recruitment/$cycleId/exports";
+
+interface NavItem {
+  to: NavPath;
+  label: string;
+  exact: boolean;
+  visible: (standing: RecruitmentStanding) => boolean;
+}
+
+function always(): boolean {
+  return true;
+}
+
+const NAV_ITEMS: readonly NavItem[] = [
+  { to: "/recruitment/$cycleId", label: "Overview", exact: true, visible: always },
+  { to: "/recruitment/$cycleId/queue", label: "My Queue", exact: false, visible: always },
+  { to: "/recruitment/$cycleId/applicants", label: "Applicants", exact: false, visible: always },
+  { to: "/recruitment/$cycleId/ranking", label: "Ranking", exact: false, visible: always },
+  {
+    to: "/recruitment/$cycleId/disagreements",
+    label: "Disagreements",
+    exact: false,
+    visible: always,
+  },
+  {
+    to: "/recruitment/$cycleId/import",
+    label: "Import",
+    exact: false,
+    visible: (standing) => canImportApplications({ user: standing.user }),
+  },
+  {
+    to: "/recruitment/$cycleId/rubric",
+    label: "Rubric",
+    exact: false,
+    visible: (standing) => canConfigureCycle({ user: standing.user }),
+  },
+  {
+    // Committee leads hold aggregate visibility for their own committee, so the
+    // ranking export is theirs to take; the cycle-wide files inside the screen
+    // stay gated on `canDecidePlacement`.
+    to: "/recruitment/$cycleId/exports",
+    label: "Exports",
+    exact: false,
+    visible: (standing) => standing.isLeadership,
+  },
+];
 
 function RecruitmentLayout() {
   const navigate = useNavigate();
   const params = useParams({ strict: false });
   const cycleId = params.cycleId;
+  const standing = useRecruitmentUser(cycleId ?? null);
 
   const { data: cycles, isLoading, isError, error } = $api.useQuery("get", "/recruitment/cycles");
 
@@ -122,7 +179,7 @@ function RecruitmentLayout() {
 
         {cycleId === undefined ? null : (
           <nav aria-label="Recruitment sections" className="flex flex-wrap gap-1">
-            {NAV_ITEMS.map((item) => (
+            {NAV_ITEMS.filter((item) => item.visible(standing)).map((item) => (
               <Link
                 key={item.to}
                 to={item.to}

@@ -7,12 +7,21 @@ import type {
   Committee,
   Cycle,
   CycleProgress,
+  DecisionExport,
+  ImportCommitReport,
+  ImportPreview,
+  ImportRowOutcome,
+  ImportSummary,
   MyStanding,
   PeerReview,
   QueueEntry,
   RankingEntry,
+  RankingExport,
   Review,
+  ReviewerLoadExport,
   Rubric,
+  RubricValidation,
+  RubricVersion,
 } from "../recruitmentFixtures.ts";
 
 export let session: ReturnType<typeof import("../fixtures.ts").userSession> | null = null;
@@ -96,6 +105,49 @@ export function setStanding(next: MyStanding | null) {
 }
 export function setProgress(next: CycleProgress | null) {
   progress = next;
+}
+
+/**
+ * Import, rubric-version, and export state. Same mutable-value-plus-setter
+ * pattern as everything above, and every one of these is reset in `setup.ts`.
+ */
+
+export let imports: ImportSummary[] = [];
+export let importPreview: ImportPreview | null = null;
+export let importRows: ImportRowOutcome[] = [];
+export let commitReport: ImportCommitReport | null = null;
+export let rubricVersions: RubricVersion[] = [];
+export let rubricValidation: RubricValidation | null = null;
+export let rankingExport: RankingExport[] = [];
+export let decisionExport: DecisionExport[] = [];
+export let reviewerLoadExport: ReviewerLoadExport[] = [];
+
+export function setImports(next: ImportSummary[]) {
+  imports = next;
+}
+export function setImportPreview(next: ImportPreview | null) {
+  importPreview = next;
+}
+export function setImportRows(next: ImportRowOutcome[]) {
+  importRows = next;
+}
+export function setCommitReport(next: ImportCommitReport | null) {
+  commitReport = next;
+}
+export function setRubricVersions(next: RubricVersion[]) {
+  rubricVersions = next;
+}
+export function setRubricValidation(next: RubricValidation | null) {
+  rubricValidation = next;
+}
+export function setRankingExport(next: RankingExport[]) {
+  rankingExport = next;
+}
+export function setDecisionExport(next: DecisionExport[]) {
+  decisionExport = next;
+}
+export function setReviewerLoadExport(next: ReviewerLoadExport[]) {
+  reviewerLoadExport = next;
 }
 export function resetRecordedRequests() {
   recordedRequests = [];
@@ -313,5 +365,101 @@ export const handlers = [
   http.get(`${RECRUITMENT}/candidacies/:candidacyId/reviews`, async ({ request }) => {
     await record("GET", request);
     return HttpResponse.json(peerReviews);
+  }),
+
+  http.get(`${RECRUITMENT}/cycles/:cycleId/imports`, async ({ request }) => {
+    await record("GET", request);
+    return HttpResponse.json(imports);
+  }),
+
+  http.post(`${RECRUITMENT}/cycles/:cycleId/imports`, async ({ request }) => {
+    await record("POST", request);
+    return importPreview === null
+      ? new HttpResponse(null, { status: 422 })
+      : HttpResponse.json({ importId: "import-1", preview: importPreview }, { status: 201 });
+  }),
+
+  http.get(`${RECRUITMENT}/imports/:importId/rows`, async ({ request }) => {
+    await record("GET", request);
+    return HttpResponse.json(importRows);
+  }),
+
+  http.post(`${RECRUITMENT}/imports/:importId/commit`, async ({ request }) => {
+    await record("POST", request);
+    return commitReport === null
+      ? new HttpResponse(null, { status: 409 })
+      : HttpResponse.json(commitReport);
+  }),
+
+  http.get(`${RECRUITMENT}/cycles/:cycleId/rubrics`, async ({ request }) => {
+    await record("GET", request);
+    return HttpResponse.json(rubricVersions);
+  }),
+
+  /**
+   * Mirrors the server's weight rule rather than echoing a canned answer, so a
+   * test that types an invalid draft gets the same verdict the server gives.
+   * `setRubricValidation` overrides it when a test needs a specific issue.
+   */
+  http.post(`${RECRUITMENT}/cycles/:cycleId/rubrics/validate`, async ({ request }) => {
+    await record("POST", request);
+    if (rubricValidation !== null) {
+      return HttpResponse.json(rubricValidation);
+    }
+
+    const body = (await request.json()) as {
+      criteria: Array<{ weight: number; active?: boolean }>;
+    };
+    const active = body.criteria.filter((criterion) => criterion.active !== false);
+    const sum = active.reduce((total, criterion) => total + criterion.weight, 0);
+
+    if (active.length > 0 && Math.abs(sum - 1) <= 1e-6) {
+      return HttpResponse.json({ valid: true, issues: [] });
+    }
+    return HttpResponse.json({
+      valid: false,
+      issues: [
+        {
+          code: "weights_do_not_sum_to_one",
+          message: `The active criteria weights sum to ${sum} rather than 1. Adjust the weights so they add up to exactly 1.`,
+        },
+      ],
+    });
+  }),
+
+  http.post(`${RECRUITMENT}/cycles/:cycleId/rubrics`, async ({ request }) => {
+    await record("POST", request);
+    const body = (await request.json()) as { name: string };
+    const highest = rubricVersions.reduce((max, item) => Math.max(max, item.version), 0);
+    const published: RubricVersion = {
+      id: `rubric-v${highest + 1}`,
+      version: highest + 1,
+      name: body.name,
+      committeeId: null,
+      active: true,
+      reviewCount: 0,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      criteria: [],
+    };
+    rubricVersions = [published, ...rubricVersions.map((item) => ({ ...item, active: false }))];
+    return HttpResponse.json(published, { status: 201 });
+  }),
+
+  http.get(
+    `${RECRUITMENT}/cycles/:cycleId/exports/committees/:committeeId/ranking`,
+    async ({ request }) => {
+      await record("GET", request);
+      return HttpResponse.json(rankingExport);
+    },
+  ),
+
+  http.get(`${RECRUITMENT}/cycles/:cycleId/exports/decisions`, async ({ request }) => {
+    await record("GET", request);
+    return HttpResponse.json(decisionExport);
+  }),
+
+  http.get(`${RECRUITMENT}/cycles/:cycleId/exports/reviewer-load`, async ({ request }) => {
+    await record("GET", request);
+    return HttpResponse.json(reviewerLoadExport);
   }),
 ];

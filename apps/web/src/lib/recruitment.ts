@@ -19,6 +19,63 @@ export type SaveReviewRequest = components["schemas"]["SaveReviewRequest"];
 export type MyStanding =
   paths["/recruitment/cycles/{cycleId}/me"]["get"]["responses"][200]["content"]["application/json"];
 
+/* Spreadsheet import. */
+export type ImportPreview = components["schemas"]["ImportPreview"];
+export type ImportRowResult = components["schemas"]["ImportRowResult"];
+export type ImportRowError = components["schemas"]["ImportRowError"];
+export type ImportCommitReport = components["schemas"]["ImportCommitReport"];
+export type ImportSummary =
+  paths["/recruitment/cycles/{cycleId}/imports"]["get"]["responses"][200]["content"]["application/json"][number];
+export type ImportRowOutcome =
+  paths["/recruitment/imports/{importId}/rows"]["get"]["responses"][200]["content"]["application/json"][number];
+
+/* Rubric configuration. */
+export type RubricVersionSummary = components["schemas"]["RubricVersionSummary"];
+export type CriterionInput = components["schemas"]["CriterionInput"];
+export type CriterionSource = "reviewer" | "application_preference";
+
+/* Exports. */
+export type RankingExportRow = components["schemas"]["RankingExportRow"];
+export type DecisionExportRow = components["schemas"]["DecisionExportRow"];
+export type ReviewerLoadExportRow = components["schemas"]["ReviewerLoadExportRow"];
+
+export const CRITERION_SOURCE_OPTIONS: ReadonlyArray<{ value: CriterionSource; label: string }> = [
+  { value: "reviewer", label: "Scored by the reviewer" },
+  { value: "application_preference", label: "Derived from the applicant's preference" },
+];
+
+/**
+ * Weights are decimals, so 0.30 + 0.20 + 0.20 + 0.15 + 0.10 + 0.05 sums to
+ * 1.0000000000000002 in IEEE 754. This mirrors the tolerance
+ * `@labrador/common`'s `validateRubric` uses on the server, so the editor's live
+ * verdict and the server's verdict cannot disagree on a rubric a human typed.
+ */
+export const WEIGHT_SUM_EPSILON = 1e-6;
+
+export function weightsSumToOne(total: number): boolean {
+  return Math.abs(total - 1) <= WEIGHT_SUM_EPSILON;
+}
+
+/** Renders a fraction of 1 the way people discuss weights: as a percentage. */
+export function formatWeightPercent(weight: number): string {
+  if (Number.isNaN(weight)) return "—";
+  return `${(weight * 100).toFixed(1)}%`;
+}
+
+/** Byte counts, for showing what is about to be uploaded. */
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** A timestamp for a history table. Invalid or absent values read as an em dash. */
+export function formatDateTime(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+}
+
 /**
  * The assignment statuses `/my-queue` can return. `cancelled` is deliberately
  * absent: the server excludes those rows, so offering it as a filter would only
