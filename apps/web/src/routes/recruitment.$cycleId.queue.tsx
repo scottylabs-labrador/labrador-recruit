@@ -21,6 +21,7 @@ import {
   queueStatusLabel,
   type QueueItem,
   type QueueStatus,
+  yearLabel,
 } from "@/lib/recruitment.ts";
 
 const COLUMNS = ["Committee", "Applicant", "Year", "Major", "Their rank", "Review", ""];
@@ -126,7 +127,7 @@ function MyQueuePage() {
               <TableRow key={item.assignmentId}>
                 <TableCell>{item.committeeName}</TableCell>
                 <TableCell className="font-medium">{applicantLabel(item.applicantName)}</TableCell>
-                <TableCell>{item.year}</TableCell>
+                <TableCell>{yearLabel(item.year)}</TableCell>
                 <TableCell className="max-w-56 truncate">{item.major ?? "—"}</TableCell>
                 <TableCell className="tabular-nums">{formatRank(item.applicantRank)}</TableCell>
                 <TableCell>

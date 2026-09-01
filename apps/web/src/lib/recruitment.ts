@@ -120,3 +120,24 @@ export function percent(part: number, whole: number): number {
 export function isExternalLink(value: string): boolean {
   return /^https?:\/\/\S+$/i.test(value.trim());
 }
+
+/**
+ * Class year for display.
+ *
+ * The API returns the database enum verbatim (`first_year`), which is correct
+ * on the wire but reads as a leaked implementation detail in a table a human
+ * scans. Unknown values fall through unchanged rather than being hidden, so a
+ * new enum member is visible rather than silently blank.
+ */
+const YEAR_LABELS: Record<string, string> = {
+  first_year: "First Year",
+  sophomore: "Sophomore",
+  junior: "Junior",
+  senior: "Senior",
+  grad: "Grad",
+  unknown: "Unknown",
+};
+
+export function yearLabel(value: string): string {
+  return YEAR_LABELS[value] ?? value;
+}

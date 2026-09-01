@@ -34,6 +34,7 @@ import {
   type RecommendationValue,
   type ReviewDetail,
   type SaveReviewRequest,
+  yearLabel,
 } from "@/lib/recruitment.ts";
 
 const AUTOSAVE_DELAY_MS = 800;
@@ -284,7 +285,7 @@ function ReviewPage() {
             ) : null}
           </div>
           <p className="text-sm text-muted-foreground">
-            {current.year}
+            {yearLabel(current.year)}
             {current.major === null ? "" : ` · ${current.major}`}
           </p>
           {identityHidden ? (
