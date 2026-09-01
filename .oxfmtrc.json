@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "sortImports": {},
+  "ignorePatterns": [
+    "/apps/web/src/routeTree.gen.ts",
+    "/packages/db/drizzle",
+    "/.agents/skills",
+    // We use syncpack to format package.json since it also orders the scripts alphabetically.
+    "**/package.json"
+  ],
+  "overrides": [
+    // Disable trailing commas in JSON and JSONC files because the oxfmt CLI tool
+    // removes trailing commas from these files regardless of configuration.
+    {
+      "files": ["*.json", "*.jsonc"],
+      "options": {
+        "trailingComma": "none"
+      }
+    }
+  ]
+}

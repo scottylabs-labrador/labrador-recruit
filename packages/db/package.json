@@ -1,0 +1,25 @@
+{
+  "name": "@labrador/db",
+  "version": "0.0.0",
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.21.0",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-seed": "^0.3.1"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts"
+  },
+  "private": true,
+  "scripts": {
+    "db:generate": "secretspec run -P local -- bunx drizzle-kit generate",
+    "db:migrate": "secretspec run -P local -- bunx drizzle-kit migrate",
+    "db:seed": "secretspec run -P local -- bun run src/seed.ts",
+    "db:studio": "secretspec run -P local -- bunx drizzle-kit studio"
+  },
+  "type": "module"
+}

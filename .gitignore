@@ -1,0 +1,24 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# Dependencies
+node_modules/
+
+# Local env files
+.env*
+
+# Cache
+.turbo/
+*.tsbuildinfo
+
+# Build
+dist/
+build/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# Misc
+.DS_Store

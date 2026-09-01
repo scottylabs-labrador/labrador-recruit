@@ -1,0 +1,31 @@
+name: "labrador-recruit"
+
+services:
+  dev:
+    container_name: labrador-recruit-dev
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ..:/workspace:cached
+    command: sleep infinity
+    depends_on:
+      - postgres
+    ports:
+      - "3000:3000"
+      - "80:80"
+
+  postgres:
+    image: postgres:17
+    container_name: labrador-recruit-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: donotuseinprod
+      POSTGRES_DB: labrador-recruit
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:

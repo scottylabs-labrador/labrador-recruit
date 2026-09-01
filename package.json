@@ -1,0 +1,55 @@
+{
+  "name": "labrador-recruit",
+  "version": "0.0.0",
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.3.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "@electric-sql/pglite": "^0.5.5",
+    "@electric-sql/pglite-socket": "^0.2.8",
+    "@labrador/db": "workspace:*",
+    "@playwright/test": "^1.62.1",
+    "drizzle-orm": "^0.45.2",
+    "husky": "^9.1.7",
+    "markdownlint-cli2": "^0.22.1",
+    "oxfmt": "^0.41.0",
+    "oxlint": "~1.71.0",
+    "oxlint-tsgolint": "^0.17.0",
+    "syncpack": "^14.3.1",
+    "turbo": "^2.7.4",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "bun@1.3.5",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "build:api": "cd apps/server && bun run build:api",
+    "check": "bun run quality && turbo run test && bun run test:e2e",
+    "dev": "turbo run dev",
+    "format": "oxfmt --check .",
+    "format:fix": "oxfmt .",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix",
+    "preinstall": "bunx only-allow bun",
+    "prepare": "husky",
+    "quality": "bun run format && bun run lint",
+    "quality:fix": "bun run format:fix && bun run lint:fix",
+    "secrets": "BAO_ADDR=https://bao.scottylabs.org bao login -method=oidc",
+    "syncpack": "syncpack lint && syncpack format --check",
+    "syncpack:fix": "syncpack format && syncpack fix",
+    "syncpack:update": "syncpack update",
+    "test": "turbo run test",
+    "test:e2e": "playwright test"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

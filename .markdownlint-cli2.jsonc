@@ -1,0 +1,27 @@
+{
+  // Scan all Markdown files
+  "globs": ["**/*.md"],
+
+  // Vendor Cursor skills (upstream markdown style)
+  "ignores": [".agents/skills/**"],
+
+  // Skip gitignore file
+  "gitignore": true,
+
+  "config": {
+    // Use dashes for lists
+    "MD004": { "style": "dash" },
+
+    // Disable line length check
+    "MD013": false,
+
+    // Allows duplicate headings in different sections but flags duplicates at the same level.
+    "MD024": { "siblings_only": true },
+
+    // Use asterisk for emphasis style
+    "MD049": { "style": "underscore" },
+
+    // Use asterisk for strong style
+    "MD050": { "style": "asterisk" }
+  }
+}

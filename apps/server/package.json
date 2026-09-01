@@ -1,0 +1,52 @@
+{
+  "name": "@labrador/server",
+  "version": "0.0.0",
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.5.4",
+    "@labrador/access-control": "workspace:*",
+    "@labrador/db": "workspace:*",
+    "@sentry/bun": "^10.42.0",
+    "@tsoa/runtime": "^7.0.0-alpha.0",
+    "better-auth": "^1.6.26",
+    "cors": "^2.8.6",
+    "drizzle-orm": "^0.45.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "jwks-rsa": "^3.2.2",
+    "swagger-ui-dist": "^5.31.0",
+    "swagger-ui-express": "^5.0.1",
+    "tsoa": "^7.0.0-alpha.0",
+    "yaml": "^2.9.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.5",
+    "@types/bun": "^1.3.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/supertest": "^7.2.1",
+    "@types/swagger-ui-express": "^4.1.8",
+    "concurrently": "^10.0.4",
+    "dotenv-cli": "^11.0.0",
+    "onchange": "^7.1.0",
+    "openapi-typescript": "^7.13.0",
+    "supertest": "^7.2.2",
+    "vitest": "^4.0.18"
+  },
+  "module": "index.ts",
+  "private": true,
+  "scripts": {
+    "build": "bun build src/server.ts --outdir=dist --target=bun --sourcemap",
+    "build:api": "bun run tsoa && bun run openapi",
+    "dev": "concurrently 'bun run server' 'bun run tsoa:watch' 'bun run openapi:watch'",
+    "openapi": "bunx --package typescript@6 --package openapi-typescript@7.13.0 openapi-typescript ./build/swagger.yaml -o ./build/swagger.d.ts",
+    "openapi:watch": "onchange './build/swagger.yaml' -- bun run openapi",
+    "server": "secretspec run -P local -- bun run --preload ./src/instrument.ts --watch src/server.ts",
+    "start": "bun dist/server.js",
+    "test": "vitest run",
+    "tsoa": "tsoa spec-and-routes",
+    "tsoa:watch": "onchange 'src/controllers/*.ts' 'tsoa.json' -- bun run tsoa"
+  },
+  "type": "module"
+}

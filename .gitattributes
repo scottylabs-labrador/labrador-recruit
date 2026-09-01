@@ -1,0 +1,17 @@
+# Keep line endings LF everywhere so `.editorconfig` (end_of_line = lf) and
+# oxfmt agree with the working tree on every platform, including Windows
+# checkouts where git's core.autocrlf would otherwise rewrite files to CRLF.
+* text=auto eol=lf
+
+# Binary assets must never be normalized.
+*.png binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.xlsx binary
