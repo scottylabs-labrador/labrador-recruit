@@ -1,8 +1,27 @@
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 
-import { setAdminUsers, setSession } from "./msw/handlers.ts";
+import {
+  resetRecordedRequests,
+  setAdminUsers,
+  setAggregates,
+  setApplications,
+  setCommittees,
+  setCycles,
+  setDisagreements,
+  setPeerReviews,
+  setQueue,
+  setRanking,
+  setReview,
+  setRubric,
+  setSession,
+  setWorkloads,
+} from "./msw/handlers.ts";
 import { server } from "./msw/server.ts";
+
+// Route components are code-split, so the first navigation in a file pays for a
+// dynamic import and a Vite transform before anything paints.
+configure({ asyncUtilTimeout: 5000 });
 
 vi.mock("posthog-js/react", () => ({
   PostHogProvider: ({ children }: { children: unknown }) => children,
@@ -28,6 +47,18 @@ beforeAll(() => {
 beforeEach(() => {
   setSession(null);
   setAdminUsers([]);
+  setCycles([]);
+  setCommittees([]);
+  setQueue([]);
+  setApplications([]);
+  setRubric(null);
+  setReview(null);
+  setAggregates([]);
+  setRanking([]);
+  setDisagreements([]);
+  setPeerReviews([]);
+  setWorkloads([]);
+  resetRecordedRequests();
 });
 
 afterEach(() => {

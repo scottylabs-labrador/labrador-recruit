@@ -72,12 +72,50 @@ use the offline path below.
 
 ### Running without OpenBao access
 
-Tests do not need secrets. `apps/server/test/setup.ts` seeds `process.env` before any
-module that validates it is imported, and the server, web, and access-control suites all
-run against PGlite. So `bun install`, `bun run build:api`, `bun run test`, and
+Tests never need secrets. `apps/server/test/setup.ts` seeds `process.env` before any
+module that validates it is imported, and the server, web, and access-control suites run
+against PGlite. So `bun install`, `bun run build:api`, `bun run test`, and
 `bun run quality` all work offline.
 
-Only `bun run dev` — the live server and web app — requires resolvable secrets.
+The app itself also runs offline, through a parallel set of `:local` scripts that load a
+gitignored `.env.local` with dotenv-cli instead of resolving secrets through secretspec:
+
+```bash
+cp .env.local.example .env.local          # then set BETTER_AUTH_SECRET
+docker compose -f .devcontainer/docker-compose.yml up -d postgres
+bun run db:migrate:local
+bun run db:seed:local                     # synthetic cycle, committees, applicants
+bun run dev:local                         # web on :3000, API on :8080
+```
+
+### Signing in locally
+
+Real sign-in goes through Keycloak, which needs a Goldador-registered OIDC client. To work
+without one, mint a session directly:
+
+```bash
+bun run dev:login rjones --admin --name "Robin Jones"
+```
+
+It prints a `document.cookie = ...` line to paste into the browser console at
+`http://localhost:3000`. Reload and you are signed in.
+
+This is a **script, not an endpoint**, on purpose. A dev-login route would be one
+misconfigured environment variable away from letting anyone authenticate as an
+administrator in production. A script an operator runs against a database they already
+control adds no attack surface to the deployed server.
+
+`--admin` puts the user in the configured admin group, which grants the **global** admin
+role. That is enough to create a cycle and grant memberships, but not to read applicant
+data: the account still needs a recruitment membership, which it must grant itself
+explicitly. That separation is deliberate — see [`architecture.md`](architecture.md).
+
+### Moving to real Keycloak sign-in
+
+Register the project in [Goldador](https://scottylabs-labrador.github.io/goldador/), which
+issues the OIDC client id and secret, then provision the vault items that
+`secretspec.toml` points at under `labrador-recruit/...` and use `bun run dev` instead of
+`bun run dev:local`.
 
 ## Troubleshooting
 
