@@ -19,8 +19,40 @@ export const testDb = drizzle({ client: pglite });
 
 await migrate(testDb, { migrationsFolder });
 
+/**
+ * Every table must be listed here, or state leaks between tests. CASCADE makes
+ * the order irrelevant, but a missing table is silent, so keep this in sync
+ * with `packages/db/src/schema` (and with `e2e/db.ts`) whenever one is added.
+ */
 export async function resetDb() {
-  await testDb.execute(sql`TRUNCATE TABLE "session", "account", "verification", "user" CASCADE`);
+  await testDb.execute(sql`
+    TRUNCATE TABLE
+      "audit_event",
+      "import_row",
+      "import_batch",
+      "final_placement",
+      "committee_decision",
+      "review_score",
+      "review",
+      "review_assignment",
+      "rubric_criterion",
+      "rubric",
+      "committee_candidacy",
+      "committee_preference",
+      "application_answer",
+      "question_definition",
+      "application",
+      "applicant",
+      "recruitment_membership",
+      "cycle_committee",
+      "committee",
+      "recruitment_cycle",
+      "session",
+      "account",
+      "verification",
+      "user"
+    CASCADE
+  `);
 }
 
 export async function seedUser(opts: {

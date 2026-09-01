@@ -22,8 +22,36 @@ export const adminUser = {
   sessionToken: "admin-session",
 };
 
+/** Keep in sync with `apps/server/test/harness.ts` whenever a table is added. */
 export async function resetDb() {
-  await db.execute(sql`TRUNCATE TABLE "session", "account", "verification", "user" CASCADE`);
+  await db.execute(sql`
+    TRUNCATE TABLE
+      "audit_event",
+      "import_row",
+      "import_batch",
+      "final_placement",
+      "committee_decision",
+      "review_score",
+      "review",
+      "review_assignment",
+      "rubric_criterion",
+      "rubric",
+      "committee_candidacy",
+      "committee_preference",
+      "application_answer",
+      "question_definition",
+      "application",
+      "applicant",
+      "recruitment_membership",
+      "cycle_committee",
+      "committee",
+      "recruitment_cycle",
+      "session",
+      "account",
+      "verification",
+      "user"
+    CASCADE
+  `);
 }
 
 function accessToken(sub: string, groups: string[] = []) {
