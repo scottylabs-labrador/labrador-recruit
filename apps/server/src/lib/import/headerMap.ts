@@ -46,7 +46,7 @@ function keyify(label: string): string {
  * that contributes no `answer` fields.
  */
 export const FALL_2026_MAPPING: readonly KnownHeader[] = [
-  // --- General (columns 1-15) ---
+  // --- General (columns 1-16) ---
   {
     header: "Timestamp",
     key: "timestamp",
@@ -133,16 +133,16 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     role: "committee_rank",
   },
   {
-    header: "Please explain your committee rankings. Why are you interested in your top choices?",
+    header:
+      "Please use this space to explain your rankings above (prior experience, strong " +
+      "interests, etc). You will be more likely to be assigned your top choices if you do so :)",
     key: "ranking_explanation",
     section: "general",
     answerType: "long_text",
     role: "identity",
   },
   {
-    header:
-      "Are there any friends you would like to be placed with? " +
-      "(This is not guaranteed, but we will try our best!)",
+    header: "Are there any friends who you want to be in the same committee as?",
     key: "friend_request",
     section: "general",
     answerType: "long_text",
@@ -155,6 +155,15 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     answerType: "short_text",
     role: "identity",
   },
+  // Pure form routing: this only decided which question blocks the applicant
+  // was shown, and the ranking columns already record the same thing exactly.
+  {
+    header: "Did you select either Tech or Labrador in your top three options?",
+    key: "tech_or_labrador_routing",
+    section: "general",
+    answerType: "choice",
+    role: "ignored",
+  },
 
   // --- Tech (opt-in + 2) ---
   {
@@ -166,7 +175,7 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     role: "opt_in",
   },
   {
-    header: "What is a technical project you are proud of, and what was your role in it?",
+    header: "What's something technical you worked on recently that you're particularly proud of?",
     key: "tech_project",
     section: "tech",
     committeeSlug: "tech",
@@ -174,15 +183,17 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     role: "answer",
   },
   {
-    header: "What technologies are you most interested in learning or working with this semester?",
-    key: "tech_interests",
+    header:
+      "After looking through the projects page, what team(s)/project(s) stand out most to you? " +
+      "What do you hope to contribute to them?",
+    key: "tech_projects_of_interest",
     section: "tech",
     committeeSlug: "tech",
     answerType: "long_text",
     role: "answer",
   },
 
-  // --- Labrador (opt-in + 8) ---
+  // --- Labrador (opt-in + 7) ---
   {
     header: "Do you want to answer the Labrador committee specific questions?",
     key: "labrador_opt_in",
@@ -192,7 +203,25 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     role: "opt_in",
   },
   {
-    header: "Why are you interested in Labrador?",
+    header: "What idea do you want to work on in the committee?",
+    key: "labrador_idea",
+    section: "labrador",
+    committeeSlug: "labrador",
+    answerType: "long_text",
+    role: "answer",
+  },
+  {
+    header:
+      "Are you interested in a technical role (e.g. backend developer) or a non-technical role " +
+      "(e.g. team lead)? Describe your previous experience in your chosen role type.",
+    key: "labrador_role_preference",
+    section: "labrador",
+    committeeSlug: "labrador",
+    answerType: "long_text",
+    role: "answer",
+  },
+  {
+    header: "Why are you excited about Labrador?",
     key: "labrador_interest",
     section: "labrador",
     committeeSlug: "labrador",
@@ -200,39 +229,15 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     role: "answer",
   },
   {
-    header: "What experience do you have with content creation, marketing, or community building?",
-    key: "labrador_experience",
+    header: "What makes you a good candidate for the committee?",
+    key: "labrador_fit",
     section: "labrador",
     committeeSlug: "labrador",
     answerType: "long_text",
     role: "answer",
   },
   {
-    header: "Describe a campus community you have helped grow.",
-    key: "labrador_community",
-    section: "labrador",
-    committeeSlug: "labrador",
-    answerType: "long_text",
-    role: "answer",
-  },
-  {
-    header: "What is your favorite ScottyLabs product or event, and how would you promote it?",
-    key: "labrador_promotion",
-    section: "labrador",
-    committeeSlug: "labrador",
-    answerType: "long_text",
-    role: "answer",
-  },
-  {
-    header: "How much time can you commit to Labrador each week?",
-    key: "labrador_commitment",
-    section: "labrador",
-    committeeSlug: "labrador",
-    answerType: "short_text",
-    role: "answer",
-  },
-  {
-    header: "Social media link",
+    header: "Social media link (personal website, LinkedIn, etc.)",
     key: "labrador_social_link",
     section: "labrador",
     committeeSlug: "labrador",
@@ -240,7 +245,7 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     role: "answer",
   },
   {
-    header: "Github link",
+    header: "Github link (optional: only if technical)",
     key: "labrador_github_link",
     section: "labrador",
     committeeSlug: "labrador",
@@ -248,7 +253,7 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     role: "answer",
   },
   {
-    header: "Anything else you would like the Labrador committee to know?",
+    header: "Other comments/questions",
     key: "labrador_additional",
     section: "labrador",
     committeeSlug: "labrador",
@@ -256,7 +261,7 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     role: "answer",
   },
 
-  // --- Foundry (opt-in + 17) ---
+  // --- Foundry (opt-in + 18) ---
   {
     header: "Would you like to answer the Foundry specific questions",
     key: "foundry_opt_in",
@@ -266,9 +271,73 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     role: "opt_in",
   },
   {
+    header: "What type of membership?",
+    key: "foundry_membership_type",
+    section: "foundry",
+    committeeSlug: "foundry",
+    answerType: "choice",
+    role: "answer",
+  },
+  {
+    header: "Why are you interested in Entrepreneurship?",
+    key: "foundry_entrepreneurship",
+    section: "foundry",
+    committeeSlug: "foundry",
+    answerType: "long_text",
+    role: "answer",
+  },
+  {
+    header: "What are you building or hoping to build?",
+    key: "foundry_building",
+    section: "foundry",
+    committeeSlug: "foundry",
+    answerType: "long_text",
+    role: "answer",
+  },
+  {
+    header: "Are you looking for cofounders?",
+    key: "foundry_cofounders",
+    section: "foundry",
+    committeeSlug: "foundry",
+    answerType: "choice",
+    role: "answer",
+  },
+  {
+    header: "What have you built, run, or shipped that nobody assigned you? Link it if it exists.",
+    key: "foundry_self_directed",
+    section: "foundry",
+    committeeSlug: "foundry",
+    answerType: "long_text",
+    role: "answer",
+  },
+  {
+    header: "LinkedIn (Optional)",
+    key: "foundry_linkedin",
+    section: "foundry",
+    committeeSlug: "foundry",
+    answerType: "url",
+    role: "answer",
+  },
+  {
+    header: "Website Portfolio (Optional)",
+    key: "foundry_portfolio",
+    section: "foundry",
+    committeeSlug: "foundry",
+    answerType: "url",
+    role: "answer",
+  },
+  {
+    header: "Would you also like to answer the Foundry analyst member questions?",
+    key: "foundry_analyst_opt_in",
+    section: "foundry",
+    committeeSlug: "foundry",
+    answerType: "boolean",
+    role: "opt_in",
+  },
+  {
     header:
-      "Pick your team\n\n*Note: this is a ranking, so 1st Choice is the team you most want. " +
-      "[Talent]",
+      "Pick your team\n\n*Note: If you mark your interest as an Accelerator team member, you " +
+      "will also be required to give an interview to join the team. [Talent]",
     key: "foundry_subteam_rank_talent",
     section: "foundry",
     committeeSlug: "foundry",
@@ -278,8 +347,8 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
   },
   {
     header:
-      "Pick your team\n\n*Note: this is a ranking, so 1st Choice is the team you most want. " +
-      "[Accelerator]",
+      "Pick your team\n\n*Note: If you mark your interest as an Accelerator team member, you " +
+      "will also be required to give an interview to join the team. [Accelerator]",
     key: "foundry_subteam_rank_accelerator",
     section: "foundry",
     committeeSlug: "foundry",
@@ -289,8 +358,8 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
   },
   {
     header:
-      "Pick your team\n\n*Note: this is a ranking, so 1st Choice is the team you most want. " +
-      "[Outreach]",
+      "Pick your team\n\n*Note: If you mark your interest as an Accelerator team member, you " +
+      "will also be required to give an interview to join the team. [Outreach]",
     key: "foundry_subteam_rank_outreach",
     section: "foundry",
     committeeSlug: "foundry",
@@ -299,121 +368,63 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     role: "subteam_rank",
   },
   {
-    header: "Why do you want to join Foundry?",
-    key: "foundry_motivation",
+    header: "Describe your experience with Startups/VC's",
+    key: "foundry_startup_experience",
     section: "foundry",
     committeeSlug: "foundry",
     answerType: "long_text",
     role: "answer",
   },
   {
-    header: "What does entrepreneurship mean to you?",
-    key: "foundry_entrepreneurship",
+    header:
+      "Pitch us a unique speaker series or event format that would get 100 CMU students in a " +
+      "room who wouldn't otherwise show up.",
+    key: "foundry_event_pitch",
     section: "foundry",
     committeeSlug: "foundry",
     answerType: "long_text",
     role: "answer",
   },
   {
-    header: "Describe a startup or product you admire and why.",
-    key: "foundry_admired_product",
+    header:
+      "What is a venture capital firm you follow? Describe their investment strategy (thesis) " +
+      "and why you find it interesting.",
+    key: "foundry_vc_thesis",
     section: "foundry",
     committeeSlug: "foundry",
     answerType: "long_text",
     role: "answer",
   },
   {
-    header: "Have you ever built or launched something? Tell us about it.",
-    key: "foundry_built",
+    header:
+      "Identify one early-stage startup (Seed or Series A) you believe has high potential. " +
+      "Explain your thesis.",
+    key: "foundry_startup_thesis",
     section: "foundry",
     committeeSlug: "foundry",
     answerType: "long_text",
     role: "answer",
   },
   {
-    header: "What skills would you bring to the Foundry team?",
-    key: "foundry_skills",
+    header: "Would you also like to answer the Foundry builder member questions?",
+    key: "foundry_builder_opt_in",
     section: "foundry",
     committeeSlug: "foundry",
-    answerType: "long_text",
-    role: "answer",
+    answerType: "boolean",
+    role: "opt_in",
   },
   {
-    header: "How do you handle ambiguity and fast-changing priorities?",
-    key: "foundry_ambiguity",
+    header: "Do you want to apply to our Foundry Builder or Analyst Member?",
+    key: "foundry_track",
     section: "foundry",
     committeeSlug: "foundry",
-    answerType: "long_text",
-    role: "answer",
-  },
-  {
-    header: "Describe a time you convinced someone to support an idea.",
-    key: "foundry_persuasion",
-    section: "foundry",
-    committeeSlug: "foundry",
-    answerType: "long_text",
-    role: "answer",
-  },
-  {
-    header: "What would you want to change about the CMU startup ecosystem?",
-    key: "foundry_ecosystem",
-    section: "foundry",
-    committeeSlug: "foundry",
-    answerType: "long_text",
-    role: "answer",
-  },
-  {
-    header: "How many hours per week can you commit to Foundry?",
-    key: "foundry_commitment",
-    section: "foundry",
-    committeeSlug: "foundry",
-    answerType: "short_text",
-    role: "answer",
-  },
-  {
-    header: "Are you interested in the Talent team? If so, why?",
-    key: "foundry_talent_interest",
-    section: "foundry",
-    committeeSlug: "foundry",
-    answerType: "long_text",
-    role: "answer",
-  },
-  {
-    header: "Are you interested in the Accelerator team? If so, why?",
-    key: "foundry_accelerator_interest",
-    section: "foundry",
-    committeeSlug: "foundry",
-    answerType: "long_text",
-    role: "answer",
-  },
-  {
-    header: "Are you interested in the Outreach team? If so, why?",
-    key: "foundry_outreach_interest",
-    section: "foundry",
-    committeeSlug: "foundry",
-    answerType: "long_text",
-    role: "answer",
-  },
-  {
-    header: "Do you have experience with event planning or sponsorship outreach?",
-    key: "foundry_event_experience",
-    section: "foundry",
-    committeeSlug: "foundry",
-    answerType: "long_text",
-    role: "answer",
-  },
-  {
-    header: "Anything else you would like the Foundry committee to know?",
-    key: "foundry_additional",
-    section: "foundry",
-    committeeSlug: "foundry",
-    answerType: "long_text",
+    answerType: "choice",
     role: "answer",
   },
 
   // --- Finance (opt-in + 6 sub-team ranks + 4 free response) ---
   {
-    header: "Do you want to answer the Finance committee specific questions?",
+    header: "Do you want to answer Finance specific questions?",
     key: "finance_opt_in",
     section: "finance",
     committeeSlug: "finance",
@@ -422,8 +433,9 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
   },
   {
     header:
-      "Rank your preference for which team you'd like to be in. Please rank from 1 " +
-      "(most preferred) to 6 (least preferred). [Local Sponsorship]",
+      "Rank your preference for which team you'd like to be in. We will try our best to " +
+      "accommodate everyone into their top choice, but we cannot guarantee placements. " +
+      "[Local Sponsorship]",
     key: "finance_subteam_rank_local_sponsorship",
     section: "finance",
     committeeSlug: "finance",
@@ -433,8 +445,9 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
   },
   {
     header:
-      "Rank your preference for which team you'd like to be in. Please rank from 1 " +
-      "(most preferred) to 6 (least preferred). [Documentation]",
+      "Rank your preference for which team you'd like to be in. We will try our best to " +
+      "accommodate everyone into their top choice, but we cannot guarantee placements. " +
+      "[Documentation]",
     key: "finance_subteam_rank_documentation",
     section: "finance",
     committeeSlug: "finance",
@@ -444,8 +457,9 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
   },
   {
     header:
-      "Rank your preference for which team you'd like to be in. Please rank from 1 " +
-      "(most preferred) to 6 (least preferred). [University Relations]",
+      "Rank your preference for which team you'd like to be in. We will try our best to " +
+      "accommodate everyone into their top choice, but we cannot guarantee placements. " +
+      "[University Relations]",
     key: "finance_subteam_rank_university_relations",
     section: "finance",
     committeeSlug: "finance",
@@ -455,8 +469,9 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
   },
   {
     header:
-      "Rank your preference for which team you'd like to be in. Please rank from 1 " +
-      "(most preferred) to 6 (least preferred). [Purchasing + Planning]",
+      "Rank your preference for which team you'd like to be in. We will try our best to " +
+      "accommodate everyone into their top choice, but we cannot guarantee placements. " +
+      "[Purchasing + Planning]",
     key: "finance_subteam_rank_purchasing_planning",
     section: "finance",
     committeeSlug: "finance",
@@ -466,8 +481,9 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
   },
   {
     header:
-      "Rank your preference for which team you'd like to be in. Please rank from 1 " +
-      "(most preferred) to 6 (least preferred). [Sponsor Relations]",
+      "Rank your preference for which team you'd like to be in. We will try our best to " +
+      "accommodate everyone into their top choice, but we cannot guarantee placements. " +
+      "[Sponsor Relations]",
     key: "finance_subteam_rank_sponsor_relations",
     section: "finance",
     committeeSlug: "finance",
@@ -477,8 +493,9 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
   },
   {
     header:
-      "Rank your preference for which team you'd like to be in. Please rank from 1 " +
-      "(most preferred) to 6 (least preferred). [Corporate Sponsorship]",
+      "Rank your preference for which team you'd like to be in. We will try our best to " +
+      "accommodate everyone into their top choice, but we cannot guarantee placements. " +
+      "[Corporate Sponsorship]",
     key: "finance_subteam_rank_corporate_sponsorship",
     section: "finance",
     committeeSlug: "finance",
@@ -487,31 +504,31 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     role: "subteam_rank",
   },
   {
-    header: "Why are you interested in the Finance committee?",
-    key: "finance_motivation",
+    header: "Which fruit most represents you and why?",
+    key: "finance_fruit",
     section: "finance",
     committeeSlug: "finance",
     answerType: "long_text",
     role: "answer",
   },
   {
-    header: "Describe any experience you have with budgeting, sponsorships, or vendor relations.",
-    key: "finance_experience",
+    header: "Best bad idea you tried?",
+    key: "finance_bad_idea",
     section: "finance",
     committeeSlug: "finance",
     answerType: "long_text",
     role: "answer",
   },
   {
-    header: "What is your approach to reaching out to a company you have no connection to?",
-    key: "finance_outreach_approach",
+    header: "What's your hottest take?",
+    key: "finance_hot_take",
     section: "finance",
     committeeSlug: "finance",
     answerType: "long_text",
     role: "answer",
   },
   {
-    header: "Anything else you would like the Finance committee to know?",
+    header: "Anything else you'd like to share with us? You can leave this blank if you wish.",
     key: "finance_additional",
     section: "finance",
     committeeSlug: "finance",
@@ -529,48 +546,50 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     role: "opt_in",
   },
   {
-    header: "What is the best event you have ever attended, and what made it work?",
-    key: "events_best_event",
+    header: "Where is Waldo?",
+    key: "events_waldo",
     section: "events",
     committeeSlug: "events",
     answerType: "long_text",
     role: "answer",
   },
   {
-    header: "If you could run any event on campus, what would it be?",
-    key: "events_dream_event",
+    header: "What's something you did recently you're proud of?",
+    key: "events_proud_of",
     section: "events",
     committeeSlug: "events",
     answerType: "long_text",
     role: "answer",
   },
   {
-    header: "Describe a time you had to solve a problem on short notice.",
-    key: "events_problem_solving",
+    header: "What are you adding to the TartanHacks Opening Ceremony playlist?",
+    key: "events_opening_playlist",
     section: "events",
     committeeSlug: "events",
     answerType: "long_text",
     role: "answer",
   },
   {
-    header: "How comfortable are you with talking to vendors and campus partners?",
-    key: "events_comfort",
+    header:
+      "TartanHacks just wrapped up (it's almost midnight). What are you listening to on your " +
+      "way home?",
+    key: "events_closing_playlist",
     section: "events",
     committeeSlug: "events",
-    answerType: "short_text",
+    answerType: "long_text",
     role: "answer",
   },
   {
-    header: "How many hours per week can you commit to Events?",
-    key: "events_commitment",
+    header: "Why do you do what you do?",
+    key: "events_motivation",
     section: "events",
     committeeSlug: "events",
-    answerType: "short_text",
+    answerType: "long_text",
     role: "answer",
   },
   {
-    header: "Anything else you would like the Events committee to know?",
-    key: "events_additional",
+    header: "If you wrote these questions, what would you do differently?",
+    key: "events_question_critique",
     section: "events",
     committeeSlug: "events",
     answerType: "long_text",
@@ -579,7 +598,7 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
 
   // --- Design (opt-in + 2) ---
   {
-    header: "Do you want to answer the Design committee specific questions?",
+    header: "Do you want to answer Design specific questions?",
     key: "design_opt_in",
     section: "design",
     committeeSlug: "design",
@@ -595,7 +614,7 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     role: "answer",
   },
   {
-    header: "Portfolio link",
+    header: "Portfolio link (optional but highly recommended!)",
     key: "design_portfolio_link",
     section: "design",
     committeeSlug: "design",
@@ -704,6 +723,19 @@ function buildLookups(): { exact: Map<string, KnownHeader>; folded: Map<string, 
 }
 
 const LOOKUPS = buildLookups();
+
+/**
+ * Whether the declared form knows this header at all, by any of the three match
+ * kinds `detectMapping` uses. Exists so a caller can weigh one worksheet
+ * against another before committing to parse either.
+ */
+export function isKnownHeader(header: string): boolean {
+  return (
+    LOOKUPS.exact.has(header) ||
+    LOOKUPS.folded.has(normalizeHeaderKey(header)) ||
+    matchRankGroup(header) !== null
+  );
+}
 
 /**
  * Matches a sheet's headers against the declared Fall 2026 form. Exact matches

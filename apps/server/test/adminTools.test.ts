@@ -185,6 +185,90 @@ describe("exports", () => {
   });
 });
 
+describe("committee configuration", () => {
+  /**
+   * Before this endpoint the development seed was the only thing that could
+   * create a committee, so a real cycle could not be configured without shell
+   * access to the server.
+   */
+  it("creates a committee and attaches it to the cycle", async () => {
+    const { cycle } = await setup();
+
+    const res = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/committees`)
+      .set(adminAuth())
+      .send({ slug: "labrador", name: "Labrador", capacity: 12, displayOrder: 5 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.slug).toBe("labrador");
+    expect(res.body.capacity).toBe(12);
+
+    const listed = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/committees`)
+      .set(adminAuth());
+    expect(listed.body.map((row: { slug: string }) => row.slug)).toContain("labrador");
+  });
+
+  it("is idempotent, updating capacity rather than failing on a second call", async () => {
+    const { cycle } = await setup();
+
+    await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/committees`)
+      .set(adminAuth())
+      .send({ slug: "labrador", name: "Labrador", capacity: 12 });
+
+    const again = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/committees`)
+      .set(adminAuth())
+      .send({ slug: "labrador", name: "Labrador", capacity: 20 });
+
+    expect(again.status).toBe(201);
+    expect(again.body.capacity).toBe(20);
+
+    const listed = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/committees`)
+      .set(adminAuth());
+    const labrador = listed.body.filter((row: { slug: string }) => row.slug === "labrador");
+    expect(labrador).toHaveLength(1);
+  });
+
+  it("normalises the slug so casing cannot create a second committee", async () => {
+    const { cycle } = await setup();
+
+    await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/committees`)
+      .set(adminAuth())
+      .send({ slug: "Labrador", name: "Labrador" });
+
+    const listed = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/committees`)
+      .set(adminAuth());
+    expect(listed.body.filter((row: { slug: string }) => row.slug === "labrador")).toHaveLength(1);
+  });
+
+  it("refuses a blank name rather than creating an unnamed committee", async () => {
+    const { cycle } = await setup();
+
+    const res = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/committees`)
+      .set(adminAuth())
+      .send({ slug: "ghost", name: "   " });
+
+    expect(res.status).toBe(422);
+  });
+
+  it("does not let a reviewer configure committees", async () => {
+    const { cycle } = await setup();
+
+    const res = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/committees`)
+      .set(aliceAuth())
+      .send({ slug: "labrador", name: "Labrador" });
+
+    expect(res.status).toBe(403);
+  });
+});
+
 describe("rubric versions", () => {
   it("publishes a new version and deactivates the previous one", async () => {
     const { cycle, rubric } = await setup();

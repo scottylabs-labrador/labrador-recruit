@@ -229,9 +229,14 @@ describe("normalizeRow preferences", () => {
 describe("normalizeRow answers", () => {
   it("omits blank optional answers instead of storing empty strings", () => {
     const application = expectOk(
-      normalizeRow(rowFor({ ...VALID, tech_project: "   ", tech_interests: "Rust" }), MAPPING),
+      normalizeRow(
+        rowFor({ ...VALID, tech_project: "   ", tech_projects_of_interest: "Rust" }),
+        MAPPING,
+      ),
     );
-    expect(application.answers).toEqual([{ questionKey: "tech_interests", answerText: "Rust" }]);
+    expect(application.answers).toEqual([
+      { questionKey: "tech_projects_of_interest", answerText: "Rust" },
+    ]);
   });
 
   it("keeps prose verbatim apart from the outer whitespace", () => {

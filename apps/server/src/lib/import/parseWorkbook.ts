@@ -1,6 +1,7 @@
 import type { CellValue, Row, Worksheet } from "exceljs";
 import { Workbook } from "exceljs";
 
+import { isKnownHeader } from "./headerMap.ts";
 import type { ParsedSheet, RawCell, RawRow } from "./types.ts";
 
 /**
@@ -122,9 +123,40 @@ function readSheet(worksheet: Worksheet): ParsedSheet {
 }
 
 /**
- * Reads one worksheet of a Google Forms .xlsx export. Defaults to the first
- * worksheet because the Fall 2026 export contains only `Form Responses 1`, but
- * accepts a name so a multi-sheet workbook can be imported deliberately.
+ * How many of a worksheet's headers the Fall 2026 mapping recognises. Used only
+ * to pick between worksheets, never to accept or reject one.
+ */
+function countRecognisedHeaders(worksheet: Worksheet): number {
+  const headerRow = worksheet.getRow(1);
+  let recognised = 0;
+
+  for (let index = 1; index <= headerRow.cellCount; index += 1) {
+    const raw = toRawCell(headerRow.getCell(index).value);
+    if (typeof raw !== "string") {
+      continue;
+    }
+    const header = normalizeHeaderText(raw);
+    if (header !== "" && isKnownHeader(header)) {
+      recognised += 1;
+    }
+  }
+
+  return recognised;
+}
+
+/**
+ * Reads one worksheet of a Google Forms .xlsx export.
+ *
+ * When no sheet is named, the worksheet whose headers the form mapping
+ * recognises best is chosen, falling back to the first. Taking the first
+ * worksheet unconditionally was wrong for the real export: Google Sheets keeps
+ * `Form Responses 1` alongside whatever tabs the committee added, and the live
+ * Fall 2026 file leads with a hand-written `Instructions` sheet. Reading that
+ * one produced a spotless import of zero applicants - no error, no unmapped
+ * column, just nothing - which is the least debuggable outcome available.
+ *
+ * A name is still honoured exactly when given, so a deliberate choice always
+ * wins over the guess.
  */
 export async function parseXlsx(
   buffer: ArrayBuffer | Buffer,
@@ -139,18 +171,29 @@ export async function parseXlsx(
   const data = Buffer.from(bytes) as unknown as Parameters<typeof workbook.xlsx.load>[0];
   await workbook.xlsx.load(data);
 
-  const worksheet =
-    sheetName === undefined ? workbook.worksheets[0] : workbook.getWorksheet(sheetName);
-
-  if (worksheet === undefined) {
-    throw new Error(
-      sheetName === undefined
-        ? "Workbook contains no worksheets"
-        : `Workbook has no worksheet named "${sheetName}"`,
-    );
+  if (sheetName !== undefined) {
+    const named = workbook.getWorksheet(sheetName);
+    if (named === undefined) {
+      throw new Error(`Workbook has no worksheet named "${sheetName}"`);
+    }
+    return readSheet(named);
   }
 
-  return readSheet(worksheet);
+  let best = workbook.worksheets[0];
+  if (best === undefined) {
+    throw new Error("Workbook contains no worksheets");
+  }
+
+  let bestScore = countRecognisedHeaders(best);
+  for (const candidate of workbook.worksheets.slice(1)) {
+    const score = countRecognisedHeaders(candidate);
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  return readSheet(best);
 }
 
 /**

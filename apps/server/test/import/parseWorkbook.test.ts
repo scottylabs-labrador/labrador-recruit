@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { Workbook } from "exceljs";
 import { describe, expect, it } from "vitest";
 
 import { FALL_2026_MAPPING } from "../../src/lib/import/headerMap.ts";
@@ -137,6 +138,44 @@ describe("parseXlsx", () => {
     const financeRow = sheet.rows.find((row) => row["Email Address"] === "gia@andrew.cmu.edu");
     expect(header).toBeDefined();
     expect(financeRow?.[header ?? ""]).toBe(1);
+  });
+
+  /**
+   * The live Fall 2026 export leads with a hand-written `Instructions` tab, so
+   * "first worksheet" was the wrong default: it imported cleanly and produced
+   * no applicants at all. Nothing errored and no column was reported unmapped,
+   * which made it look like a correct import of an empty form.
+   */
+  it("skips a leading sheet that is not the form responses", async () => {
+    const workbook = new Workbook();
+    const instructions = workbook.addWorksheet("Instructions");
+    instructions.addRow(["How to use this sheet"]);
+    instructions.addRow(["Do not edit the Form Responses tab directly."]);
+
+    const responses = workbook.addWorksheet("Form Responses 1");
+    responses.addRow(FALL_2026_MAPPING.map((known) => known.header));
+    responses.addRow(FALL_2026_MAPPING.map((known) => (known.key === "email" ? "a@b.edu" : null)));
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const sheet = await parseXlsx(Buffer.from(buffer));
+
+    expect(sheet.sheetName).toBe("Form Responses 1");
+    expect(sheet.rows).toHaveLength(1);
+  });
+
+  it("still honours an explicitly named sheet over the better-matching one", async () => {
+    const workbook = new Workbook();
+    const notes = workbook.addWorksheet("Notes");
+    notes.addRow(["Committee Ranking [Tech]"]);
+    notes.addRow(["1st Choice"]);
+
+    const responses = workbook.addWorksheet("Form Responses 1");
+    responses.addRow(FALL_2026_MAPPING.map((known) => known.header));
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const sheet = await parseXlsx(Buffer.from(buffer), "Notes");
+
+    expect(sheet.sheetName).toBe("Notes");
   });
 
   it("accepts an ArrayBuffer as well as a Buffer", async () => {

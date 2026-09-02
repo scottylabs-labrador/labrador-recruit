@@ -255,6 +255,101 @@ export const recruitmentCycleService = {
     };
   },
 
+  /**
+   * Creates a committee if its slug is new, and attaches it to the cycle.
+   *
+   * Until this existed the only way to get a committee into the database was
+   * the development seed, so a real cycle could not be configured at all
+   * without shell access to the server. Committees are global and cycles
+   * reference them, which is what lets a committee keep its identity - and its
+   * history - from one recruitment round to the next.
+   *
+   * Idempotent on both halves: re-attaching an existing committee updates its
+   * capacity rather than failing, so this can be run repeatedly while setting a
+   * cycle up.
+   */
+  attachCommittee: async (
+    acUser: RecruitmentUser,
+    cycleId: string,
+    input: {
+      slug: string;
+      name: string;
+      description?: string | null;
+      capacity?: number | null;
+      minimumReviews?: number | null;
+      displayOrder?: number;
+    },
+  ): Promise<CommitteeSummary> => {
+    await recruitmentCycleService.getCycle(acUser, cycleId);
+    if (!canConfigureCycle({ user: acUser })) {
+      throw new HttpError(403, "You are not allowed to configure this cycle");
+    }
+
+    const slug = input.slug.trim().toLowerCase();
+    const name = input.name.trim();
+    if (slug === "" || name === "") {
+      throw new HttpError(422, "A committee needs both a slug and a name");
+    }
+
+    const now = new Date();
+
+    const [saved] = await db
+      .insert(committee)
+      .values({
+        slug,
+        name,
+        description: input.description ?? null,
+        displayOrder: input.displayOrder ?? 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: committee.slug,
+        set: { name, description: input.description ?? null, updatedAt: now },
+      })
+      .returning();
+
+    if (saved === undefined) {
+      throw new HttpError(500, "Failed to save the committee");
+    }
+
+    await db
+      .insert(cycleCommittee)
+      .values({
+        cycleId,
+        committeeId: saved.id,
+        capacity: input.capacity ?? null,
+        minimumReviews: input.minimumReviews ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [cycleCommittee.cycleId, cycleCommittee.committeeId],
+        set: {
+          capacity: input.capacity ?? null,
+          minimumReviews: input.minimumReviews ?? null,
+          updatedAt: now,
+        },
+      });
+
+    await recordAuditEvent({
+      cycleId,
+      actorUserId: acUser.id,
+      action: "committee.attached",
+      entityType: "committee",
+      entityId: saved.id,
+      metadata: { slug, name, capacity: input.capacity ?? null },
+    });
+
+    return {
+      id: saved.id,
+      slug: saved.slug,
+      name: saved.name,
+      capacity: input.capacity ?? null,
+      displayOrder: saved.displayOrder,
+    };
+  },
+
   listCommittees: async (acUser: RecruitmentUser, cycleId: string): Promise<CommitteeSummary[]> => {
     await recruitmentCycleService.getCycle(acUser, cycleId);
 

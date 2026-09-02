@@ -101,6 +101,32 @@ export class RecruitmentCyclesController extends Controller {
     return recruitmentCycleService.listCommittees(user, cycleId);
   }
 
+  /**
+   * Creates a committee and attaches it to this cycle, or updates it if the
+   * slug already exists. Safe to call repeatedly while configuring a cycle.
+   */
+  @Post("{cycleId}/committees")
+  @Security(OIDC_AUTH)
+  @Security(BEARER_AUTH)
+  @SuccessResponse(201)
+  async attachCommittee(
+    @Request() req: ExpressRequest,
+    @Path() cycleId: string,
+    @Body()
+    body: {
+      slug: string;
+      name: string;
+      description?: string | null;
+      capacity?: number | null;
+      minimumReviews?: number | null;
+      displayOrder?: number;
+    },
+  ) {
+    const user = await getRecruitmentUser(req, cycleId);
+    this.setStatus(201);
+    return recruitmentCycleService.attachCommittee(user, cycleId, body);
+  }
+
   /** The rubric a reviewer will be asked to score against. */
   @Get("{cycleId}/committees/{committeeId}/rubric")
   @Security(OIDC_AUTH)

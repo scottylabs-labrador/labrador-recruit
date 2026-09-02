@@ -113,7 +113,7 @@ describe("Fall 2026 fixture, end to end", () => {
     });
     expect(dorian.answers.map((answer) => answer.questionKey)).toEqual([
       "tech_project",
-      "tech_interests",
+      "tech_projects_of_interest",
     ]);
   });
 
@@ -121,7 +121,7 @@ describe("Fall 2026 fixture, end to end", () => {
     const echo = applicationFor("echo@andrew.cmu.edu");
     expect(echo.year).toBe("grad");
     expect(echo.committeeOptIns["labrador"]).toBe(true);
-    expect(echo.answers).toHaveLength(8);
+    expect(echo.answers).toHaveLength(7);
 
     const social = echo.answers.find((answer) => answer.questionKey === "labrador_social_link");
     expect(social?.answerText).toBe("instagram.com/fake.echo.mockworth");
@@ -159,7 +159,7 @@ describe("Fall 2026 fixture, end to end", () => {
   it("imports the Events candidate, whose opt-in wording is the odd one out", () => {
     const hugo = applicationFor("hugo@andrew.cmu.edu");
     expect(hugo.committeeOptIns["events"]).toBe(true);
-    expect(hugo.answers.map((answer) => answer.questionKey)).toContain("events_dream_event");
+    expect(hugo.answers.map((answer) => answer.questionKey)).toContain("events_waldo");
     // Every other block refused with "No, let me be done" or "No".
     expect(hugo.committeeOptIns["design"]).toBe(false);
   });
