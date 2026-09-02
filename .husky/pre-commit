@@ -1,17 +1,13 @@
 #!/usr/bin/env sh
 # POSIX sh rather than zsh so the hook runs on Windows (Git Bash) as well as
 # macOS and Linux. CI (.github/workflows/check.yml) remains the authoritative
-# gate and runs every check below unconditionally, including the end-to-end
-# suite that is too slow to justify on every commit.
+# gate; this runs everything it does except the end-to-end suite, which is too
+# slow to justify on every commit.
 set -e
 
-# Installed via Homebrew in .devcontainer/post-create.sh, which does not run on
-# Windows. Skip locally when absent; the EditorConfig Check CI job still enforces it.
-if command -v editorconfig-checker >/dev/null 2>&1; then
-  editorconfig-checker --exclude '(^LICENSE|^packages/db/drizzle/.*$)'
-else
-  echo "pre-commit: editorconfig-checker not installed, skipping (CI enforces it)"
-fi
+# Pinned to v6: v7 fails at startup on this runtime with
+# "setGlobalProxyFromEnv is not a function".
+bunx editorconfig-checker --exclude '(^LICENSE|^packages/db/drizzle/.*$)'
 
 bun run syncpack
 bunx markdownlint-cli2

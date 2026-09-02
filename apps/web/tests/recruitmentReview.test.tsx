@@ -13,12 +13,15 @@ import {
   setReview,
   setRubric,
   setSession,
+  setStanding,
 } from "./msw/handlers.ts";
 import {
+  adminStanding,
   application,
   ASSIGNMENT_ID,
   committee,
   cycle,
+  myStanding,
   peerReview,
   queueEntry,
   review,
@@ -38,6 +41,7 @@ function seed() {
   setRubric(rubric());
   setReview(review());
   setPeerReviews([peerReview()]);
+  setStanding(myStanding());
 }
 
 async function fillValidReview(user: ReturnType<typeof userEvent.setup>) {
@@ -80,6 +84,29 @@ describe("review page", () => {
     await renderApp(REVIEW_PATH);
 
     expect(await screen.findByText("No committee-specific response submitted.")).toBeDefined();
+  });
+
+  /**
+   * A derived criterion is part of the rubric and part of the score, but the
+   * reviewer never enters it and the server rejects any attempt to. Rendering
+   * one as an input made the form permanently unsubmittable, which only showed
+   * up end to end because the earlier fixture rubric had no derived criterion.
+   */
+  it("shows a derived criterion as context rather than as something to score", async () => {
+    seed();
+    await renderApp(REVIEW_PATH);
+
+    await screen.findByRole("button", { name: "Submit review" });
+
+    // The reviewer-scored criterion has radios.
+    expect(document.querySelector("#criterion-technical_depth-3")).not.toBeNull();
+    // The derived one does not.
+    expect(document.querySelector("#criterion-preference-3")).toBeNull();
+
+    expect(await screen.findByText("Also counted, but not yours to score")).toBeDefined();
+    expect(
+      await screen.findByText(/derived from the ranking the applicant submitted themselves/),
+    ).toBeDefined();
   });
 
   it("refuses to submit without a rationale and explains why", async () => {
@@ -147,6 +174,22 @@ describe("review page", () => {
     expect(requestsMatching("POST", "/review/submit")).toHaveLength(1);
 
     expect(await screen.findByText("Solid project experience and clear writing.")).toBeDefined();
+  });
+
+  it("offers Reopen to a recruitment admin on a locked review, but not to a reviewer", async () => {
+    seed();
+    setReview(review({ submittedAt: "2026-02-01T00:00:00.000Z", computedScore: 4 }));
+    setQueue([queueEntry({ status: "submitted", submitted: true })]);
+
+    const reviewerView = await renderApp(REVIEW_PATH);
+    expect(await screen.findByText(/This review is locked/)).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Reopen this review" })).toBeNull();
+    reviewerView.unmount();
+
+    setStanding(adminStanding());
+    await renderApp(REVIEW_PATH);
+
+    expect(await screen.findByRole("button", { name: "Reopen this review" })).toBeDefined();
   });
 
   it("requires a confirmation step before declaring a conflict, and never asks for a reason", async () => {

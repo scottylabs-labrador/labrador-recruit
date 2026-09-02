@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { $api } from "@/lib/apiClient";
-import { confidenceLabel, recommendationLabel } from "@/lib/recruitment.ts";
+import { confidenceLabel, formatStatistic, recommendationLabel } from "@/lib/recruitment.ts";
 
 interface PeerReviewsProps {
   candidacyId: string;
@@ -49,11 +49,11 @@ export function PeerReviews({ candidacyId, currentUserId }: PeerReviewsProps) {
                 <Badge variant="outline">{recommendationLabel(review.recommendation)}</Badge>
                 <Badge variant="muted">{confidenceLabel(review.confidence)} confidence</Badge>
                 <span className="text-sm text-muted-foreground tabular-nums">
-                  Score {review.computedScore}
+                  Score {formatStatistic(review.computedScore)}
                 </span>
               </div>
               <p className="max-w-[70ch] text-[0.95rem] leading-7 whitespace-pre-wrap">
-                {review.rationale}
+                {review.rationale ?? "No rationale recorded."}
               </p>
             </article>
           ))

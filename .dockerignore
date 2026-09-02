@@ -1,0 +1,45 @@
+# Keep the build context small and, more importantly, correct.
+#
+# Both Dockerfiles run `bun ci` and then `COPY . .`. Without this file that
+# second copy overwrites the freshly installed Linux node_modules with whatever
+# the host has - on a Windows or macOS machine, binaries that cannot run in the
+# image. It also shipped a 200MB+ context, which every Railway build pays for.
+
+node_modules
+**/node_modules
+
+# Generated. The server Dockerfile regenerates the OpenAPI spec during the build.
+dist
+**/dist
+build
+**/build
+.turbo
+**/.turbo
+*.tsbuildinfo
+
+# Never send secrets into a build context.
+.env
+.env.*
+!.env.local.example
+
+# History and tooling the image has no use for.
+.git
+.github
+.husky
+.vscode
+.devcontainer
+.agents
+.playwright-mcp
+
+# Test output.
+test-results
+playwright-report
+blob-report
+playwright/.cache
+
+# Documentation and local notes.
+docs
+*.md
+!README.md
+
+.DS_Store

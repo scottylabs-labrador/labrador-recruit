@@ -3,8 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { userSession } from "./fixtures.ts";
-import { setCommittees, setCycles, setQueue, setSession } from "./msw/handlers.ts";
-import { committee, COMMITTEE_DESIGN, cycle, queueEntry } from "./recruitmentFixtures.ts";
+import { setCommittees, setCycles, setQueue, setSession, setStanding } from "./msw/handlers.ts";
+import {
+  committee,
+  COMMITTEE_DESIGN,
+  cycle,
+  myStanding,
+  queueEntry,
+} from "./recruitmentFixtures.ts";
 import { renderApp } from "./render.tsx";
 
 function seed() {
@@ -14,6 +20,7 @@ function seed() {
     committee(),
     committee({ id: COMMITTEE_DESIGN, slug: "design", name: "Design", displayOrder: 2 }),
   ]);
+  setStanding(myStanding());
 }
 
 describe("my review queue", () => {

@@ -34,6 +34,7 @@ import {
   type RecommendationValue,
   type ReviewDetail,
   type SaveReviewRequest,
+  yearLabel,
 } from "@/lib/recruitment.ts";
 
 const AUTOSAVE_DELAY_MS = 800;
@@ -59,9 +60,6 @@ function ReviewPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const cycle = $api.useQuery("get", "/recruitment/cycles/{cycleId}", {
-    params: { path: { cycleId } },
-  });
   const queue = $api.useQuery("get", "/recruitment/cycles/{cycleId}/my-queue", {
     params: { path: { cycleId } },
   });
@@ -92,14 +90,13 @@ function ReviewPage() {
     { enabled: current !== undefined },
   );
 
-  const user = useRecruitmentUser({
-    cycleId,
-    blindReviewEnabled: cycle.data?.blindReviewEnabled,
-    unblindedCandidacyIds: queueItems
-      .filter((item) => item.submitted)
-      .map((item) => item.candidacyId),
-  });
-  const identityVisible = canReadApplicantIdentity({ user, cycleId });
+  // `/me` carries the caller's memberships, blind-review setting, and the
+  // candidacies they have already submitted on, so both predicates below are the
+  // server's own, evaluated over the server's own inputs.
+  const { user, isLoaded: standingLoaded } = useRecruitmentUser(cycleId);
+  // Only claim identity is being withheld once the standing is actually known,
+  // so the notice never flashes on a cycle that is not running blind review.
+  const identityHidden = standingLoaded && !canReadApplicantIdentity({ user, cycleId });
   const mayReopen = canReopenReview({ user });
 
   const [form, setForm] = useState<FormState | null>(null);
@@ -172,7 +169,21 @@ function ReviewPage() {
 
   const locked = reviewData?.submittedAt != null;
   const conflicted = current?.status === "conflicted";
-  const criteria = rubric.data?.criteria ?? [];
+  /**
+   * Only reviewer-scored criteria are shown or required.
+   *
+   * A rubric also carries derived criteria — currently the applicant's own
+   * committee preference — which are computed from what the applicant
+   * submitted, never entered by a reviewer. Rendering one as an input asks for
+   * a score the server refuses with 422, and counting one as missing makes the
+   * form permanently unsubmittable.
+   */
+  const criteria = (rubric.data?.criteria ?? []).filter(
+    (criterion) => criterion.source === "reviewer",
+  );
+  const derivedCriteria = (rubric.data?.criteria ?? []).filter(
+    (criterion) => criterion.source !== "reviewer",
+  );
 
   function updateForm(patch: Partial<FormState>) {
     setForm((previousState) => {
@@ -274,15 +285,15 @@ function ReviewPage() {
             ) : null}
           </div>
           <p className="text-sm text-muted-foreground">
-            {current.year}
+            {yearLabel(current.year)}
             {current.major === null ? "" : ` · ${current.major}`}
           </p>
-          {identityVisible ? null : (
+          {identityHidden ? (
             <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <EyeOff className="size-3.5" aria-hidden />
               Blind review is on for this cycle, so applicant identity is withheld.
             </p>
-          )}
+          ) : null}
         </div>
 
         <nav aria-label="Queue navigation" className="flex items-center gap-2">
@@ -391,6 +402,27 @@ function ReviewPage() {
                         }
                       />
                     ))
+                  )}
+
+                  {derivedCriteria.length === 0 ? null : (
+                    <div className="rounded-md border border-dashed border-border px-3 py-2">
+                      <p className="text-sm font-medium text-foreground">
+                        Also counted, but not yours to score
+                      </p>
+                      <ul className="mt-1 flex flex-col gap-1">
+                        {derivedCriteria.map((criterion) => (
+                          <li
+                            key={criterion.id}
+                            className="text-sm leading-6 text-muted-foreground"
+                          >
+                            <span className="font-medium">{criterion.label}</span>
+                            {" — "}
+                            {Math.round(criterion.weight * 100)}% of the total, derived from the
+                            ranking the applicant submitted themselves.
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
 
                   <div className="flex flex-col gap-1.5">

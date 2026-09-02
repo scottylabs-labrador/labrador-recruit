@@ -15,8 +15,11 @@ import { Route as RecruitmentRouteImport } from './routes/recruitment'
 import { Route as RecruitmentCycleIdIndexRouteImport } from './routes/recruitment.$cycleId.index'
 import { Route as RecruitmentCycleIdApplicantsRouteImport } from './routes/recruitment.$cycleId.applicants'
 import { Route as RecruitmentCycleIdDisagreementsRouteImport } from './routes/recruitment.$cycleId.disagreements'
+import { Route as RecruitmentCycleIdExportsRouteImport } from './routes/recruitment.$cycleId.exports'
+import { Route as RecruitmentCycleIdImportRouteImport } from './routes/recruitment.$cycleId.import'
 import { Route as RecruitmentCycleIdQueueRouteImport } from './routes/recruitment.$cycleId.queue'
 import { Route as RecruitmentCycleIdRankingRouteImport } from './routes/recruitment.$cycleId.ranking'
+import { Route as RecruitmentCycleIdRubricRouteImport } from './routes/recruitment.$cycleId.rubric'
 import { Route as RecruitmentCycleIdApplicantApplicationIdRouteImport } from './routes/recruitment.$cycleId.applicant.$applicationId'
 import { Route as RecruitmentCycleIdReviewAssignmentIdRouteImport } from './routes/recruitment.$cycleId.review.$assignmentId'
 
@@ -52,6 +55,18 @@ const RecruitmentCycleIdDisagreementsRoute =
     path: '/$cycleId/disagreements',
     getParentRoute: () => RecruitmentRoute,
   } as any)
+const RecruitmentCycleIdExportsRoute =
+  RecruitmentCycleIdExportsRouteImport.update({
+    id: '/$cycleId/exports',
+    path: '/$cycleId/exports',
+    getParentRoute: () => RecruitmentRoute,
+  } as any)
+const RecruitmentCycleIdImportRoute =
+  RecruitmentCycleIdImportRouteImport.update({
+    id: '/$cycleId/import',
+    path: '/$cycleId/import',
+    getParentRoute: () => RecruitmentRoute,
+  } as any)
 const RecruitmentCycleIdQueueRoute = RecruitmentCycleIdQueueRouteImport.update({
   id: '/$cycleId/queue',
   path: '/$cycleId/queue',
@@ -61,6 +76,12 @@ const RecruitmentCycleIdRankingRoute =
   RecruitmentCycleIdRankingRouteImport.update({
     id: '/$cycleId/ranking',
     path: '/$cycleId/ranking',
+    getParentRoute: () => RecruitmentRoute,
+  } as any)
+const RecruitmentCycleIdRubricRoute =
+  RecruitmentCycleIdRubricRouteImport.update({
+    id: '/$cycleId/rubric',
+    path: '/$cycleId/rubric',
     getParentRoute: () => RecruitmentRoute,
   } as any)
 const RecruitmentCycleIdApplicantApplicationIdRoute =
@@ -82,8 +103,11 @@ export interface FileRoutesByFullPath {
   '/recruitment': typeof RecruitmentRouteWithChildren
   '/recruitment/$cycleId/applicants': typeof RecruitmentCycleIdApplicantsRoute
   '/recruitment/$cycleId/disagreements': typeof RecruitmentCycleIdDisagreementsRoute
+  '/recruitment/$cycleId/exports': typeof RecruitmentCycleIdExportsRoute
+  '/recruitment/$cycleId/import': typeof RecruitmentCycleIdImportRoute
   '/recruitment/$cycleId/queue': typeof RecruitmentCycleIdQueueRoute
   '/recruitment/$cycleId/ranking': typeof RecruitmentCycleIdRankingRoute
+  '/recruitment/$cycleId/rubric': typeof RecruitmentCycleIdRubricRoute
   '/recruitment/$cycleId/': typeof RecruitmentCycleIdIndexRoute
   '/recruitment/$cycleId/applicant/$applicationId': typeof RecruitmentCycleIdApplicantApplicationIdRoute
   '/recruitment/$cycleId/review/$assignmentId': typeof RecruitmentCycleIdReviewAssignmentIdRoute
@@ -94,8 +118,11 @@ export interface FileRoutesByTo {
   '/recruitment': typeof RecruitmentRouteWithChildren
   '/recruitment/$cycleId/applicants': typeof RecruitmentCycleIdApplicantsRoute
   '/recruitment/$cycleId/disagreements': typeof RecruitmentCycleIdDisagreementsRoute
+  '/recruitment/$cycleId/exports': typeof RecruitmentCycleIdExportsRoute
+  '/recruitment/$cycleId/import': typeof RecruitmentCycleIdImportRoute
   '/recruitment/$cycleId/queue': typeof RecruitmentCycleIdQueueRoute
   '/recruitment/$cycleId/ranking': typeof RecruitmentCycleIdRankingRoute
+  '/recruitment/$cycleId/rubric': typeof RecruitmentCycleIdRubricRoute
   '/recruitment/$cycleId': typeof RecruitmentCycleIdIndexRoute
   '/recruitment/$cycleId/applicant/$applicationId': typeof RecruitmentCycleIdApplicantApplicationIdRoute
   '/recruitment/$cycleId/review/$assignmentId': typeof RecruitmentCycleIdReviewAssignmentIdRoute
@@ -107,8 +134,11 @@ export interface FileRoutesById {
   '/recruitment': typeof RecruitmentRouteWithChildren
   '/recruitment/$cycleId/applicants': typeof RecruitmentCycleIdApplicantsRoute
   '/recruitment/$cycleId/disagreements': typeof RecruitmentCycleIdDisagreementsRoute
+  '/recruitment/$cycleId/exports': typeof RecruitmentCycleIdExportsRoute
+  '/recruitment/$cycleId/import': typeof RecruitmentCycleIdImportRoute
   '/recruitment/$cycleId/queue': typeof RecruitmentCycleIdQueueRoute
   '/recruitment/$cycleId/ranking': typeof RecruitmentCycleIdRankingRoute
+  '/recruitment/$cycleId/rubric': typeof RecruitmentCycleIdRubricRoute
   '/recruitment/$cycleId/': typeof RecruitmentCycleIdIndexRoute
   '/recruitment/$cycleId/applicant/$applicationId': typeof RecruitmentCycleIdApplicantApplicationIdRoute
   '/recruitment/$cycleId/review/$assignmentId': typeof RecruitmentCycleIdReviewAssignmentIdRoute
@@ -121,8 +151,11 @@ export interface FileRouteTypes {
     | '/recruitment'
     | '/recruitment/$cycleId/applicants'
     | '/recruitment/$cycleId/disagreements'
+    | '/recruitment/$cycleId/exports'
+    | '/recruitment/$cycleId/import'
     | '/recruitment/$cycleId/queue'
     | '/recruitment/$cycleId/ranking'
+    | '/recruitment/$cycleId/rubric'
     | '/recruitment/$cycleId/'
     | '/recruitment/$cycleId/applicant/$applicationId'
     | '/recruitment/$cycleId/review/$assignmentId'
@@ -133,8 +166,11 @@ export interface FileRouteTypes {
     | '/recruitment'
     | '/recruitment/$cycleId/applicants'
     | '/recruitment/$cycleId/disagreements'
+    | '/recruitment/$cycleId/exports'
+    | '/recruitment/$cycleId/import'
     | '/recruitment/$cycleId/queue'
     | '/recruitment/$cycleId/ranking'
+    | '/recruitment/$cycleId/rubric'
     | '/recruitment/$cycleId'
     | '/recruitment/$cycleId/applicant/$applicationId'
     | '/recruitment/$cycleId/review/$assignmentId'
@@ -145,8 +181,11 @@ export interface FileRouteTypes {
     | '/recruitment'
     | '/recruitment/$cycleId/applicants'
     | '/recruitment/$cycleId/disagreements'
+    | '/recruitment/$cycleId/exports'
+    | '/recruitment/$cycleId/import'
     | '/recruitment/$cycleId/queue'
     | '/recruitment/$cycleId/ranking'
+    | '/recruitment/$cycleId/rubric'
     | '/recruitment/$cycleId/'
     | '/recruitment/$cycleId/applicant/$applicationId'
     | '/recruitment/$cycleId/review/$assignmentId'
@@ -202,6 +241,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RecruitmentCycleIdDisagreementsRouteImport
       parentRoute: typeof RecruitmentRoute
     }
+    '/recruitment/$cycleId/exports': {
+      id: '/recruitment/$cycleId/exports'
+      path: '/$cycleId/exports'
+      fullPath: '/recruitment/$cycleId/exports'
+      preLoaderRoute: typeof RecruitmentCycleIdExportsRouteImport
+      parentRoute: typeof RecruitmentRoute
+    }
+    '/recruitment/$cycleId/import': {
+      id: '/recruitment/$cycleId/import'
+      path: '/$cycleId/import'
+      fullPath: '/recruitment/$cycleId/import'
+      preLoaderRoute: typeof RecruitmentCycleIdImportRouteImport
+      parentRoute: typeof RecruitmentRoute
+    }
     '/recruitment/$cycleId/queue': {
       id: '/recruitment/$cycleId/queue'
       path: '/$cycleId/queue'
@@ -214,6 +267,13 @@ declare module '@tanstack/react-router' {
       path: '/$cycleId/ranking'
       fullPath: '/recruitment/$cycleId/ranking'
       preLoaderRoute: typeof RecruitmentCycleIdRankingRouteImport
+      parentRoute: typeof RecruitmentRoute
+    }
+    '/recruitment/$cycleId/rubric': {
+      id: '/recruitment/$cycleId/rubric'
+      path: '/$cycleId/rubric'
+      fullPath: '/recruitment/$cycleId/rubric'
+      preLoaderRoute: typeof RecruitmentCycleIdRubricRouteImport
       parentRoute: typeof RecruitmentRoute
     }
     '/recruitment/$cycleId/applicant/$applicationId': {
@@ -236,8 +296,11 @@ declare module '@tanstack/react-router' {
 interface RecruitmentRouteChildren {
   RecruitmentCycleIdApplicantsRoute: typeof RecruitmentCycleIdApplicantsRoute
   RecruitmentCycleIdDisagreementsRoute: typeof RecruitmentCycleIdDisagreementsRoute
+  RecruitmentCycleIdExportsRoute: typeof RecruitmentCycleIdExportsRoute
+  RecruitmentCycleIdImportRoute: typeof RecruitmentCycleIdImportRoute
   RecruitmentCycleIdQueueRoute: typeof RecruitmentCycleIdQueueRoute
   RecruitmentCycleIdRankingRoute: typeof RecruitmentCycleIdRankingRoute
+  RecruitmentCycleIdRubricRoute: typeof RecruitmentCycleIdRubricRoute
   RecruitmentCycleIdIndexRoute: typeof RecruitmentCycleIdIndexRoute
   RecruitmentCycleIdApplicantApplicationIdRoute: typeof RecruitmentCycleIdApplicantApplicationIdRoute
   RecruitmentCycleIdReviewAssignmentIdRoute: typeof RecruitmentCycleIdReviewAssignmentIdRoute
@@ -246,8 +309,11 @@ interface RecruitmentRouteChildren {
 const RecruitmentRouteChildren: RecruitmentRouteChildren = {
   RecruitmentCycleIdApplicantsRoute: RecruitmentCycleIdApplicantsRoute,
   RecruitmentCycleIdDisagreementsRoute: RecruitmentCycleIdDisagreementsRoute,
+  RecruitmentCycleIdExportsRoute: RecruitmentCycleIdExportsRoute,
+  RecruitmentCycleIdImportRoute: RecruitmentCycleIdImportRoute,
   RecruitmentCycleIdQueueRoute: RecruitmentCycleIdQueueRoute,
   RecruitmentCycleIdRankingRoute: RecruitmentCycleIdRankingRoute,
+  RecruitmentCycleIdRubricRoute: RecruitmentCycleIdRubricRoute,
   RecruitmentCycleIdIndexRoute: RecruitmentCycleIdIndexRoute,
   RecruitmentCycleIdApplicantApplicationIdRoute:
     RecruitmentCycleIdApplicantApplicationIdRoute,

@@ -20,7 +20,6 @@ import {
   formatRank,
   formatStatistic,
   RECOMMENDATION_OPTIONS,
-  type CandidacyAggregate,
 } from "@/lib/recruitment.ts";
 
 const COLUMNS = [
@@ -60,22 +59,15 @@ function RankingPage() {
   const committeeId = selected === "" ? (committeeList[0]?.id ?? "") : selected;
   const hasCommittee = committeeId !== "";
 
+  // `RankingRow` now carries `minimumReviews` and `recommendationCounts`, so the
+  // whole table comes from one request; there is no aggregate join left to do.
   const ranking = $api.useQuery(
     "get",
     "/recruitment/cycles/{cycleId}/committees/{committeeId}/ranking",
     { params: { path: { cycleId, committeeId } } },
     { enabled: hasCommittee },
   );
-  const aggregates = $api.useQuery(
-    "get",
-    "/recruitment/cycles/{cycleId}/committees/{committeeId}/aggregates",
-    { params: { path: { cycleId, committeeId } } },
-    { enabled: hasCommittee },
-  );
 
-  const aggregateByCandidacy = new Map<string, CandidacyAggregate>(
-    (aggregates.data ?? []).map((item) => [item.candidacyId, item]),
-  );
   const rows = ranking.data ?? [];
 
   return (
@@ -103,9 +95,9 @@ function RankingPage() {
           title="No committees configured"
           description="A recruitment admin configures committees before a ranking exists."
         />
-      ) : ranking.isError || aggregates.isError ? (
-        <ErrorState title="Could not load the ranking" error={ranking.error ?? aggregates.error} />
-      ) : ranking.isLoading || aggregates.isLoading || committees.isLoading ? (
+      ) : ranking.isError ? (
+        <ErrorState title="Could not load the ranking" error={ranking.error} />
+      ) : ranking.isLoading || committees.isLoading ? (
         <TableSkeleton columns={COLUMNS} />
       ) : rows.length === 0 ? (
         <EmptyState
@@ -123,9 +115,7 @@ function RankingPage() {
           </TableHeader>
           <TableBody>
             {rows.map((row) => {
-              const aggregate = aggregateByCandidacy.get(row.candidacyId);
-              const minimum = aggregate?.minimumReviews ?? 0;
-              const complete = minimum > 0 && row.submittedCount >= minimum;
+              const complete = row.submittedCount >= row.minimumReviews;
               return (
                 <TableRow key={row.candidacyId}>
                   <TableCell className="tabular-nums">
@@ -143,13 +133,13 @@ function RankingPage() {
                   </TableCell>
                   <TableCell className="tabular-nums">{formatRank(row.applicantRank)}</TableCell>
                   <TableCell className="tabular-nums">
-                    {row.submittedCount}/{minimum}
+                    {row.submittedCount}/{row.minimumReviews}
                   </TableCell>
                   <TableCell className="tabular-nums">{formatStatistic(row.mean)}</TableCell>
                   <TableCell className="tabular-nums">{formatStatistic(row.median)}</TableCell>
                   <TableCell className="tabular-nums">{formatStatistic(row.spread)}</TableCell>
                   <TableCell>
-                    <RecommendationDistribution aggregate={aggregate} />
+                    <RecommendationDistribution counts={row.recommendationCounts} />
                   </TableCell>
                   <TableCell className="max-w-80 whitespace-normal">
                     {row.flagged ? (
@@ -176,7 +166,7 @@ function RankingPage() {
                       <Badge variant="success">Complete</Badge>
                     ) : (
                       <Badge variant="muted">
-                        {Math.max(0, minimum - row.submittedCount)} more needed
+                        {Math.max(0, row.minimumReviews - row.submittedCount)} more needed
                       </Badge>
                     )}
                   </TableCell>
@@ -190,13 +180,11 @@ function RankingPage() {
   );
 }
 
-function RecommendationDistribution({ aggregate }: { aggregate: CandidacyAggregate | undefined }) {
-  if (aggregate === undefined) return <span className="text-muted-foreground">—</span>;
-
+function RecommendationDistribution({ counts }: { counts: Record<string, number> }) {
   const entries = RECOMMENDATION_OPTIONS.map((option) => ({
     label: option.label,
     short: SHORT_RECOMMENDATION_LABELS[option.value] ?? option.value,
-    count: countFor(aggregate.recommendationCounts, option.value),
+    count: countFor(counts, option.value),
   })).filter((entry) => entry.count > 0);
 
   if (entries.length === 0) return <span className="text-muted-foreground">—</span>;

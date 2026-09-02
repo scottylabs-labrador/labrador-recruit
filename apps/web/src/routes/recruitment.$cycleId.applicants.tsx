@@ -14,7 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table.tsx";
 import { $api } from "@/lib/apiClient";
-import { applicantLabel, type ApplicationListItem } from "@/lib/recruitment.ts";
+import { applicantLabel, type ApplicationListItem, yearLabel } from "@/lib/recruitment.ts";
 
 const COLUMNS = ["Applicant", "Year", "Major", "Committee preferences"];
 const PAGE_LIMIT = 500;
@@ -126,7 +126,7 @@ function ApplicantsPage() {
                     {applicantLabel(item.applicantName)}
                   </Link>
                 </TableCell>
-                <TableCell>{item.year}</TableCell>
+                <TableCell>{yearLabel(item.year)}</TableCell>
                 <TableCell className="max-w-64 truncate">{item.major ?? "—"}</TableCell>
                 <TableCell className="whitespace-normal">
                   <ul className="flex flex-wrap gap-1.5">

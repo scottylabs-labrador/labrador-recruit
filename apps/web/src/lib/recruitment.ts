@@ -1,6 +1,7 @@
-import type { components } from "@labrador/server/build/swagger";
+import type { components, paths } from "@labrador/server/build/swagger";
 
 export type QueueItem = components["schemas"]["QueueItem"];
+export type CandidacyReviewSummary = components["schemas"]["CandidacyReviewSummary"];
 export type ReviewDetail = components["schemas"]["ReviewDetail"];
 export type CycleSummary = components["schemas"]["CycleSummary"];
 export type CommitteeSummary = components["schemas"]["CommitteeSummary"];
@@ -14,15 +15,94 @@ export type RecommendationValue = components["schemas"]["RecommendationValue"];
 export type ConfidenceValue = "high" | "medium" | "low";
 export type SaveReviewRequest = components["schemas"]["SaveReviewRequest"];
 
-/** Assignment statuses, as the server's `status` query parameter accepts them. */
-export type AssignmentStatus = "assigned" | "in_progress" | "submitted" | "conflicted";
+/** The caller's own recruitment standing in one cycle. */
+export type MyStanding =
+  paths["/recruitment/cycles/{cycleId}/me"]["get"]["responses"][200]["content"]["application/json"];
 
-export const QUEUE_STATUS_OPTIONS: ReadonlyArray<{ value: AssignmentStatus; label: string }> = [
+/* Spreadsheet import. */
+export type ImportPreview = components["schemas"]["ImportPreviewSummary"];
+export type ImportRowFailure = components["schemas"]["ImportRowFailure"];
+export type ImportRowError = ImportRowFailure["errors"][number];
+export type ImportCommitReport = components["schemas"]["ImportCommitReport"];
+export type ImportSummary =
+  paths["/recruitment/cycles/{cycleId}/imports"]["get"]["responses"][200]["content"]["application/json"][number];
+export type ImportRowOutcome =
+  paths["/recruitment/imports/{importId}/rows"]["get"]["responses"][200]["content"]["application/json"][number];
+
+/* Rubric configuration. */
+export type RubricVersionSummary = components["schemas"]["RubricVersionSummary"];
+export type CriterionInput = components["schemas"]["CriterionInput"];
+export type CriterionSource = "reviewer" | "application_preference";
+
+/* Exports. */
+export type RankingExportRow = components["schemas"]["RankingExportRow"];
+export type DecisionExportRow = components["schemas"]["DecisionExportRow"];
+export type ReviewerLoadExportRow = components["schemas"]["ReviewerLoadExportRow"];
+
+export const CRITERION_SOURCE_OPTIONS: ReadonlyArray<{ value: CriterionSource; label: string }> = [
+  { value: "reviewer", label: "Scored by the reviewer" },
+  { value: "application_preference", label: "Derived from the applicant's preference" },
+];
+
+/**
+ * Weights are decimals, so 0.30 + 0.20 + 0.20 + 0.15 + 0.10 + 0.05 sums to
+ * 1.0000000000000002 in IEEE 754. This mirrors the tolerance
+ * `@labrador/common`'s `validateRubric` uses on the server, so the editor's live
+ * verdict and the server's verdict cannot disagree on a rubric a human typed.
+ */
+export const WEIGHT_SUM_EPSILON = 1e-6;
+
+export function weightsSumToOne(total: number): boolean {
+  return Math.abs(total - 1) <= WEIGHT_SUM_EPSILON;
+}
+
+/** Renders a fraction of 1 the way people discuss weights: as a percentage. */
+export function formatWeightPercent(weight: number): string {
+  if (Number.isNaN(weight)) return "—";
+  return `${(weight * 100).toFixed(1)}%`;
+}
+
+/** Byte counts, for showing what is about to be uploaded. */
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** A timestamp for a history table. Invalid or absent values read as an em dash. */
+export function formatDateTime(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+}
+
+/**
+ * The assignment statuses `/my-queue` can return. `cancelled` is deliberately
+ * absent: the server excludes those rows, so offering it as a filter would only
+ * ever produce an empty table.
+ *
+ * The spec types both `QueueItem.status` and the `status` query parameter as a
+ * bare `string`, so this union is the only place the four values are checked.
+ * Everything that filters or labels a queue row goes through it.
+ */
+export type QueueStatus = "assigned" | "in_progress" | "submitted" | "conflicted";
+
+export type QueueStatusLabel = "Not started" | "Draft" | "Submitted" | "Conflicted";
+
+export const QUEUE_STATUS_OPTIONS: ReadonlyArray<{
+  value: QueueStatus;
+  label: QueueStatusLabel;
+}> = [
   { value: "assigned", label: "Not started" },
   { value: "in_progress", label: "Draft" },
   { value: "submitted", label: "Submitted" },
   { value: "conflicted", label: "Conflicted" },
 ];
+
+/** Narrows the spec's untyped `status` string before it is used as a filter. */
+export function isQueueStatus(value: string): value is QueueStatus {
+  return QUEUE_STATUS_OPTIONS.some((option) => option.value === value);
+}
 
 export const RECOMMENDATION_OPTIONS: ReadonlyArray<{
   value: RecommendationValue;
@@ -58,7 +138,7 @@ export function confidenceLabel(value: string | null): string {
   return CONFIDENCE_OPTIONS.find((option) => option.value === value)?.label ?? value;
 }
 
-export function queueStatusLabel(item: QueueItem): string {
+export function queueStatusLabel(item: QueueItem): QueueStatusLabel {
   if (item.status === "conflicted") return "Conflicted";
   if (item.submitted || item.status === "submitted") return "Submitted";
   if (item.hasDraft || item.status === "in_progress") return "Draft";
@@ -96,4 +176,25 @@ export function percent(part: number, whole: number): number {
  */
 export function isExternalLink(value: string): boolean {
   return /^https?:\/\/\S+$/i.test(value.trim());
+}
+
+/**
+ * Class year for display.
+ *
+ * The API returns the database enum verbatim (`first_year`), which is correct
+ * on the wire but reads as a leaked implementation detail in a table a human
+ * scans. Unknown values fall through unchanged rather than being hidden, so a
+ * new enum member is visible rather than silently blank.
+ */
+const YEAR_LABELS: Record<string, string> = {
+  first_year: "First Year",
+  sophomore: "Sophomore",
+  junior: "Junior",
+  senior: "Senior",
+  grad: "Grad",
+  unknown: "Unknown",
+};
+
+export function yearLabel(value: string): string {
+  return YEAR_LABELS[value] ?? value;
 }

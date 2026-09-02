@@ -80,6 +80,7 @@ export interface IdentitySubject {
 export type RecruitmentAction =
   | "read"
   | "readIdentity"
+  | "readLeadershipContext"
   | "readPeerReview"
   | "create"
   | "update"

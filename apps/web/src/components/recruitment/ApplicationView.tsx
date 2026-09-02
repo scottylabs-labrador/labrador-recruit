@@ -7,6 +7,7 @@ import {
   isExternalLink,
   type AnswerSection,
   type ApplicationDetail,
+  yearLabel,
 } from "@/lib/recruitment.ts";
 
 interface ApplicationViewProps {
@@ -42,7 +43,7 @@ export function ApplicationView({
         <CardHeader>
           <CardTitle className="text-lg">{applicantLabel(application.applicantName)}</CardTitle>
           <p className="text-sm text-muted-foreground">
-            {application.year}
+            {yearLabel(application.year)}
             {application.major === null ? "" : ` · ${application.major}`}
             {application.email === null ? "" : ` · ${application.email}`}
           </p>

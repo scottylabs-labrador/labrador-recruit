@@ -9,8 +9,6 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { $api } from "@/lib/apiClient";
 import { percent, type CandidacyAggregate } from "@/lib/recruitment.ts";
 
-const APPLICATION_PAGE_LIMIT = 500;
-
 export const Route = createFileRoute("/recruitment/$cycleId/")({
   component: CycleOverviewPage,
 });
@@ -18,8 +16,10 @@ export const Route = createFileRoute("/recruitment/$cycleId/")({
 function CycleOverviewPage() {
   const { cycleId } = Route.useParams();
 
-  const applications = $api.useQuery("get", "/recruitment/cycles/{cycleId}/applications", {
-    params: { path: { cycleId }, query: { limit: APPLICATION_PAGE_LIMIT } },
+  // Counted server-side, so the overview no longer pulls every application row
+  // across the wire just to take its length.
+  const progress = $api.useQuery("get", "/recruitment/cycles/{cycleId}/progress", {
+    params: { path: { cycleId } },
   });
   const committees = $api.useQuery("get", "/recruitment/cycles/{cycleId}/committees", {
     params: { path: { cycleId } },
@@ -39,16 +39,16 @@ function CycleOverviewPage() {
     ),
   });
 
-  if (applications.isError || committees.isError || queue.isError) {
+  if (progress.isError || committees.isError || queue.isError) {
     return (
       <ErrorState
         title="Could not load this cycle"
-        error={applications.error ?? committees.error ?? queue.error}
+        error={progress.error ?? committees.error ?? queue.error}
       />
     );
   }
 
-  if (applications.isLoading || committees.isLoading || queue.isLoading) {
+  if (progress.isLoading || committees.isLoading || queue.isLoading) {
     return (
       <div className="flex flex-col gap-6">
         <CardGridSkeleton />
@@ -57,15 +57,10 @@ function CycleOverviewPage() {
     );
   }
 
-  const applicationList = applications.data ?? [];
   const queueList = queue.data ?? [];
 
-  const applicantCount = applicationList.length;
-  const candidacyCount = applicationList.reduce(
-    (total, application) =>
-      total + application.committees.filter((committee) => committee.hasCandidacy).length,
-    0,
-  );
+  const applicantCount = progress.data?.applicationCount ?? 0;
+  const candidacyCount = progress.data?.candidacyCount ?? 0;
 
   const assignedCount = queueList.length;
   const completedCount = queueList.filter((item) => item.submitted).length;

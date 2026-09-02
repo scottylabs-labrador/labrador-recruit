@@ -126,12 +126,23 @@ async function main() {
 
   const cookieValue = await signCookieValue(sessionToken, secret);
 
+  // Better Auth prefixes the cookie with `__Secure-` over HTTPS, and a browser
+  // refuses to store that name without the Secure attribute. Printing the
+  // local name against a deployed server produces a cookie the API silently
+  // ignores, which reads as "the session did not work".
+  const serverUrl = process.env["SERVER_URL"] ?? "http://localhost";
+  const isHttps = serverUrl.startsWith("https://");
+  const cookieName = isHttps ? `__Secure-${SESSION_COOKIE}` : SESSION_COOKIE;
+  const attributes = isHttps ? "; path=/; Secure; SameSite=None" : "; path=/";
+  const webOrigin = process.env["BETTER_AUTH_URL"] ?? "http://localhost:3000";
+
   console.log(`
 Signed in as ${andrewId}${isAdmin ? " (global admin group)" : ""}.
 
-Paste this into the browser console at http://localhost:3000, then reload:
+The cookie belongs to the API's origin, so set it there - ${serverUrl} - and
+then open ${webOrigin}:
 
-  document.cookie = "${SESSION_COOKIE}=${encodeURIComponent(cookieValue)}; path=/";
+  document.cookie = "${cookieName}=${encodeURIComponent(cookieValue)}${attributes}";
 
 The session expires ${expiresAt.toISOString()}.
 

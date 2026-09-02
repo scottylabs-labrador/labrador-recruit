@@ -16,10 +16,12 @@ import { $api } from "@/lib/apiClient";
 import {
   applicantLabel,
   formatRank,
+  isQueueStatus,
   QUEUE_STATUS_OPTIONS,
   queueStatusLabel,
-  type AssignmentStatus,
   type QueueItem,
+  type QueueStatus,
+  yearLabel,
 } from "@/lib/recruitment.ts";
 
 const COLUMNS = ["Committee", "Applicant", "Year", "Major", "Their rank", "Review", ""];
@@ -31,7 +33,7 @@ export const Route = createFileRoute("/recruitment/$cycleId/queue")({
 function MyQueuePage() {
   const { cycleId } = Route.useParams();
   const [committeeFilter, setCommitteeFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<AssignmentStatus | "">("");
+  const [statusFilter, setStatusFilter] = useState<QueueStatus | "">("");
 
   const committees = $api.useQuery("get", "/recruitment/cycles/{cycleId}/committees", {
     params: { path: { cycleId } },
@@ -80,7 +82,10 @@ function MyQueuePage() {
               id="queue-status-filter"
               className="w-40"
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as AssignmentStatus | "")}
+              onChange={(event) => {
+                const next = event.target.value;
+                setStatusFilter(isQueueStatus(next) ? next : "");
+              }}
             >
               <option value="">All statuses</option>
               {QUEUE_STATUS_OPTIONS.map((option) => (
@@ -122,7 +127,7 @@ function MyQueuePage() {
               <TableRow key={item.assignmentId}>
                 <TableCell>{item.committeeName}</TableCell>
                 <TableCell className="font-medium">{applicantLabel(item.applicantName)}</TableCell>
-                <TableCell>{item.year}</TableCell>
+                <TableCell>{yearLabel(item.year)}</TableCell>
                 <TableCell className="max-w-56 truncate">{item.major ?? "—"}</TableCell>
                 <TableCell className="tabular-nums">{formatRank(item.applicantRank)}</TableCell>
                 <TableCell>
