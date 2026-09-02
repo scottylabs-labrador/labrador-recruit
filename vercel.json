@@ -10,7 +10,11 @@
       "destination": "/api"
     },
     {
-      "source": "/recruitment/(.*)",
+      "source": "/recruitment/(applications|assignments|candidacies|cycles|imports|memberships)",
+      "destination": "/api"
+    },
+    {
+      "source": "/recruitment/(applications|assignments|candidacies|cycles|imports|memberships)/(.*)",
       "destination": "/api"
     },
     {

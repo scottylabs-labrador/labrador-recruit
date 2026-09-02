@@ -1,9 +1,12 @@
 import type { Role } from "@labrador/access-control";
 import * as schema from "@labrador/db/schema";
+import { user as userTable } from "@labrador/db/schema";
 import type { Session, User } from "better-auth";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { customSession, genericOAuth } from "better-auth/plugins";
+import { eq } from "drizzle-orm";
 
 import { env } from "../env.ts";
 import { getJwtPayloadFromHeaders } from "./authUtils.ts";
@@ -59,6 +62,37 @@ export const auth = betterAuth({
     enabled: true,
     disableSignUp: true,
     minPasswordLength: 12,
+  },
+
+  hooks: {
+    /**
+     * Clears the temporary-password flag once someone has actually replaced it.
+     *
+     * The flag is what the interface gates every screen on, and Better Auth
+     * owns the change-password endpoint, so nothing else is in a position to
+     * notice it succeeded. Without this the person changes their password and
+     * stays locked on the same screen forever - which is exactly what happened
+     * the first time this was deployed.
+     */
+    after: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/change-password") {
+        return;
+      }
+      // The hook runs whether the endpoint succeeded or refused, and clearing
+      // the flag on a rejected attempt would let anyone past the gate by
+      // submitting the wrong current password.
+      if (ctx.context.returned instanceof APIError) {
+        return;
+      }
+      const userId = ctx.context.session?.user.id ?? ctx.context.newSession?.user.id;
+      if (typeof userId !== "string") {
+        return;
+      }
+      await db
+        .update(userTable)
+        .set({ mustChangePassword: false, updatedAt: new Date() })
+        .where(eq(userTable.id, userId));
+    }),
   },
 
   user: {

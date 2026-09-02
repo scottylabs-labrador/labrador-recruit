@@ -7,6 +7,15 @@ import { app } from "../src/app.ts";
 import { accountService } from "../src/services/accountService.ts";
 import { testDb } from "./harness.ts";
 
+/** supertest types `set-cookie` as string | string[]; Express always sends many. */
+function cookieHeader(response: request.Response): string {
+  const raw: unknown = response.headers["set-cookie"];
+  if (Array.isArray(raw)) {
+    return raw.join("; ");
+  }
+  return typeof raw === "string" ? raw : "";
+}
+
 /**
  * Local password accounts, for running a cycle before an identity provider
  * exists. The Andrew ID is the primary key every membership, assignment and
@@ -123,5 +132,51 @@ describe("local accounts", () => {
       .send({ email: first.email, password: first.temporaryPassword });
 
     expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+});
+
+/**
+ * The flag is what the interface gates every screen on, and Better Auth owns
+ * the change-password endpoint, so nothing else is positioned to notice it
+ * succeeded. Without the hook a person changes their password and stays locked
+ * on the same screen - which is what the first deployment actually did.
+ */
+describe("temporary password flag", () => {
+  it("is cleared once the password has actually been changed", async () => {
+    const created = await accountService.createAccount({ andrewId: "ugate", name: "U Gate" });
+
+    const signIn = await request(app)
+      .post("/api/auth/sign-in/email")
+      .send({ email: created.email, password: created.temporaryPassword });
+    const cookies = cookieHeader(signIn);
+    expect(cookies).not.toBe("");
+
+    const [before] = await testDb.select().from(user).where(eq(user.id, "ugate"));
+    expect(before?.mustChangePassword).toBe(true);
+
+    const changed = await request(app)
+      .post("/api/auth/change-password")
+      .set("Cookie", cookies)
+      .send({ currentPassword: created.temporaryPassword, newPassword: "a-chosen-password" });
+    expect(changed.status).toBe(200);
+
+    const [after] = await testDb.select().from(user).where(eq(user.id, "ugate"));
+    expect(after?.mustChangePassword).toBe(false);
+  });
+
+  it("stays set when the change is rejected", async () => {
+    const created = await accountService.createAccount({ andrewId: "vgate", name: "V Gate" });
+
+    const signIn = await request(app)
+      .post("/api/auth/sign-in/email")
+      .send({ email: created.email, password: created.temporaryPassword });
+
+    await request(app)
+      .post("/api/auth/change-password")
+      .set("Cookie", cookieHeader(signIn))
+      .send({ currentPassword: "not-the-temporary-one", newPassword: "a-chosen-password" });
+
+    const [after] = await testDb.select().from(user).where(eq(user.id, "vgate"));
+    expect(after?.mustChangePassword).toBe(true);
   });
 });
