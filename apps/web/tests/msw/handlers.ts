@@ -34,6 +34,16 @@ export function setSession(next: typeof session) {
   session = next;
 }
 
+/**
+ * Whether the deployment has a registered OIDC client. Defaults to true, which
+ * is what a properly configured deployment reports.
+ */
+export let identityProviderConfigured = true;
+
+export function setIdentityProviderConfigured(next: boolean) {
+  identityProviderConfigured = next;
+}
+
 export function setAdminUsers(next: typeof adminUsers) {
   adminUsers = next;
 }
@@ -200,6 +210,10 @@ export function setSignInFails(next: boolean) {
 }
 
 export const handlers = [
+  http.get(`${API_URL}/auth/config`, () => {
+    return HttpResponse.json({ identityProviderConfigured });
+  }),
+
   http.get(`${API_URL}/api/auth/*`, () => {
     return HttpResponse.json(session);
   }),

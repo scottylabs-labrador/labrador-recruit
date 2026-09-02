@@ -24,6 +24,7 @@ import {
   setRubric,
   setRubricValidation,
   setRubricVersions,
+  setIdentityProviderConfigured,
   setSession,
   setSignInFails,
   setStanding,
@@ -37,7 +38,7 @@ import { server } from "./msw/server.ts";
 // these routes import invalidates the transform cache, and the first test in a
 // file then renders nothing within the window. This is a ceiling rather than a
 // delay, so raising it costs nothing when the tests pass.
-configure({ asyncUtilTimeout: 15_000 });
+configure({ asyncUtilTimeout: 30_000 });
 
 vi.mock("posthog-js/react", () => ({
   PostHogProvider: ({ children }: { children: unknown }) => children,
@@ -63,6 +64,7 @@ beforeAll(() => {
 beforeEach(() => {
   setSession(null);
   setSignInFails(false);
+  setIdentityProviderConfigured(true);
   setAdminUsers([]);
   setCycles([]);
   setCommittees([]);

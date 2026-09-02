@@ -14,7 +14,7 @@ export default mergeConfig(
       // Must exceed the `asyncUtilTimeout` set in tests/setup.ts, or a test
       // dies before Testing Library has finished waiting and the failure
       // reports as a bare timeout instead of naming the element it wanted.
-      testTimeout: 20_000,
+      testTimeout: 40_000,
       env: {
         VITE_SERVER_URL: "http://localhost:3001",
       },
