@@ -21,13 +21,58 @@ import { normalizeRow } from "../lib/import/normalizeRow.ts";
 import { parseCsv, parseXlsx } from "../lib/import/parseWorkbook.ts";
 import type {
   HeaderMapping,
-  ImportPreview,
   NormalizedApplication,
   ParsedSheet,
   RawRow,
 } from "../lib/import/types.ts";
 import { HttpError } from "../middlewares/errorHandler.ts";
 import { recordAuditEvent } from "./auditService.ts";
+
+/**
+ * One row that could not be used, and why.
+ *
+ * Deliberately carries no applicant content - only the row number and the
+ * columns at fault - because the preview screen renders exactly this and
+ * nothing more.
+ */
+export interface ImportRowFailure {
+  sourceRowNumber: number;
+  errors: Array<{ column: string; field: string; message: string; value: string | null }>;
+}
+
+/**
+ * What the admin needs to decide whether to commit.
+ *
+ * Excludes the parsed applications for rows that parsed cleanly. The importer
+ * produces them, but sending them would put every answer of every applicant on
+ * the wire to a screen that displays counts and failures, which product rule 6
+ * asks us not to do.
+ */
+export interface ImportPreviewSummary {
+  sheetName: string;
+  mapping: HeaderMapping;
+  rowCount: number;
+  okCount: number;
+  errorCount: number;
+  failures: ImportRowFailure[];
+  duplicateEmails: string[];
+}
+
+/**
+ * An import as the history list shows it. Named rather than inferred because
+ * tsoa flattened the inline shape and emitted `committedAt` as a required
+ * string, though a batch that has only been previewed has no commit time.
+ */
+export interface ImportSummary {
+  id: string;
+  filename: string;
+  status: string;
+  rowCount: number;
+  successCount: number;
+  errorCount: number;
+  committedAt: Date | null;
+  createdAt: Date;
+}
 
 export interface ImportCommitReport {
   importId: string;
@@ -130,7 +175,7 @@ export const importService = {
     cycleId: string,
     filename: string,
     contentBase64: string,
-  ): Promise<{ importId: string; preview: ImportPreview }> => {
+  ): Promise<{ importId: string; preview: ImportPreviewSummary }> => {
     if (!canImportApplications({ user: acUser })) {
       throw new HttpError(403, "You are not allowed to import applications");
     }
@@ -223,7 +268,12 @@ export const importService = {
         rowCount: sheet.rows.length,
         okCount,
         errorCount: sheet.rows.length - okCount,
-        results,
+        failures: results
+          .filter((result) => !result.ok)
+          .map((result) => ({
+            sourceRowNumber: result.sourceRowNumber,
+            errors: result.ok ? [] : result.errors,
+          })),
         duplicateEmails,
       },
     };
@@ -548,7 +598,7 @@ export const importService = {
     return row?.cycleId ?? null;
   },
 
-  listImports: async (acUser: RecruitmentUser, cycleId: string) => {
+  listImports: async (acUser: RecruitmentUser, cycleId: string): Promise<ImportSummary[]> => {
     if (!canImportApplications({ user: acUser })) {
       throw new HttpError(403, "You are not allowed to view imports");
     }

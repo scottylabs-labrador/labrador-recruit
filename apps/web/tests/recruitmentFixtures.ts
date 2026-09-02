@@ -309,3 +309,201 @@ export function cycleProgress(overrides: Partial<CycleProgress> = {}): CycleProg
     ...overrides,
   };
 }
+
+/* Spreadsheet import. */
+
+export type ImportPreview = components["schemas"]["ImportPreviewSummary"];
+export type ImportCommitReport = components["schemas"]["ImportCommitReport"];
+export type ImportSummary =
+  paths["/recruitment/cycles/{cycleId}/imports"]["get"]["responses"][200]["content"]["application/json"][number];
+export type ImportRowOutcome =
+  paths["/recruitment/imports/{importId}/rows"]["get"]["responses"][200]["content"]["application/json"][number];
+
+export const IMPORT_ID = "import-1";
+
+export function importPreview(overrides: Partial<ImportPreview> = {}): ImportPreview {
+  return {
+    sheetName: "Form Responses 1",
+    rowCount: 3,
+    okCount: 2,
+    errorCount: 1,
+    mapping: {
+      fields: [
+        {
+          header: "Email Address",
+          key: "email",
+          section: "general",
+          role: "identity",
+          answerType: "short_text",
+          matchedBy: "exact",
+        },
+      ],
+      unmappedHeaders: [],
+      missingHeaders: [],
+    },
+    duplicateEmails: [],
+    failures: [],
+    ...overrides,
+  };
+}
+
+/**
+ * One rejected row as the preview reports it. The preview deliberately carries
+ * no parsed applications, only the row number and the columns at fault.
+ */
+export function failedImportRow(
+  sourceRowNumber: number,
+  errors: Array<{ column: string; field: string; message: string; value: string | null }>,
+): ImportPreview["failures"][number] {
+  return { sourceRowNumber, errors };
+}
+
+export function importSummary(overrides: Partial<ImportSummary> = {}): ImportSummary {
+  return {
+    id: IMPORT_ID,
+    filename: "fall-2026-responses.xlsx",
+    status: "committed",
+    rowCount: 3,
+    successCount: 2,
+    errorCount: 1,
+    createdAt: "2026-01-06T00:00:00.000Z",
+    committedAt: "2026-01-06T00:05:00.000Z",
+    ...overrides,
+  };
+}
+
+export function importRowOutcome(overrides: Partial<ImportRowOutcome> = {}): ImportRowOutcome {
+  return {
+    sourceRowNumber: 2,
+    status: "imported",
+    applicationId: APPLICATION_ID,
+    errorMessage: "",
+    ...overrides,
+  };
+}
+
+export function importCommitReport(
+  overrides: Partial<ImportCommitReport> = {},
+): ImportCommitReport {
+  return {
+    importId: IMPORT_ID,
+    rowCount: 3,
+    created: 2,
+    updated: 0,
+    skipped: 0,
+    errors: 1,
+    candidaciesCreated: 2,
+    unknownCommitteeSlugs: [],
+    ...overrides,
+  };
+}
+
+/* Rubric versions. */
+
+export type RubricVersion = components["schemas"]["RubricVersionSummary"];
+export type RubricValidation =
+  paths["/recruitment/cycles/{cycleId}/rubrics/validate"]["post"]["responses"][200]["content"]["application/json"];
+
+export function rubricVersion(overrides: Partial<RubricVersion> = {}): RubricVersion {
+  return {
+    id: "rubric-v1",
+    version: 1,
+    name: "Cycle rubric",
+    committeeId: null,
+    active: true,
+    reviewCount: 0,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    criteria: [
+      {
+        id: "criterion-1",
+        key: "technical_depth",
+        label: "Technical depth",
+        description: "How deeply did they engage with the technical prompt?",
+        weight: 0.6,
+        minScore: 1,
+        maxScore: 5,
+        source: "reviewer",
+        displayOrder: 1,
+        active: true,
+      },
+      {
+        id: "criterion-2",
+        key: "collaboration",
+        label: "Collaboration",
+        description: null,
+        weight: 0.4,
+        minScore: 1,
+        maxScore: 5,
+        source: "reviewer",
+        displayOrder: 2,
+        active: true,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+/* Exports. */
+
+export type RankingExport = components["schemas"]["RankingExportRow"];
+export type DecisionExport = components["schemas"]["DecisionExportRow"];
+export type ReviewerLoadExport = components["schemas"]["ReviewerLoadExportRow"];
+
+export function rankingExportRow(overrides: Partial<RankingExport> = {}): RankingExport {
+  return {
+    rank: 1,
+    tied: false,
+    applicantName: "Robin Fixture",
+    email: "robin@example.edu",
+    year: "sophomore",
+    major: "Information Systems",
+    committee: "Tech",
+    applicantRank: 1,
+    submittedReviews: 2,
+    minimumReviews: 2,
+    mean: 3.5,
+    median: 3.5,
+    spread: 3,
+    standardDeviation: 1.5,
+    strongYes: 1,
+    yes: 0,
+    unsure: 0,
+    no: 1,
+    strongNo: 0,
+    flagged: false,
+    flagReasons: "",
+    decision: "pending",
+    ...overrides,
+  };
+}
+
+export function decisionExportRow(overrides: Partial<DecisionExport> = {}): DecisionExport {
+  return {
+    applicantName: "Robin Fixture",
+    email: "robin@example.edu",
+    year: "sophomore",
+    committee: "Tech",
+    applicantRank: 1,
+    committeeDecision: "accept",
+    decisionNotes: "Strong, thoughtful application.",
+    finalPlacement: "placed",
+    placedCommittee: "Tech",
+    ...overrides,
+  };
+}
+
+export function reviewerLoadExportRow(
+  overrides: Partial<ReviewerLoadExport> = {},
+): ReviewerLoadExport {
+  return {
+    reviewerUserId: "alice",
+    reviewerName: "Alice",
+    role: "reviewer",
+    committee: "Tech",
+    assigned: 4,
+    submitted: 3,
+    conflicted: 0,
+    outstanding: 1,
+    ...overrides,
+  };
+}

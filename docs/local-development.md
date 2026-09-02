@@ -90,8 +90,13 @@ bun run dev:local                         # web on :3000, API on :8080
 
 ### Signing in locally
 
-Real sign-in goes through Keycloak, which needs a Goldador-registered OIDC client. To work
-without one, mint a session directly:
+**The "Sign In" button does not work locally, and cannot.** It redirects to Keycloak, and
+`.env.local.example` ships a placeholder `AUTH_ISSUER` (`auth.example.com`) that does not
+resolve. Better Auth cannot fetch the OIDC discovery document, the request 500s, and the
+interface reports "Could not reach the sign-in provider". That is the correct behaviour for
+an unreachable identity provider — it is not a bug in the app.
+
+To sign in without Keycloak, mint a session directly:
 
 ```bash
 bun run dev:login rjones --admin --name "Robin Jones"
