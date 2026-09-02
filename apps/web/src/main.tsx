@@ -35,9 +35,26 @@ declare module "@tanstack/react-router" {
 }
 
 // Initialize Posthog https://posthog.com/docs/libraries/react
-posthog.init(env.VITE_PUBLIC_POSTHOG_KEY || "", {
-  api_host: env.VITE_PUBLIC_POSTHOG_HOST,
-});
+//
+// The key is optional, and local development ships without one. Initialising
+// with an empty key made posthog-js log a misconfiguration error on every page
+// load, which trains people to ignore the console in the one app where a
+// console error is worth reading. With no key we skip both the init and the
+// provider; `usePostHog()` then returns undefined, which every caller already
+// handles because analytics has always been optional here.
+const posthogKey = env.VITE_PUBLIC_POSTHOG_KEY;
+const analyticsEnabled = posthogKey !== undefined && posthogKey !== "";
+
+if (analyticsEnabled) {
+  posthog.init(posthogKey, {
+    api_host: env.VITE_PUBLIC_POSTHOG_HOST,
+  });
+}
+
+function withAnalytics(children: React.ReactNode) {
+  if (!analyticsEnabled) return children;
+  return <PostHogProvider client={posthog}>{children}</PostHogProvider>;
+}
 
 // Render the app
 const rootElement = document.getElementById("app");
@@ -45,11 +62,11 @@ if (rootElement && !rootElement.innerHTML) {
   const root = ReactDom.createRoot(rootElement);
   root.render(
     <StrictMode>
-      <PostHogProvider client={posthog}>
+      {withAnalytics(
         <QueryClientProvider client={TanStackQueryProviderContext.queryClient}>
           <RouterProvider router={router} />
-        </QueryClientProvider>
-      </PostHogProvider>
+        </QueryClientProvider>,
+      )}
     </StrictMode>,
   );
 }
