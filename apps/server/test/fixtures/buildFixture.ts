@@ -51,8 +51,6 @@ const DECLINE_ALL: FixtureRow = {
   tech_opt_in: "No",
   labrador_opt_in: "No",
   foundry_opt_in: "No",
-  foundry_analyst_opt_in: "No",
-  foundry_builder_opt_in: "No",
   finance_opt_in: "No",
   events_opt_in: "No, let me be done",
   design_opt_in: "No",

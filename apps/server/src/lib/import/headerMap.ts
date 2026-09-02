@@ -262,6 +262,11 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
   },
 
   // --- Foundry (opt-in + 18) ---
+  // Only `foundry_opt_in` is a committee gate. The analyst and builder
+  // questions below are sub-questions of that block, so they are answers:
+  // `committeeOptIns` is keyed by committee and last write wins, and marking
+  // them `opt_in` let a "No" to the analyst track silently retract a "Yes" to
+  // Foundry itself - which cost two applicants their Foundry candidacy.
   {
     header: "Would you like to answer the Foundry specific questions",
     key: "foundry_opt_in",
@@ -331,8 +336,8 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     key: "foundry_analyst_opt_in",
     section: "foundry",
     committeeSlug: "foundry",
-    answerType: "boolean",
-    role: "opt_in",
+    answerType: "choice",
+    role: "answer",
   },
   {
     header:
@@ -410,8 +415,8 @@ export const FALL_2026_MAPPING: readonly KnownHeader[] = [
     key: "foundry_builder_opt_in",
     section: "foundry",
     committeeSlug: "foundry",
-    answerType: "boolean",
-    role: "opt_in",
+    answerType: "choice",
+    role: "answer",
   },
   {
     header: "Do you want to apply to our Foundry Builder or Analyst Member?",

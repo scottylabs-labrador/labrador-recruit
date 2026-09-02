@@ -19,7 +19,39 @@ describe("FALL_2026_MAPPING", () => {
 
   it("uses a unique stable key and a unique header for every column", () => {
     expect(new Set(FALL_2026_MAPPING.map((known) => known.key)).size).toBe(66);
+
     expect(new Set(ALL_HEADERS).size).toBe(66);
+  });
+
+  /**
+   * `committeeOptIns` is keyed by committee slug and the last column written
+   * wins, so a second `opt_in` for the same committee silently overrides the
+   * first. Declaring the Foundry analyst and builder sub-questions as opt-ins
+   * did exactly that: answering "No" to the analyst track retracted the "Yes"
+   * to Foundry, and two applicants lost their Foundry candidacy without any
+   * error. The mapping, not the normaliser, is where that has to be caught.
+   */
+  it("declares at most one opt-in per committee", () => {
+    const seen = new Map<string, string>();
+    for (const known of FALL_2026_MAPPING) {
+      if (known.role !== "opt_in" || known.committeeSlug === undefined) {
+        continue;
+      }
+      const previous = seen.get(known.committeeSlug);
+      expect(
+        previous,
+        `${known.committeeSlug} has two opt-in columns: ${previous} and ${known.key}`,
+      ).toBeUndefined();
+      seen.set(known.committeeSlug, known.key);
+    }
+    expect([...seen.keys()].sort()).toEqual([
+      "design",
+      "events",
+      "finance",
+      "foundry",
+      "labrador",
+      "tech",
+    ]);
   });
 
   it("gives all seven committees a top-level ranking column", () => {
