@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7-labs
 # Base image with Bun
 FROM oven/bun:latest AS base
 WORKDIR /app
@@ -5,7 +6,10 @@ WORKDIR /app
 # Build stage
 FROM base AS builder
 
-# Copy dependency manifests first so install is cached when only source changes
+# Copy dependency manifests first so install is cached when only source changes.
+# `COPY --parents` preserves the apps/*/ and packages/*/ paths so the workspace
+# manifests land where bun expects them. It is a labs feature, so the syntax
+# directive above is required; without it BuildKit fails with "unknown flag".
 COPY package.json bun.lock ./
 COPY --parents apps/*/package.json packages/*/package.json ./
 RUN bun ci
