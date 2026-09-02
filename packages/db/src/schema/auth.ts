@@ -10,6 +10,24 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
+
+  /**
+   * Global role, as opposed to the per-cycle roles in `recruitment_membership`.
+   *
+   * It used to be derived entirely from the `groups` claim of a Keycloak access
+   * token. Local password accounts have no such token, so the role has to live
+   * somewhere the database can answer for. When an identity provider is
+   * configured its groups still win, and this is the fallback - which keeps a
+   * later move back to Keycloak a configuration change rather than a migration.
+   */
+  role: text("role").notNull().default("user"),
+
+  /**
+   * Set when an administrator issued a temporary password. The interface makes
+   * the user choose their own before it will let them go anywhere else, so an
+   * account can never sit indefinitely on a password somebody else knows.
+   */
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at")
     .$onUpdate(() => new Date())

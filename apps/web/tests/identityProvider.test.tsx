@@ -12,22 +12,22 @@ import { renderApp } from "./render.tsx";
  * page, off-site, with nothing to say what is wrong or who can fix it.
  */
 describe("identity provider availability", () => {
-  it("offers sign-in when a client is registered", async () => {
+  it("offers single sign-on when a client is registered", async () => {
     setIdentityProviderConfigured(true);
     await renderApp("/");
 
     expect(
-      await screen.findByRole("button", { name: "Sign in with your Andrew ID" }),
+      await screen.findByRole("button", { name: "Or sign in with your Andrew ID" }),
     ).toBeDefined();
-    expect(screen.queryByText("Sign-in is not available yet")).toBeNull();
+    expect(screen.queryByText("Single sign-on is not available yet")).toBeNull();
   });
 
-  it("withholds the button and explains when no client is registered", async () => {
+  it("withholds single sign-on and explains when no client is registered", async () => {
     setIdentityProviderConfigured(false);
     await renderApp("/");
 
-    expect(await screen.findByText("Sign-in is not available yet")).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Sign in with your Andrew ID" })).toBeNull();
+    expect(await screen.findByText("Single sign-on is not available yet")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Or sign in with your Andrew ID" })).toBeNull();
   });
 
   it("names who can fix it rather than only saying it is broken", async () => {

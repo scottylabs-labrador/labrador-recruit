@@ -2,6 +2,7 @@ import { createFileRoute, Navigate } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { SignInForm } from "@/components/user/SignInForm";
 import { useIdentityProvider } from "@/hooks/useIdentityProvider";
 import { signIn, useSession } from "@/lib/authClient";
 
@@ -47,26 +48,30 @@ function IndexComponent() {
           reviewer, and every figure the platform reports is arithmetic over those scores.
         </p>
 
+        <SignInForm />
+
         {identityProvider.configured ? (
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Button onClick={() => signIn()}>Sign in with your Andrew ID</Button>
+            <Button variant="outline" onClick={() => signIn()}>
+              Or sign in with your Andrew ID
+            </Button>
             <span className="text-sm text-muted-foreground">
               You will reach the cycles you are enrolled in.
             </span>
           </div>
         ) : (
           <div className="mt-8 rounded-[10px] border border-border bg-muted/40 p-4">
-            <h2 className="text-sm font-semibold">Sign-in is not available yet</h2>
+            <h2 className="text-sm font-semibold">Single sign-on is not available yet</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               This deployment has no OIDC client registered with the ScottyLabs identity provider,
-              so Andrew ID sign-in cannot complete. Sending you to Keycloak would only produce a
-              &ldquo;Client not found&rdquo; error there, so the button is withheld rather than
-              offered.
+              so single sign-on cannot complete. Sending you to Keycloak would only produce a
+              &ldquo;Client not found&rdquo; error there, so that button is withheld rather than
+              offered. Use the Andrew ID and password above instead.
             </p>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               A ScottyLabs administrator needs to register a client for this deployment and set its
-              id and secret on the API. Until then, access is granted directly by whoever runs this
-              instance.
+              id and secret on the API. Until then a recruitment admin creates accounts directly and
+              issues a temporary password.
             </p>
           </div>
         )}

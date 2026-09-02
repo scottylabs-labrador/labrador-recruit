@@ -209,12 +209,39 @@ export function setSignInFails(next: boolean) {
   signInFails = next;
 }
 
+/** What the last password sign-in was posted, so a test can assert on it. */
+export let lastSignIn: { email: string; password: string } | null = null;
+export let lastPasswordChange: { currentPassword: string; newPassword: string } | null = null;
+export let rejectCredentials = false;
+
+export function setRejectCredentials(next: boolean) {
+  rejectCredentials = next;
+}
+
+export function resetAuthProbes() {
+  lastSignIn = null;
+  lastPasswordChange = null;
+  rejectCredentials = false;
+}
+
 export const handlers = [
   http.get(`${API_URL}/auth/config`, () => {
     return HttpResponse.json({ identityProviderConfigured });
   }),
 
   http.get(`${API_URL}/api/auth/*`, () => {
+    return HttpResponse.json(session);
+  }),
+  http.post(`${API_URL}/api/auth/sign-in/email`, async ({ request }) => {
+    const body = (await request.json()) as { email: string; password: string };
+    lastSignIn = body;
+    if (rejectCredentials) {
+      return HttpResponse.json({ message: "Invalid email or password" }, { status: 401 });
+    }
+    return HttpResponse.json(session);
+  }),
+  http.post(`${API_URL}/api/auth/change-password`, async ({ request }) => {
+    lastPasswordChange = (await request.json()) as { currentPassword: string; newPassword: string };
     return HttpResponse.json(session);
   }),
   http.post(`${API_URL}/api/auth/sign-in/*`, () => {

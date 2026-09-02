@@ -6,9 +6,9 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { customSession, genericOAuth } from "better-auth/plugins";
 
 import { env } from "../env.ts";
-import { getRoleFromJwt } from "./accessControl.ts";
 import { getJwtPayloadFromHeaders } from "./authUtils.ts";
 import { db } from "./db.ts";
+import { getRoleFromJwt, toRole } from "./role.ts";
 
 /**
  * Custom session type.
@@ -18,7 +18,7 @@ import { db } from "./db.ts";
  */
 interface Auth {
   session: Session;
-  user: User & { role: Role };
+  user: User & { role: Role; mustChangePassword: boolean };
 }
 
 /**
@@ -45,6 +45,28 @@ export const auth = betterAuth({
   baseURL: env.SERVER_URL,
   trustedOrigins: [env.BETTER_AUTH_URL],
   database: drizzleAdapter(db, { schema, provider: "pg" }),
+
+  /**
+   * Local accounts, for running a cycle before an identity provider exists.
+   *
+   * Sign-up is closed: an administrator creates the account and issues a
+   * temporary password. Letting anyone register would put a stranger one form
+   * submission away from an account on a system holding applicant essays, and
+   * the Andrew ID - which every membership, assignment and review points at -
+   * would then be self-asserted rather than granted.
+   */
+  emailAndPassword: {
+    enabled: true,
+    disableSignUp: true,
+    minPasswordLength: 12,
+  },
+
+  user: {
+    additionalFields: {
+      role: { type: "string", input: false, defaultValue: "user" },
+      mustChangePassword: { type: "boolean", input: false, defaultValue: false },
+    },
+  },
   ...(isCrossSite && {
     advanced: {
       defaultCookieAttributes: { sameSite: "none", secure: true },
@@ -63,13 +85,14 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        before: async (user) => ({
-          data: {
-            ...user,
-            // @ts-expect-error The user here actually has all the JWT fields
-            id: user["full_email"].split("@")[0],
-          },
-        }),
+        before: async (user) => {
+          // `full_email` is the identity provider's claim; a locally created
+          // account has only `email`. Either way the Andrew ID is the local
+          // part, and it becomes the primary key every membership, assignment
+          // and review is keyed by.
+          const source = (user as unknown as { full_email?: string })["full_email"] ?? user.email;
+          return { data: { ...user, id: source.split("@")[0] } };
+        },
       },
     },
   },
@@ -91,10 +114,17 @@ export const auth = betterAuth({
 
     // Reference: https://better-auth.com/docs/concepts/session-management#customizing-session-response
     customSession(async ({ user, session }, ctx): Promise<Auth> => {
+      // An identity provider's groups win when there is a token to read them
+      // from; otherwise the role stored on the user row is authoritative. That
+      // ordering is what lets a deployment move to Keycloak later without
+      // rewriting anyone's access.
       const jwtPayload = await getJwtPayloadFromHeaders(ctx.headers);
+      const stored = user as unknown as { role?: string; mustChangePassword?: boolean };
+      const role = jwtPayload === null ? toRole(stored.role) : getRoleFromJwt(jwtPayload);
+
       return {
         session,
-        user: { ...user, role: getRoleFromJwt(jwtPayload) },
+        user: { ...user, role, mustChangePassword: stored.mustChangePassword ?? false },
       };
     }),
   ],

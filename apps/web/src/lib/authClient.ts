@@ -40,6 +40,52 @@ export function signIn() {
     });
 }
 
+/**
+ * Signs in with an Andrew ID and password.
+ *
+ * Returns an error message rather than throwing, because every failure here is
+ * something the person can act on and needs to read: a wrong password, an
+ * account that does not exist, or the API being unreachable.
+ */
+export async function signInWithPassword(
+  andrewId: string,
+  password: string,
+): Promise<string | null> {
+  const email = andrewId.includes("@") ? andrewId.trim() : `${andrewId.trim()}@andrew.cmu.edu`;
+
+  try {
+    const result = await authClient.signIn.email({ email, password });
+    if (result.error) {
+      return result.error.message ?? "That Andrew ID and password did not match.";
+    }
+    return null;
+  } catch (error) {
+    console.error(error);
+    return "Could not reach the server. Check your connection and try again.";
+  }
+}
+
+/** Replaces a temporary password with one the person chose themselves. */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<string | null> {
+  try {
+    const result = await authClient.changePassword({
+      currentPassword,
+      newPassword,
+      revokeOtherSessions: true,
+    });
+    if (result.error) {
+      return result.error.message ?? "Could not change your password.";
+    }
+    return null;
+  } catch (error) {
+    console.error(error);
+    return "Could not reach the server. Check your connection and try again.";
+  }
+}
+
 export function signOut() {
   void authClient
     .signOut()
