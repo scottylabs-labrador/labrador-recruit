@@ -2,6 +2,7 @@ import type { Request as ExpressRequest } from "express";
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Path,
   Post,
@@ -134,6 +135,24 @@ export class DecisionsController extends Controller {
     this.setStatus(201);
     const user = await getRecruitmentUser(req, cycleId);
     return membershipService.grantMembership(user, cycleId, body);
+  }
+
+  /**
+   * Removes a recruitment role. Deactivates rather than deletes, so reviews the
+   * person already submitted keep a resolvable author.
+   */
+  @Delete("memberships/{membershipId}")
+  @Security(OIDC_AUTH)
+  @Security(BEARER_AUTH)
+  @SuccessResponse(204)
+  async revokeMembership(@Request() req: ExpressRequest, @Path() membershipId: string) {
+    const cycleId = await membershipService.getCycleIdForMembership(membershipId);
+    if (!cycleId) {
+      throw new HttpError(404, "Membership not found");
+    }
+    const user = await getRecruitmentUser(req, cycleId);
+    await membershipService.revokeMembership(user, membershipId);
+    this.setStatus(204);
   }
 
   @Get("cycles/{cycleId}/committees/{committeeId}/eligible-reviewers")

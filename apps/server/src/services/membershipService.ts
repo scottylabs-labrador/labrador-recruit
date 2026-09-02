@@ -1,7 +1,7 @@
 import type { RecruitmentUser } from "@labrador/access-control";
 import { canConfigureCycle } from "@labrador/access-control";
 import { committee, recruitmentMembership, user } from "@labrador/db/schema";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";
 import { HttpError } from "../middlewares/errorHandler.ts";
@@ -85,6 +85,57 @@ export const membershipService = {
     }
 
     const now = new Date();
+
+    // Granting a role somebody already holds is a normal thing for an admin to
+    // do - two people set the cycle up, or a page is submitted twice. The
+    // unique indexes turned that into a 500 from the database driver, which
+    // reads as "the app is broken" rather than "they already have it".
+    //
+    // A revoked membership is reactivated rather than duplicated, because
+    // revoking deactivates instead of deleting so that submitted reviews keep
+    // a resolvable author. Inserting a second row would leave two.
+    const [existing] = await db
+      .select()
+      .from(recruitmentMembership)
+      .where(
+        and(
+          eq(recruitmentMembership.cycleId, cycleId),
+          eq(recruitmentMembership.userId, input.userId),
+          eq(recruitmentMembership.role, input.role),
+          committeeId === null
+            ? isNull(recruitmentMembership.committeeId)
+            : eq(recruitmentMembership.committeeId, committeeId),
+        ),
+      );
+
+    if (existing !== undefined) {
+      if (existing.active) {
+        return existing;
+      }
+
+      const [reactivated] = await db
+        .update(recruitmentMembership)
+        .set({ active: true, updatedAt: now })
+        .where(eq(recruitmentMembership.id, existing.id))
+        .returning();
+
+      await recordAuditEvent({
+        cycleId,
+        actorUserId: acUser.id,
+        action: "membership.granted",
+        entityType: "recruitment_membership",
+        entityId: existing.id,
+        metadata: {
+          userId: input.userId,
+          role: input.role,
+          committeeId,
+          reactivated: true,
+        },
+      });
+
+      return reactivated;
+    }
+
     const [created] = await db
       .insert(recruitmentMembership)
       .values({
@@ -107,6 +158,15 @@ export const membershipService = {
     });
 
     return created;
+  },
+
+  /** The cycle a membership belongs to, so the caller can be scoped to it. */
+  getCycleIdForMembership: async (membershipId: string): Promise<string | null> => {
+    const [row] = await db
+      .select({ cycleId: recruitmentMembership.cycleId })
+      .from(recruitmentMembership)
+      .where(eq(recruitmentMembership.id, membershipId));
+    return row?.cycleId ?? null;
   },
 
   /**

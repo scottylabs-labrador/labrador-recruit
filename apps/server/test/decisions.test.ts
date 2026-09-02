@@ -242,6 +242,57 @@ describe("memberships", () => {
     expect(list.body.some((row: { userId: string }) => row.userId === bob.id)).toBe(true);
   });
 
+  /**
+   * Two admins setting a cycle up, or a double-submitted form, used to surface
+   * the unique index as a 500 from the database driver - which reads as "the
+   * app is broken" rather than "they already have that role".
+   */
+  it("is idempotent when the user already holds the role", async () => {
+    const { cycle, tech } = await setupTwoCommitteeScenario();
+
+    const first = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/memberships`)
+      .set(adminAuth())
+      .send({ userId: bob.id, role: "reviewer", committeeId: tech.id });
+    expect(first.status).toBe(201);
+
+    const second = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/memberships`)
+      .set(adminAuth())
+      .send({ userId: bob.id, role: "reviewer", committeeId: tech.id });
+    expect(second.status).toBe(201);
+    expect(second.body.id).toBe(first.body.id);
+
+    const listed = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/memberships`)
+      .set(adminAuth());
+    const bobRows = listed.body.filter(
+      (row: { userId: string; role: string }) => row.userId === bob.id && row.role === "reviewer",
+    );
+    expect(bobRows).toHaveLength(1);
+  });
+
+  /** Revoking deactivates rather than deletes, so re-granting must revive it. */
+  it("reactivates a revoked membership instead of duplicating it", async () => {
+    const { cycle, tech } = await setupTwoCommitteeScenario();
+
+    const granted = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/memberships`)
+      .set(adminAuth())
+      .send({ userId: bob.id, role: "reviewer", committeeId: tech.id });
+
+    await request(app).delete(`/recruitment/memberships/${granted.body.id}`).set(adminAuth());
+
+    const regranted = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/memberships`)
+      .set(adminAuth())
+      .send({ userId: bob.id, role: "reviewer", committeeId: tech.id });
+
+    expect(regranted.status).toBe(201);
+    expect(regranted.body.id).toBe(granted.body.id);
+    expect(regranted.body.active).toBe(true);
+  });
+
   it("refuses a user who has never signed in", async () => {
     const { cycle, design } = await setupTwoCommitteeScenario();
 
