@@ -71,7 +71,23 @@ export async function verifyOidc(request: express.Request): Promise<jwt.JwtPaylo
     const headers = fromNodeHeaders(request.headers);
     const session = await auth.api.getSession({ headers });
     if (session?.user) {
-      return await getJwtPayloadFromHeaders(headers);
+      const jwtPayload = await getJwtPayloadFromHeaders(headers);
+      if (jwtPayload !== null) {
+        return jwtPayload;
+      }
+
+      // A local password account has no provider token. The session is still
+      // proof of identity, so the claims an identity provider would have
+      // supplied are synthesised from the user row: the subject is the Andrew
+      // ID, which is also the credential account's id, and the admin group is
+      // present exactly when the stored role says so. Returning null here
+      // instead made every password-authenticated request a 401 while the
+      // session itself was perfectly valid.
+      const user = session.user as { id: string; role?: string };
+      return {
+        sub: user.id,
+        groups: user.role === "admin" ? [env.ADMIN_GROUP] : [],
+      };
     } else {
       const err = new AuthenticationError();
       request.authErrors?.push(err);

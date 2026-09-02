@@ -28,20 +28,41 @@ app.all("/api/auth/*splat", toNodeHandler(auth) as unknown as RequestHandler);
 // Mount after Better Auth so it can read the raw request body.
 app.use(express.json({ limit: "1mb" }));
 
-const swaggerYaml = fs.readFileSync("./build/swagger.yaml", "utf8");
-const swaggerJson = parseYaml(swaggerYaml) as JsonObject;
-app.use(
-  "/swagger",
-  // https://github.com/scottie1984/swagger-ui-express/issues/114#issuecomment-566022730
-  express.static(path.join(__dirname, "../node_modules/swagger-ui-dist"), {
-    index: false,
-  }),
-  swaggerUi.serve,
-  swaggerUi.setup(swaggerJson),
-);
-app.get("/openapi.json", (_req, res) => {
-  res.status(200).send(swaggerJson);
-});
+/**
+ * The generated specification, if it is on disk beside us.
+ *
+ * Read defensively because the API also runs as a bundled serverless function,
+ * where the working directory is not the package root and only the code that
+ * was traced into the bundle exists at all. Failing to find it is not worth
+ * taking the whole API down for: the documentation UI is a convenience, and
+ * every route it describes works without it.
+ */
+function loadSwagger(): JsonObject | null {
+  for (const candidate of ["./build/swagger.yaml", path.join(__dirname, "../build/swagger.yaml")]) {
+    try {
+      return parseYaml(fs.readFileSync(candidate, "utf8")) as JsonObject;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+const swaggerJson = loadSwagger();
+if (swaggerJson !== null) {
+  app.use(
+    "/swagger",
+    // https://github.com/scottie1984/swagger-ui-express/issues/114#issuecomment-566022730
+    express.static(path.join(__dirname, "../node_modules/swagger-ui-dist"), {
+      index: false,
+    }),
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerJson),
+  );
+  app.get("/openapi.json", (_req, res) => {
+    res.status(200).send(swaggerJson);
+  });
+}
 
 RegisterRoutes(app);
 app.get("/", (_req, res) => {

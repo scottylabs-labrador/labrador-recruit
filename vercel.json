@@ -1,0 +1,37 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "bun install",
+  "buildCommand": "bun run --filter @labrador/server build:vercel && bun run --filter @labrador/web build",
+  "outputDirectory": "apps/web/dist",
+  "rewrites": [
+    {
+      "source": "/api/auth/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/recruitment/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/admin/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/auth/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/swagger(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/openapi.json",
+      "destination": "/api"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

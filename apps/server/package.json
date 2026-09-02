@@ -41,6 +41,7 @@
   "scripts": {
     "build": "bun build src/server.ts --outdir=dist --target=bun --sourcemap",
     "build:api": "bun run tsoa && bun run openapi",
+    "build:vercel": "bun run build:api && bun build src/vercelEntry.ts --target=node --format=esm --outfile=dist/vercel.js",
     "dev": "concurrently 'bun run server' 'bun run tsoa:watch' 'bun run openapi:watch'",
     "dev:local": "dotenv -e ../../.env.local -- concurrently 'bun run server:local' 'bun run tsoa:watch' 'bun run openapi:watch'",
     "openapi": "bunx --package typescript@6 --package openapi-typescript@7.13.0 openapi-typescript ./build/swagger.yaml -o ./build/swagger.d.ts",

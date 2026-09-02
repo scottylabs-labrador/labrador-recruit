@@ -4,5 +4,6 @@
     "denyWarnings": true,
     "typeAware": true,
     "typeCheck": true
-  }
+  },
+  "ignorePatterns": ["api/**"]
 }
