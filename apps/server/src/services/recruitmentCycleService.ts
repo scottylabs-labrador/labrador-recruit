@@ -35,6 +35,31 @@ export interface CommitteeSummary {
   displayOrder: number;
 }
 
+/**
+ * One recruitment role the caller holds.
+ *
+ * Declared as a named interface rather than inline, because tsoa infers an
+ * inline object inside a Promise generic as a flat required shape and emitted
+ * `committeeId` as a non-nullable string. Null is precisely how a cycle-wide
+ * membership — and therefore a recruitment admin — is represented, so the
+ * generated client was wrong about the one value that decides the role's scope.
+ */
+export interface StandingMembership {
+  role: "reviewer" | "committee_lead" | "recruitment_admin";
+  /** Null means the role applies across the whole cycle. */
+  committeeId: string | null;
+}
+
+export interface MyStanding {
+  userId: string;
+  globalRole: "admin" | "user" | "guest";
+  cycleId: string;
+  memberships: StandingMembership[];
+  /** Candidacies where the caller has already submitted, so peers are visible. */
+  unblindedCandidacyIds: string[];
+  blindReviewEnabled: boolean;
+}
+
 export interface RubricCriterionSummary {
   id: string;
   key: string;
@@ -204,6 +229,30 @@ export const recruitmentCycleService = {
     });
 
     return updated;
+  },
+
+  /**
+   * The caller's own recruitment standing in a cycle.
+   *
+   * Exists because the browser runs the same `can*` predicates the server does,
+   * and it cannot do that without knowing which memberships it holds. Without
+   * this the interface has to assume least privilege, which silently hides
+   * actions an admin is entitled to.
+   *
+   * Returns only the caller's own standing, so it needs no permission check
+   * beyond being able to see the cycle at all.
+   */
+  getMyStanding: async (acUser: RecruitmentUser, cycleId: string): Promise<MyStanding> => {
+    await recruitmentCycleService.getCycle(acUser, cycleId);
+
+    return {
+      userId: acUser.id,
+      globalRole: acUser.role,
+      cycleId,
+      memberships: acUser.recruitment.memberships,
+      unblindedCandidacyIds: acUser.recruitment.unblindedCandidacyIds ?? [],
+      blindReviewEnabled: acUser.recruitment.blindReviewEnabled ?? false,
+    };
   },
 
   listCommittees: async (acUser: RecruitmentUser, cycleId: string): Promise<CommitteeSummary[]> => {

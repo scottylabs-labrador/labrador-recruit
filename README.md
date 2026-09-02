@@ -61,21 +61,40 @@ app imports generated types from `apps/server/build/`.
 
 ### Running the app locally
 
-Secrets resolve through [secretspec](https://secretspec.dev) against ScottyLabs'
-OpenBao instance, which requires ScottyLabs organization access:
+No ScottyLabs credentials required:
+
+```bash
+cp .env.local.example .env.local          # then set BETTER_AUTH_SECRET
+docker compose -f .devcontainer/docker-compose.yml up -d postgres
+bun run db:migrate:local
+bun run db:seed:local                     # synthetic cycle and applicants
+bun run dev:local                         # web on :3000, API on :8080
+
+bun run dev:login rjones --admin          # prints a cookie to paste in the browser
+```
+
+The **"Sign In" button does not work locally** — it redirects to Keycloak, and the local
+environment ships a placeholder issuer that does not resolve. Use `dev:login` instead.
+
+`dev:login` is a script rather than an endpoint on purpose: a dev-login route would be one
+misconfigured environment variable away from letting anyone authenticate as an
+administrator in production.
+
+With ScottyLabs organization access, real Keycloak sign-in works instead:
 
 ```bash
 bun run secrets       # OIDC login to bao.scottylabs.org
 bun run dev
 ```
 
-See [`docs/local-development.md`](docs/local-development.md) for running without OpenBao
-access, and for the Postgres setup.
+See [`docs/local-development.md`](docs/local-development.md) for the full setup, including
+what to provision before `bun run dev` will resolve.
 
 ## Documentation
 
 | Document                                                 | Contents                                             |
 | -------------------------------------------------------- | ---------------------------------------------------- |
+| [`docs/running-a-cycle.md`](docs/running-a-cycle.md)     | Operational runbook: import, assign, review, decide  |
 | [`docs/architecture.md`](docs/architecture.md)           | Where recruitment code lives and how a request flows |
 | [`docs/product-rules.md`](docs/product-rules.md)         | The no-AI-evaluation rule and privacy constraints    |
 | [`docs/local-development.md`](docs/local-development.md) | Setup, secrets, database, troubleshooting            |

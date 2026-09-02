@@ -81,6 +81,7 @@ export function getRecruitmentAbility(user: RecruitmentUser): RecruitmentAbility
     allow(["read", "configure", "import"], "Cycle");
     allow("read", "Application");
     allow("readIdentity", "Identity");
+    allow("readLeadershipContext", "Application");
     allow(["read", "update"], "Candidacy");
     allow(["read", "assign"], "Assignment");
     // Admins hold aggregate visibility, so peer reviews are never blinded.
@@ -103,6 +104,9 @@ export function getRecruitmentAbility(user: RecruitmentUser): RecruitmentAbility
   if (leadCommitteeIds.length > 0) {
     allow("read", "Cycle");
     allow("read", "Application");
+    // Context a committee weighs in discussion but that never feeds a score,
+    // such as the applicant's request to be placed with friends.
+    allow("readLeadershipContext", "Application");
     allow("update", "Candidacy", { committeeId: { $in: leadCommitteeIds } });
     allow(["read", "assign"], "Assignment");
     // A lead inspects disagreement, so they see peer reviews for their

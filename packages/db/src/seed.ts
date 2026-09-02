@@ -6,7 +6,7 @@
  *
  * Run: bun run db:seed
  */
-import { createDb, type Database } from "./index.ts";
+import type { Database } from "./index.ts";
 import {
   applicant,
   application,
@@ -46,7 +46,7 @@ const COMMITTEES = [
 ];
 
 /** The default rubric. Weights are fractions of 1 and must sum to exactly 1. */
-const CRITERIA = [
+export const CRITERIA = [
   {
     key: "interest",
     label: "Interest & Passion",
@@ -354,36 +354,4 @@ export async function seedRecruitmentData(
     candidacyCount,
     assignmentCount,
   };
-}
-
-async function main() {
-  const databaseUrl = process.env["DATABASE_URL"];
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is required");
-  }
-
-  const db = createDb(databaseUrl);
-  const summary = await seedRecruitmentData(db);
-
-  console.log(
-    [
-      `Seeded cycle ${CYCLE_SLUG}`,
-      `  ${summary.staffCount} staff users`,
-      `  ${summary.committeeCount} committees`,
-      `  ${CRITERIA.length} rubric criteria`,
-      `  ${summary.applicantCount} synthetic applicants`,
-      `  ${summary.candidacyCount} candidacies`,
-      `  ${summary.assignmentCount} review assignments`,
-    ].join("\n"),
-  );
-
-  await db.$client.end();
-}
-
-// Only run when invoked directly, so importing this module in a test is safe.
-if (import.meta.main) {
-  main().catch((err) => {
-    console.error("Seed failed:", err);
-    process.exit(1);
-  });
 }

@@ -11,7 +11,9 @@
         "@electric-sql/pglite-socket": "^0.2.8",
         "@labrador/db": "workspace:*",
         "@playwright/test": "^1.62.1",
+        "dotenv-cli": "^11.0.0",
         "drizzle-orm": "^0.45.2",
+        "editorconfig-checker": "^6",
         "husky": "^9.1.7",
         "markdownlint-cli2": "^0.22.1",
         "oxfmt": "^0.41.0",
@@ -106,6 +108,7 @@
         "@types/react-dom": "^19.2.2",
         "@vitejs/plugin-react": "^6.0.3",
         "babel-plugin-react-compiler": "^1.0.0",
+        "dotenv-cli": "^11.0.0",
         "happy-dom": "^20.11.2",
         "jsdom": "^28.0.0",
         "msw": "^2.15.0",
@@ -1292,6 +1295,8 @@
     "eastasianwidth": ["eastasianwidth@0.2.0", "", {}, "sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA=="],
 
     "ecdsa-sig-formatter": ["ecdsa-sig-formatter@1.0.11", "", { "dependencies": { "safe-buffer": "^5.0.1" } }, "sha512-nagl3RYrbNv6kQkeJIpt6NJZy8twLB/2vtz6yN9Z4vRKHN4/QZJIEbqohALSgwKdnksuY3k5Addp5lg8sVoVcQ=="],
+
+    "editorconfig-checker": ["editorconfig-checker@6.2.0", "", { "bin": { "ec": "dist/index.js", "editorconfig-checker": "dist/index.js" } }, "sha512-5zrNwlxUWyOvAcrSK4mPIGNYrf1KK5pH2D3VXDB1AcDsDdBfLNPOjBL5jHgYh+JykOIuXlQHMeYvXPrZwGNmHA=="],
 
     "ee-first": ["ee-first@1.1.1", "", {}, "sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow=="],
 
