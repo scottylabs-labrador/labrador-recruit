@@ -79,6 +79,19 @@ export class RecruitmentCyclesController extends Controller {
     return recruitmentCycleService.updateCycleSettings(user, cycleId, body);
   }
 
+  /**
+   * The caller's own recruitment standing, so the browser can evaluate the same
+   * permission predicates the server uses instead of assuming least privilege.
+   */
+  @Get("{cycleId}/me")
+  @Security(OIDC_AUTH)
+  @Security(BEARER_AUTH)
+  @SuccessResponse(200)
+  async getMyStanding(@Request() req: ExpressRequest, @Path() cycleId: string) {
+    const user = await getRecruitmentUser(req, cycleId);
+    return recruitmentCycleService.getMyStanding(user, cycleId);
+  }
+
   @Get("{cycleId}/committees")
   @Security(OIDC_AUTH)
   @Security(BEARER_AUTH)

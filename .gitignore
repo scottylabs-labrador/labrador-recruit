@@ -3,8 +3,9 @@
 # Dependencies
 node_modules/
 
-# Local env files
+# Local env files. The example is committed; real secrets never are.
 .env*
+!.env.local.example
 
 # Cache
 .turbo/

@@ -1,5 +1,5 @@
 import type { RecruitmentUser } from "@labrador/access-control";
-import { canReadApplicantIdentity } from "@labrador/access-control";
+import { canReadApplicantIdentity, canReadLeadershipContext } from "@labrador/access-control";
 import { candidacyVisibilityWhere } from "@labrador/access-control/visibility";
 import {
   applicant,
@@ -217,6 +217,13 @@ export const applicantService = {
     }
 
     const showIdentity = canReadApplicantIdentity({ user: acUser, cycleId: row.cycleId });
+    // The friend request is context for a placement conversation, never an
+    // input to a score. Withheld at the server rather than merely unrendered,
+    // so an ordinary reviewer never receives it at all.
+    const showLeadershipContext = canReadLeadershipContext({
+      user: acUser,
+      application: { cycleId: row.cycleId },
+    });
 
     const preferences = await db
       .select({ committeeId: committee.id, name: committee.name, rank: committeePreference.rank })
@@ -281,7 +288,7 @@ export const applicantService = {
       rawYear: row.rawYear,
       major: row.major,
       rankingExplanation: row.rankingExplanation,
-      friendRequest: showIdentity ? row.friendRequest : null,
+      friendRequest: showLeadershipContext ? row.friendRequest : null,
       heardAboutScottylabs: row.heardAboutScottylabs,
       preferences,
       sections: [...sections.values()],

@@ -7,9 +7,7 @@
 
 body {
   @apply m-0;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell",
-    "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -25,8 +23,16 @@ code {
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  /*
+   * ScottyLabs brand blue #0e96d1. `--primary-foreground` is a dark neutral
+   * rather than white because white on the brand blue is only 3.3:1; the dark
+   * neutral reaches 5.9:1, so solid primary controls stay readable without
+   * shifting the hue.
+   */
+  --primary: oklch(0.637 0.134 236);
+  --primary-foreground: oklch(0.205 0 0);
+  /* A darkened brand blue reserved for text and links, where 4.5:1 is required. */
+  --primary-strong: oklch(0.5 0.115 240);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
@@ -36,7 +42,7 @@ code {
   --destructive: oklch(0.58 0.22 27);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: oklch(0.637 0.134 236);
   --chart-1: oklch(0.809 0.105 251.813);
   --chart-2: oklch(0.623 0.214 259.815);
   --chart-3: oklch(0.546 0.245 262.881);
@@ -60,8 +66,13 @@ code {
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.87 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  /*
+   * Lifted brand blue so it separates from the dark surface; the dark neutral
+   * foreground stays 7:1 against it.
+   */
+  --primary: oklch(0.72 0.12 236);
+  --primary-foreground: oklch(0.145 0 0);
+  --primary-strong: oklch(0.8 0.1 236);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -71,7 +82,7 @@ code {
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.72 0.12 236);
   --chart-1: oklch(0.809 0.105 251.813);
   --chart-2: oklch(0.623 0.214 259.815);
   --chart-3: oklch(0.546 0.245 262.881);
@@ -88,7 +99,8 @@ code {
 }
 
 @theme inline {
-  --font-sans: "Geist Variable", sans-serif;
+  --font-sans: "Inter", "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-primary-strong: var(--primary-strong);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

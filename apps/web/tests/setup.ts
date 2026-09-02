@@ -1,8 +1,43 @@
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 
-import { setAdminUsers, setSession } from "./msw/handlers.ts";
+import {
+  resetRecordedRequests,
+  setAdminUsers,
+  setAggregates,
+  setApplications,
+  setCommitReport,
+  setCommittees,
+  setCycles,
+  setDecisionExport,
+  setDisagreements,
+  setImportPreview,
+  setImportRows,
+  setImports,
+  setPeerReviews,
+  setProgress,
+  setQueue,
+  setRanking,
+  setRankingExport,
+  setReview,
+  setReviewerLoadExport,
+  setRubric,
+  setRubricValidation,
+  setRubricVersions,
+  setSession,
+  setSignInFails,
+  setStanding,
+  setWorkloads,
+} from "./msw/handlers.ts";
 import { server } from "./msw/server.ts";
+
+// Route components are code-split, so the first navigation in a file pays for a
+// dynamic import and a Vite transform before anything paints. Five seconds was
+// enough on a warm cache but not on a cold one under load: editing a module
+// these routes import invalidates the transform cache, and the first test in a
+// file then renders nothing within the window. This is a ceiling rather than a
+// delay, so raising it costs nothing when the tests pass.
+configure({ asyncUtilTimeout: 15_000 });
 
 vi.mock("posthog-js/react", () => ({
   PostHogProvider: ({ children }: { children: unknown }) => children,
@@ -27,7 +62,31 @@ beforeAll(() => {
 
 beforeEach(() => {
   setSession(null);
+  setSignInFails(false);
   setAdminUsers([]);
+  setCycles([]);
+  setCommittees([]);
+  setQueue([]);
+  setApplications([]);
+  setRubric(null);
+  setReview(null);
+  setAggregates([]);
+  setRanking([]);
+  setDisagreements([]);
+  setPeerReviews([]);
+  setWorkloads([]);
+  setStanding(null);
+  setProgress(null);
+  setImports([]);
+  setImportPreview(null);
+  setImportRows([]);
+  setCommitReport(null);
+  setRubricVersions([]);
+  setRubricValidation(null);
+  setRankingExport([]);
+  setDecisionExport([]);
+  setReviewerLoadExport([]);
+  resetRecordedRequests();
 });
 
 afterEach(() => {
