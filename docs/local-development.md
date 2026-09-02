@@ -90,37 +90,50 @@ bun run dev:local                         # web on :3000, API on :8080
 
 ### Signing in locally
 
-**The "Sign In" button does not work locally, and cannot.** It redirects to Keycloak, and
-`.env.local.example` ships a placeholder `AUTH_ISSUER` (`auth.example.com`) that does not
-resolve. Better Auth cannot fetch the OIDC discovery document, the request 500s, and the
-interface reports "Could not reach the sign-in provider". That is the correct behaviour for
-an unreachable identity provider — it is not a bug in the app.
+Sign-in works locally with an Andrew ID and a password. Create an account first —
+registration is closed, so there is no way to make one from the interface:
 
-To sign in without Keycloak, mint a session directly:
+```bash
+bun run apps/server/scripts/createAccount.ts rjones "Robin Jones" --admin
+```
+
+It prints a temporary password once. Sign in with the Andrew ID (`rjones`, not the
+full address) at `http://localhost:3000`, and the application will make you choose
+your own password before it shows you anything.
+
+`--admin` grants the **global** admin role. That is enough to create a cycle and
+grant memberships, but not to read applicant data: the account still needs a
+recruitment membership, which it must grant itself explicitly. That separation is
+deliberate — see [`architecture.md`](architecture.md).
+
+**The "Sign in with your Andrew ID" button is a different thing** and does not work
+locally. It goes to Keycloak, and `.env.local.example` ships a placeholder
+`AUTH_ISSUER` (`auth.example.com`) that does not resolve. The interface detects
+that no OIDC client is registered and withholds that button rather than sending you
+to a provider that will reject you.
+
+There is also `dev:login`, which mints a session directly without a password:
 
 ```bash
 bun run dev:login rjones --admin --name "Robin Jones"
 ```
 
-It prints a `document.cookie = ...` line to paste into the browser console at
-`http://localhost:3000`. Reload and you are signed in.
-
-This is a **script, not an endpoint**, on purpose. A dev-login route would be one
+It prints a `document.cookie = ...` line to paste into the browser console. This is
+a **script, not an endpoint**, on purpose. A dev-login route would be one
 misconfigured environment variable away from letting anyone authenticate as an
-administrator in production. A script an operator runs against a database they already
-control adds no attack surface to the deployed server.
+administrator in production. A script an operator runs against a database they
+already control adds no attack surface to the deployed server.
 
-`--admin` puts the user in the configured admin group, which grants the **global** admin
-role. That is enough to create a cycle and grant memberships, but not to read applicant
-data: the account still needs a recruitment membership, which it must grant itself
-explicitly. That separation is deliberate — see [`architecture.md`](architecture.md).
+### Moving to Keycloak sign-in
 
-### Moving to real Keycloak sign-in
+Register the project in [Goldador](https://scottylabs-labrador.github.io/goldador/),
+which issues the OIDC client id and secret, then provision the vault items that
+`secretspec.toml` points at under `labrador-recruit/...` and use `bun run dev`
+instead of `bun run dev:local`.
 
-Register the project in [Goldador](https://scottylabs-labrador.github.io/goldador/), which
-issues the OIDC client id and secret, then provision the vault items that
-`secretspec.toml` points at under `labrador-recruit/...` and use `bun run dev` instead of
-`bun run dev:local`.
+Password accounts keep working afterwards. The global role prefers an identity
+provider's `groups` claim when there is a token to read it from, and falls back to
+the role stored on the user row.
 
 ## Troubleshooting
 

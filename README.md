@@ -24,7 +24,7 @@ conventions.
 | Layer         | Technology                                                      |
 | ------------- | --------------------------------------------------------------- |
 | Monorepo      | Bun workspaces + Turborepo                                      |
-| Server        | Express 5, tsoa (OpenAPI), Better Auth (Keycloak OIDC)          |
+| Server        | Express 5, tsoa (OpenAPI), Better Auth (password or Keycloak)   |
 | Database      | PostgreSQL, Drizzle ORM                                         |
 | Authorization | CASL, compiled to Drizzle `WHERE` clauses                       |
 | Web           | React 19, Vite, TanStack Router/Query/Form, Tailwind v4, shadcn |
@@ -70,17 +70,19 @@ bun run db:migrate:local
 bun run db:seed:local                     # synthetic cycle and applicants
 bun run dev:local                         # web on :3000, API on :8080
 
-bun run dev:login rjones --admin          # prints a cookie to paste in the browser
+bun run apps/server/scripts/createAccount.ts rjones "Robin Jones" --admin
 ```
 
-The **"Sign In" button does not work locally** — it redirects to Keycloak, and the local
-environment ships a placeholder issuer that does not resolve. Use `dev:login` instead.
+That last command prints a temporary password once. Sign in with the Andrew ID at
+`http://localhost:3000`; the application makes you choose your own password before it
+shows you anything. Registration is closed on purpose — the Andrew ID is the key every
+membership, assignment and review points at, so it is granted rather than self-asserted.
 
-`dev:login` is a script rather than an endpoint on purpose: a dev-login route would be one
-misconfigured environment variable away from letting anyone authenticate as an
-administrator in production.
+The separate **"Sign in with your Andrew ID"** button goes to Keycloak and does not work
+locally: the local environment ships a placeholder issuer that does not resolve, and the
+interface withholds the button rather than sending you somewhere that will reject you.
 
-With ScottyLabs organization access, real Keycloak sign-in works instead:
+With ScottyLabs organization access, Keycloak sign-in works too:
 
 ```bash
 bun run secrets       # OIDC login to bao.scottylabs.org

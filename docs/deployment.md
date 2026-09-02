@@ -1,129 +1,147 @@
 # Deployment
 
-Railway, following the ScottyStack convention. Three services: Postgres, the API,
-and the web client.
+One Vercel project serves both the interface and the API, with Postgres on Neon.
+
+Serving both from one deployment makes them same-origin. That is not only
+tidiness: a split deployment needs a `SameSite=None` session cookie and a CORS
+allowlist, and both were a source of quiet, confusing failures where sign-in
+appeared to succeed and the application behaved as though nobody had signed in.
 
 ## Before you start
 
-1. **Railway access.** Ask to be added to the ScottyLabs Railway project — the
-   wiki says this is granted per team.
-2. **A Keycloak client.** Register the project in
-   [Goldador](https://scottylabs-labrador.github.io/goldador/), which creates the
-   OIDC client and puts its id and secret in OpenBao under
-   `labrador-recruit/generated/…`.
-3. **Never paste the client secret into a chat, an issue, or a commit.** Put it
-   straight into Railway's variable editor or OpenBao. A secret that appears in
-   a transcript has to be rotated.
+- A Vercel account, and `vercel login`.
+- A Neon account, and `neonctl auth`.
+- **Never paste a secret into a chat, an issue, or a commit.** Put it straight
+  into Vercel's environment editor. A secret that appears in a transcript has to
+  be rotated — or, if the thing it protects is disposable, replaced outright.
 
-## Identity provider
+## Database
 
-These are verified against the live realm and need no discovery:
+```bash
+neonctl projects create --name labrador-recruit --org-id <your-org>
+neonctl connection-string --project-id <project-id> --pooled
+```
 
-| Variable             | Value                                                                      |
-| -------------------- | -------------------------------------------------------------------------- |
-| `AUTH_ISSUER`        | `https://idp.scottylabs.org/realms/labrador`                               |
-| `AUTH_JWKS_URI`      | `https://idp.scottylabs.org/realms/labrador/protocol/openid-connect/certs` |
-| `AUTH_CLIENT_ID`     | from Goldador                                                              |
-| `AUTH_CLIENT_SECRET` | from Goldador                                                              |
+Use the **pooled** connection string. Serverless functions open a connection per
+invocation and a direct endpoint runs out of them under any real load.
 
-**Register the redirect URI in Keycloak**, or sign-in fails after the user has
-already authenticated, which is the most confusing possible moment:
+Run the migrations before the first deploy:
+
+```bash
+cd packages/db && DATABASE_URL="<pooled-url>" bunx drizzle-kit migrate
+```
+
+## Vercel project
+
+Create the project without letting the CLI autodetect a framework — it
+recognises the Express dependency and writes a `services` block that does not
+apply here:
+
+```bash
+vercel project add labrador-recruit-app
+vercel link --yes --project labrador-recruit-app
+vercel deploy --prod
+```
+
+`vercel.json` at the repository root does the rest. Two parts of it are
+load-bearing and easy to break:
+
+**The API is bundled to a single file.** `apps/server/src/vercelEntry.ts` is
+bundled by `bun run build:vercel`, and `api/index.ts` re-exports the bundle.
+This is not an optimisation. The source is written for Bun — `.ts` import
+specifiers — and tsoa generates its route table with extensionless imports.
+Node's ESM resolver accepts neither, so without bundling the function fails at
+runtime on whichever import it reaches first. `api/package.json` declares
+`"type": "module"` because the workspaces are ESM but the repository root is
+not, and the nearest `package.json` is what Node consults.
+
+**The rewrites name the API's own resources rather than a prefix.** The API and
+the interface both own paths under `/recruitment`: the API serves
+`/recruitment/cycles`, the interface serves `/recruitment/<cycleId>/queue`. A
+catch-all sends every deep link into the interface to the API, which answers
+404 — and the application then works only if nobody ever navigates directly to a
+page. If you add a controller with a new top-level route, add it to the
+rewrites.
+
+## Environment
+
+Set these on the Vercel project, for Production:
+
+| Variable                | Value                                                   |
+| ----------------------- | ------------------------------------------------------- |
+| `DATABASE_URL`          | the Neon **pooled** connection string                   |
+| `SERVER_URL`            | the deployment's own URL                                |
+| `BETTER_AUTH_URL`       | the same URL — the interface and API share an origin    |
+| `VITE_SERVER_URL`       | the same URL again; read at build time by the interface |
+| `BETTER_AUTH_SECRET`    | `openssl rand -base64 32`, generated fresh              |
+| `ALLOWED_ORIGINS_REGEX` | `^https://<domain>$`                                    |
+| `ADMIN_GROUP`           | the group name that grants the global admin role        |
+| `AUTH_ISSUER`           | `https://idp.scottylabs.org/realms/labrador`            |
+| `AUTH_JWKS_URI`         | the realm's JWKS endpoint                               |
+| `AUTH_CLIENT_ID`        | `not-yet-registered` until an OIDC client exists        |
+| `AUTH_CLIENT_SECRET`    | `not-yet-registered` until an OIDC client exists        |
+| `SENTRY_DSN`            | optional                                                |
+
+`AUTH_ISSUER` and `AUTH_JWKS_URI` must be valid URLs even when no client is
+registered, because the environment is validated at boot. `AUTH_CLIENT_ID` set
+to `not-yet-registered` is what `GET /auth/config` reports on, so the interface
+withholds the single sign-on button and explains why instead of sending someone
+to an identity provider that will reject them.
+
+## Accounts
+
+Sign-in is by Andrew ID and password. Registration is closed: the Andrew ID is
+the primary key every membership, assignment and review points at, so it is
+granted by an administrator rather than asserted by whoever fills in a form.
+
+The first account has to come from outside the application, because the admin
+endpoint needs an administrator to call it:
+
+```bash
+vercel env pull .env.production --environment=production
+set -a && . .env.production && set +a
+bun run apps/server/scripts/createAccount.ts <andrewId> "Full Name" --admin
+```
+
+It prints a temporary password once; it is not recoverable. After that, an
+administrator can create accounts over the API:
 
 ```text
-https://<api-domain>/api/auth/oauth2/callback/keycloak
+POST /admin/users                      { andrewId, name, role }
+POST /admin/users/{andrewId}/reset-password
+```
+
+A temporary password blocks every screen until the person replaces it. Whoever
+issued it knows it, and it probably travelled through a chat message to get
+there.
+
+## Moving to the ScottyLabs identity provider
+
+Nothing in the application changes. Register the client in
+[Goldador](https://scottylabs-labrador.github.io/goldador/), which puts its id
+and secret in OpenBao, then set `AUTH_CLIENT_ID` and `AUTH_CLIENT_SECRET` on the
+deployment. Register this redirect URI in Keycloak, or sign-in fails after the
+user has already authenticated, which is the most confusing possible moment:
+
+```text
+https://<domain>/api/auth/oauth2/callback/keycloak
 ```
 
 That path comes from the `genericOAuth` provider id in
 `apps/server/src/lib/auth.ts`. Changing `providerId` changes the callback URL.
 
-## Service: Postgres
+Existing accounts keep working. The global role prefers an identity provider's
+`groups` claim when there is a token to read it from, and falls back to the role
+stored on the user row, so people who signed in with a password before the
+switch keep exactly the access they had.
 
-Add Railway's Postgres plugin. It supplies `DATABASE_URL`. Nothing else needed —
-`packages/db/drizzle.config.ts` sets `ssl: "require"`, which Railway needs
-because its certificates are self-signed.
+## Deploys
 
-## Service: API
-
-Root directory `/`, Dockerfile `apps/server/Dockerfile`. `railway.json` already
-sets the builder, the watch paths, and the pre-deploy migration.
-
-| Variable                | Value                                                      |
-| ----------------------- | ---------------------------------------------------------- |
-| `DATABASE_URL`          | reference the Postgres service                             |
-| `SERVER_URL`            | the API's public domain, `https://…`                       |
-| `SERVER_PORT`           | `8080`, or whatever Railway assigns                        |
-| `BETTER_AUTH_URL`       | the **web** domain, not the API's                          |
-| `BETTER_AUTH_SECRET`    | `openssl rand -base64 32`, generated fresh                 |
-| `ALLOWED_ORIGINS_REGEX` | `^https://<web-domain>$`                                   |
-| `ADMIN_GROUP`           | the Keycloak group whose members get the global admin role |
-| `AUTH_*`                | as above                                                   |
-| `SENTRY_DSN`            | optional                                                   |
-
-`ALLOWED_ORIGINS_REGEX` is a regular expression, so escape the dots if you want
-to be strict. Getting it wrong produces CORS failures that look like the API
-being down.
-
-Migrations run as the Railway pre-deploy command already declared in
-`apps/server/railway.json`. If serverless is enabled the pre-deploy can fail
-while the database wakes; redeploying fixes it.
-
-## Service: web
-
-Root directory `/`, Dockerfile `apps/web/Dockerfile`, served by Caddy on
-`$PORT`.
-
-**`VITE_*` variables are baked in at build time, not read at runtime.** They must
-be set as Railway _build arguments_, and changing one requires a rebuild rather
-than a restart:
-
-| Build argument             | Value                   |
-| -------------------------- | ----------------------- |
-| `VITE_SERVER_URL`          | the API's public domain |
-| `VITE_PUBLIC_POSTHOG_KEY`  | optional                |
-| `VITE_PUBLIC_POSTHOG_HOST` | optional                |
-
-Leaving the PostHog key unset logs a console error on every page load. Harmless,
-but noisy enough to be worth setting or removing.
-
-## First run
-
-The database starts empty, and there is deliberately no way to bootstrap an
-admin from the outside.
-
-1. Sign in through Keycloak once, so Better Auth creates your user row. The id
-   is your Andrew ID, taken from the `full_email` claim.
-2. Add yourself to the Keycloak group named in `ADMIN_GROUP`. That grants the
-   **global** admin role, which is enough to create a cycle and nothing else.
-3. Create a cycle, then grant yourself a `recruitment_admin` membership in it.
-   Holding the infrastructure role does not by itself reveal applicant data, and
-   the grant is recorded in the audit log.
-
-See [`running-a-cycle.md`](running-a-cycle.md) from there.
-
-## Things that will bite you
-
-**The Dockerfiles need BuildKit.** Both begin with
-`# syntax=docker/dockerfile:1.7-labs` because they use `COPY --parents`, which is
-a labs feature. Without that line the build fails with `unknown flag: --parents`.
-Railway uses BuildKit, so this works, but a plain `docker build` on an old
-daemon will not.
-
-**`bun run build:api` must succeed before the web app compiles.** The client
-imports its types from `apps/server/build/`, which is generated and gitignored.
-The server Dockerfile runs it through `turbo`; the web Dockerfile depends on the
-server package for the same reason.
-
-**Check the health endpoint after deploying.** `GET /` on the API returns
-`{"status":"ok"}` without touching the database, so a 200 there with a failing
-app usually means `DATABASE_URL`.
-
-## Verifying a deployment
+The repository is private and owned by an organisation, which Vercel's Hobby
+plan will not connect to Git. Deploys are therefore manual:
 
 ```bash
-curl https://<api-domain>/                # {"status":"ok"}
-curl https://<api-domain>/openapi.json    # the generated spec
+vercel deploy --prod
 ```
 
-`https://<api-domain>/swagger` serves Swagger UI, which is the quickest way to
-confirm authentication end to end: it will refuse every recruitment endpoint
-with a 401 until you present a session.
+CI still runs on every push; it just does not deploy.
