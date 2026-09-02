@@ -11,9 +11,17 @@ services:
     command: sleep infinity
     depends_on:
       - postgres
+    # Every published port binds to the loopback interface explicitly.
+    #
+    # Docker's "3000:3000" shorthand binds 0.0.0.0, which publishes the port to
+    # every network the machine is attached to - on campus wifi that is the
+    # whole network, not just this laptop. Docker also writes its own iptables
+    # rules, so the host firewall does not necessarily stop it. Nothing here is
+    # meant to be reached from another machine: you connect from the host, and
+    # 127.0.0.1 is what the host uses.
     ports:
-      - "3000:3000"
-      - "80:80"
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:80:80"
 
   postgres:
     image: postgres:17
@@ -24,8 +32,11 @@ services:
       POSTGRES_DB: labrador-recruit
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # Loopback only. The password below is a throwaway, which is exactly why
+    # this port must never leave the machine: published on 0.0.0.0 it is an
+    # unauthenticated database to anyone on the same network.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
 
 volumes:
   postgres_data:
