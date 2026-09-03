@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table.tsx";
+import { useScopedCommittees } from "@/hooks/useScopedCommittees";
 import { $api } from "@/lib/apiClient";
 import {
   applicantLabel,
@@ -51,12 +52,10 @@ function RankingPage() {
   const { cycleId } = Route.useParams();
   const [selected, setSelected] = useState("");
 
-  const committees = $api.useQuery("get", "/recruitment/cycles/{cycleId}/committees", {
-    params: { path: { cycleId } },
-  });
+  const committees = useScopedCommittees(cycleId);
 
-  const committeeList = committees.data ?? [];
-  const committeeId = selected === "" ? (committeeList[0]?.id ?? "") : selected;
+  const committeeList = committees.committees;
+  const committeeId = selected === "" ? committees.defaultCommitteeId : selected;
   const hasCommittee = committeeId !== "";
 
   // `RankingRow` now carries `minimumReviews` and `recommendationCounts`, so the

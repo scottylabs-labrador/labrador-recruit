@@ -37,7 +37,7 @@ function IndexComponent() {
   return (
     <div className="mx-auto w-full max-w-[1400px] px-6 py-16">
       <div className="max-w-[62ch]">
-        <h1 className="text-2xl leading-tight font-semibold">Labrador Recruit</h1>
+        <h1 className="text-2xl leading-tight font-semibold">Recruit</h1>
         <p className="mt-3 text-[0.95rem] leading-7 text-muted-foreground">
           The recruitment review platform for ScottyLabs leadership. Leadership imports the
           committee application form, reviewers score applicants against a published rubric, and the

@@ -1,4 +1,4 @@
-# Labrador Recruit
+# Recruit
 
 Internal recruitment review platform for ScottyLabs leadership.
 

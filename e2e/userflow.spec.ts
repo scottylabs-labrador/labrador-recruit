@@ -11,8 +11,8 @@ test("a guest is told what the platform is and how to get in", async ({ page }) 
   await page.goto("/");
 
   await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
-  await expect(page.getByText("LabradorRecruit")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Labrador Recruit" })).toBeVisible();
+  await expect(page.getByText("Recruit")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recruit" })).toBeVisible();
   await expect(page.getByText(/not evaluated by any model/)).toBeVisible();
 });
 

@@ -16,6 +16,19 @@ export function CommitteePicker({
   onChange,
   label = "Committee",
 }: CommitteePickerProps) {
+  // A cycle pinned to one committee leaves a select with a single option,
+  // which reads as a choice the reader does not have. Name the committee
+  // instead, so the screen still says which one they are looking at.
+  const only = committees.length === 1 ? committees[0] : undefined;
+  if (only !== undefined) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">{label}</span>
+        <span className="text-sm font-medium">{only.name}</span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-2">
       <Label htmlFor={id}>{label}</Label>

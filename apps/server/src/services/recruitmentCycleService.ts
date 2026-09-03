@@ -24,6 +24,11 @@ export interface CycleSummary {
   blindReviewEnabled: boolean;
   candidacyTopN: number;
   disagreementSpreadThreshold: number;
+  /**
+   * When set, the whole interface scopes to this one committee. Null means
+   * every committee the cycle runs is in scope.
+   */
+  reviewCommitteeId: string | null;
   createdAt: Date;
 }
 
@@ -91,6 +96,7 @@ export const recruitmentCycleService = {
       blindReviewEnabled: recruitmentCycle.blindReviewEnabled,
       candidacyTopN: recruitmentCycle.candidacyTopN,
       disagreementSpreadThreshold: recruitmentCycle.disagreementSpreadThreshold,
+      reviewCommitteeId: recruitmentCycle.reviewCommitteeId,
       createdAt: recruitmentCycle.createdAt,
     };
 
@@ -192,6 +198,8 @@ export const recruitmentCycleService = {
       disagreementSpreadThreshold?: number;
       disagreementOnExtremeConflict?: boolean;
       preferenceScoreMap?: Record<string, number>;
+      /** Null widens the cycle back out to every committee it runs. */
+      reviewCommitteeId?: string | null;
     },
   ) => {
     if (!canConfigureCycle({ user: acUser })) {

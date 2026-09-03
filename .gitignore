@@ -25,3 +25,6 @@ build/
 .DS_Store
 
 .vercel
+
+# Local agent tooling scratch. Machine-specific and not part of the project.
+.claude/

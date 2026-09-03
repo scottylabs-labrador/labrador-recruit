@@ -7,7 +7,7 @@ export function NavBar() {
     <nav className="flex items-center justify-between px-6 py-4 bg-gray-800 text-white shadow-lg">
       <div className="flex items-center gap-6">
         <Link to="/" className="text-xl font-semibold">
-          LabradorRecruit
+          Recruit
         </Link>
         <Link
           to="/recruitment"

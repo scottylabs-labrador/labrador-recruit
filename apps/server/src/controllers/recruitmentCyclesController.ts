@@ -33,6 +33,12 @@ export interface UpdateCycleRequest {
   blindReviewEnabled?: boolean;
   disagreementSpreadThreshold?: number;
   disagreementOnExtremeConflict?: boolean;
+  /**
+   * Scopes the whole interface to one committee. Null widens it back out to
+   * every committee the cycle runs; no candidacy or preference is touched
+   * either way.
+   */
+  reviewCommitteeId?: string | null;
 }
 
 @Route("recruitment/cycles")

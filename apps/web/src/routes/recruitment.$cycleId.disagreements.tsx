@@ -7,6 +7,7 @@ import { EmptyState, ErrorState } from "@/components/recruitment/StateViews.tsx"
 import { Badge } from "@/components/ui/badge.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { useScopedCommittees } from "@/hooks/useScopedCommittees";
 import { $api } from "@/lib/apiClient";
 import {
   applicantLabel,
@@ -25,12 +26,10 @@ function DisagreementsPage() {
   const { cycleId } = Route.useParams();
   const [selected, setSelected] = useState("");
 
-  const committees = $api.useQuery("get", "/recruitment/cycles/{cycleId}/committees", {
-    params: { path: { cycleId } },
-  });
+  const committees = useScopedCommittees(cycleId);
 
-  const committeeList = committees.data ?? [];
-  const committeeId = selected === "" ? (committeeList[0]?.id ?? "") : selected;
+  const committeeList = committees.committees;
+  const committeeId = selected === "" ? committees.defaultCommitteeId : selected;
   const hasCommittee = committeeId !== "";
 
   const disagreements = $api.useQuery(

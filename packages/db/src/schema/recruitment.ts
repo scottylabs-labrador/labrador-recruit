@@ -36,6 +36,23 @@ export const recruitmentCycle = pgTable(
     blindReviewEnabled: boolean("blind_review_enabled").notNull().default(false),
 
     /**
+     * Restricts the whole interface to one committee when set.
+     *
+     * A deployment can be stood up for a single committee - Labrador reviewing
+     * only its own applicants - without deleting the other committees'
+     * candidacies or anyone's submitted preferences. Those stay in the
+     * database, so widening back out later is a settings change rather than a
+     * re-import. Null means every committee the cycle runs is in scope.
+     *
+     * This is presentation and scoping, not authorisation: access control
+     * still comes from `recruitment_membership`, and narrowing this can never
+     * widen what somebody may read.
+     */
+    reviewCommitteeId: uuid("review_committee_id").references(() => committee.id, {
+      onDelete: "set null",
+    }),
+
+    /**
      * How many of an applicant's ranked committees receive a candidacy by
      * default. Admins may still add or remove candidacies by hand.
      */
