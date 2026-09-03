@@ -20,7 +20,8 @@
     "db:generate": "secretspec run -P local -- bunx drizzle-kit generate",
     "db:migrate": "secretspec run -P local -- bunx drizzle-kit migrate",
     "db:seed": "secretspec run -P local -- bun run src/seedCli.ts",
-    "db:studio": "secretspec run -P local -- bunx drizzle-kit studio"
+    "db:studio": "secretspec run -P local -- bunx drizzle-kit studio",
+    "migrate:deploy": "drizzle-kit migrate"
   },
   "type": "module"
 }
