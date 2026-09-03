@@ -5,6 +5,7 @@ import type {
   Aggregate,
   Application,
   Committee,
+  CommitteeDecisions,
   Cycle,
   CycleProgress,
   DecisionExport,
@@ -61,6 +62,12 @@ export let rubric: Rubric | null = null;
 export let review: Review | null = null;
 export let aggregates: Aggregate[] = [];
 export let ranking: RankingEntry[] = [];
+export let committeeDecisions: CommitteeDecisions = {
+  capacity: null,
+  acceptedCount: 0,
+  overCapacity: false,
+  decisions: [],
+};
 export let disagreements: Aggregate[] = [];
 export let peerReviews: PeerReview[] = [];
 /** Null means `/me` 404s, which is how "no standing in this cycle" arrives. */
@@ -100,6 +107,15 @@ export function setAggregates(next: Aggregate[]) {
 }
 export function setRanking(next: RankingEntry[]) {
   ranking = next;
+}
+export function setCommitteeDecisions(next: Partial<CommitteeDecisions>) {
+  committeeDecisions = {
+    capacity: null,
+    acceptedCount: 0,
+    overCapacity: false,
+    decisions: [],
+    ...next,
+  };
 }
 export function setDisagreements(next: Aggregate[]) {
   disagreements = next;
@@ -341,6 +357,20 @@ export const handlers = [
       return HttpResponse.json(ranking);
     },
   ),
+
+  http.get(
+    `${RECRUITMENT}/cycles/:cycleId/committees/:committeeId/decisions`,
+    async ({ request }) => {
+      await record("GET", request);
+      return HttpResponse.json(committeeDecisions);
+    },
+  ),
+
+  http.put(`${RECRUITMENT}/candidacies/:candidacyId/decision`, async ({ request, params }) => {
+    await record("PUT", request);
+    const candidacyId = String(params["candidacyId"]);
+    return HttpResponse.json({ id: `decision-${candidacyId}`, candidacyId });
+  }),
 
   http.get(
     `${RECRUITMENT}/cycles/:cycleId/committees/:committeeId/disagreements`,
