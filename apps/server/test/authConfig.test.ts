@@ -16,7 +16,10 @@ describe("GET /auth/config", () => {
   it("discloses only the boolean, never the issuer or the secret", async () => {
     const res = await request(app).get("/auth/config");
 
-    expect(Object.keys(res.body)).toEqual(["identityProviderConfigured"]);
+    expect(Object.keys(res.body).sort()).toEqual([
+      "identityProviderConfigured",
+      "passwordSignInEnabled",
+    ]);
     const body = JSON.stringify(res.body);
     expect(body).not.toContain(env.AUTH_CLIENT_SECRET);
     expect(body).not.toContain(env.AUTH_ISSUER);

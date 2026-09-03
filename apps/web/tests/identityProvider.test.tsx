@@ -17,7 +17,7 @@ describe("identity provider availability", () => {
     await renderApp("/");
 
     expect(
-      await screen.findByRole("button", { name: "Or sign in with your Andrew ID" }),
+      await screen.findByRole("button", { name: "Sign in with your Andrew ID" }),
     ).toBeDefined();
     expect(screen.queryByText("Single sign-on is not available yet")).toBeNull();
   });
@@ -27,7 +27,7 @@ describe("identity provider availability", () => {
     await renderApp("/");
 
     expect(await screen.findByText("Single sign-on is not available yet")).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Or sign in with your Andrew ID" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sign in with your Andrew ID" })).toBeNull();
   });
 
   it("names who can fix it rather than only saying it is broken", async () => {

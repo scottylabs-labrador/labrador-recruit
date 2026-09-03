@@ -130,10 +130,59 @@ https://<domain>/api/auth/oauth2/callback/keycloak
 That path comes from the `genericOAuth` provider id in
 `apps/server/src/lib/auth.ts`. Changing `providerId` changes the callback URL.
 
-Existing accounts keep working. The global role prefers an identity provider's
-`groups` claim when there is a token to read it from, and falls back to the role
-stored on the user row, so people who signed in with a password before the
-switch keep exactly the access they had.
+### Who is allowed in
+
+The realm has no local login form: the authorize endpoint redirects straight to
+a single CMU SAML provider, so every Andrew ID at the university authenticates
+successfully. Access is therefore decided by Goldador group membership, not by
+authentication.
+
+`infra/keycloak/teams.tf` in Goldador puts every `teams[<slug>].members.andrew_ids`
+into a Keycloak group named after the slug, every admin into `<slug>-admins`, and
+emits both in a `groups` claim. Set `AUTH_ALLOWED_GROUPS` to the slug. Anyone
+whose claim carries none of the allowed groups is refused with an explanation.
+`ADMIN_GROUP` is always allowed on top of the list, so a mistyped value degrades
+to admins-only rather than locking everybody out.
+
+Adding a reviewer is a Goldador change, nothing here: they sign in and are
+provisioned on first login.
+
+### Password accounts stop working
+
+`PASSWORD_SIGN_IN` defaults to `auto`, which means Andrew ID and password work
+only while `AUTH_CLIENT_ID` is still `not-yet-registered`. Registering a client
+switches them off in the same change.
+
+That is deliberate rather than tidy-minded. Password accounts exist so a cycle
+can run before an identity provider does, and the passwords issued in that
+window are shared temporary credentials; leaving them enabled afterwards would
+be a way around the group gate above. The global role still prefers the `groups`
+claim and falls back to the role stored on the user row, so the accounts
+themselves keep their access - they just cannot be signed into with a password.
+
+If single sign-on turns out to be misconfigured, returning `AUTH_CLIENT_ID` to
+`not-yet-registered` restores password sign-in immediately. That is the escape
+hatch, and it is why the group gate can safely fail closed.
+
+### The generated secret is not where the path suggests
+
+Goldador derives the OpenBao path from the client id by splitting on `-`:
+
+```hcl
+slug = split("-", client_id)[0]
+env  = split("-", client_id)[1]
+```
+
+For a hyphenated slug such as `labrador-recruit` that yields `slug = "labrador"`
+and `env = "recruit"` for _every_ environment, so all four clients
+(`-local`, `-dev`, `-staging`, `-prod`) write to the single path
+`labrador/generated/recruit` and overwrite each other. Whichever applies last
+wins, which is why that path holds the **local** client's credentials and there
+is no `prod` entry at all.
+
+Until Goldador is fixed, read the prod client's secret from the Keycloak admin
+console rather than OpenBao. Fixing it means keeping all but the last segment as
+the slug and the last as the environment.
 
 ## Deploys
 

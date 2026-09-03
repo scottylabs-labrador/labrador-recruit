@@ -8,7 +8,25 @@ const envSchema = z.object({
   AUTH_ISSUER: z.url(),
   AUTH_CLIENT_ID: z.string(),
   AUTH_CLIENT_SECRET: z.string(),
+  /**
+   * Goldador groups whose members may sign in, comma-separated.
+   *
+   * `ADMIN_GROUP` is always allowed on top of this, so an administrator
+   * cannot be locked out by an empty or mistyped list. Defaults to empty
+   * because a deployment with no identity provider never consults it.
+   */
+  AUTH_ALLOWED_GROUPS: z.string().default(""),
   AUTH_JWKS_URI: z.url(),
+  /**
+   * Whether an Andrew ID and password can be used to sign in.
+   *
+   * "auto" - the default - means "only while there is no identity
+   * provider", so the cutover to single sign-on needs no second variable
+   * changed and cannot be half-done. "on" and "off" force it either way,
+   * which is what lets the tests exercise both doors against one
+   * configured client id.
+   */
+  PASSWORD_SIGN_IN: z.enum(["auto", "on", "off"]).default("auto"),
   BETTER_AUTH_URL: z.url(), // https://www.better-auth.com/docs/installation#set-environment-variables
   DATABASE_URL: z.string(),
   SENTRY_DSN: z.string().optional(),

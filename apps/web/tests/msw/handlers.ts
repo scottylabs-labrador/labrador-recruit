@@ -233,7 +233,14 @@ export function resetDecisions() {
 
 export const handlers = [
   http.get(`${API_URL}/auth/config`, () => {
-    return HttpResponse.json({ identityProviderConfigured });
+    // Mirrors the server: password sign-in is the fallback for a deployment
+    // with no identity provider, never a second door alongside one. Deriving
+    // it here rather than exposing a second switch keeps the fixture from
+    // describing a combination the API cannot produce.
+    return HttpResponse.json({
+      identityProviderConfigured,
+      passwordSignInEnabled: !identityProviderConfigured,
+    });
   }),
 
   http.get(`${API_URL}/api/auth/*`, () => {

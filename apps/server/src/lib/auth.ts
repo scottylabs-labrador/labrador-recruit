@@ -9,6 +9,12 @@ import { customSession, genericOAuth } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 
 import { env } from "../env.ts";
+import {
+  isClientIdRegistered,
+  isInAllowedGroup,
+  isPasswordSignInEnabled,
+  parseAllowedGroups,
+} from "./authConfig.ts";
 import { getJwtPayloadFromHeaders } from "./authUtils.ts";
 import { db } from "./db.ts";
 import { getRoleFromJwt, toRole } from "./role.ts";
@@ -43,6 +49,28 @@ const isCrossSite =
   env.BETTER_AUTH_URL.startsWith("https://") &&
   new URL(env.SERVER_URL).host !== new URL(env.BETTER_AUTH_URL).host;
 
+/**
+ * Whether a real OIDC client is configured, which is the cutover switch.
+ *
+ * Everything about how people sign in follows from this one variable, so the
+ * move to CMU single sign-on is a deployment change rather than a code change -
+ * and, just as importantly, reverting it restores password sign-in immediately
+ * if the identity provider turns out to be misconfigured.
+ */
+const identityProviderConfigured = isClientIdRegistered(env.AUTH_CLIENT_ID);
+
+/**
+ * The Goldador groups permitted to sign in.
+ *
+ * `ADMIN_GROUP` is appended unconditionally: it is the group Goldador puts the
+ * project's admins in, and including it means a mistyped allow-list degrades to
+ * "only admins can sign in" rather than "nobody can".
+ */
+const allowedGroups = [...parseAllowedGroups(env.AUTH_ALLOWED_GROUPS), env.ADMIN_GROUP];
+
+/** Resolved once, because Better Auth is configured at module load. */
+const passwordSignIn = isPasswordSignInEnabled(env.PASSWORD_SIGN_IN, identityProviderConfigured);
+
 // https://www.better-auth.com/docs/installation#create-a-better-auth-instance
 export const auth = betterAuth({
   baseURL: env.SERVER_URL,
@@ -59,7 +87,16 @@ export const auth = betterAuth({
    * would then be self-asserted rather than granted.
    */
   emailAndPassword: {
-    enabled: true,
+    // Password sign-in is the fallback for a deployment with no identity
+    // provider, not a second door alongside one. Once Goldador has issued a
+    // client, CMU single sign-on is the only way in and a password that was
+    // issued earlier stops working - which is the point, since those were
+    // shared temporary credentials.
+    //
+    // The hasher is unaffected: Better Auth builds `ctx.password` regardless,
+    // so `accountService` can still write an account for a deployment that
+    // needs one.
+    enabled: passwordSignIn,
     disableSignUp: true,
     minPasswordLength: 12,
   },
@@ -142,6 +179,37 @@ export const auth = betterAuth({
           discoveryUrl: `${env.AUTH_ISSUER}/.well-known/openid-configuration`,
           redirectURI: `${env.SERVER_URL}/api/auth/oauth2/callback/keycloak`,
           scopes: ["openid", "email", "profile", "offline_access"],
+
+          /**
+           * Refuses anyone Goldador has not put on this project.
+           *
+           * Without this, implicit sign-up is on - Better Auth computes the
+           * gate purely from this provider config - and the realm brokers
+           * straight to CMU SAML with no local login form. So every Andrew ID
+           * at the university could authenticate and get a row created. They
+           * would see nothing, because every screen is gated on cycle
+           * membership, but an account on a system holding applicant essays
+           * should not be one CMU login away.
+           *
+           * Rejecting here rather than with `disableImplicitSignUp` is what
+           * keeps Goldador authoritative: a reviewer added to the team group
+           * signs in and is provisioned on first login, with no separate step
+           * here to remember. Turning implicit sign-up off outright would
+           * refuse them until somebody created a row by hand.
+           */
+          mapProfileToUser: (profile) => {
+            if (!isInAllowedGroup(profile["groups"], allowedGroups)) {
+              throw new APIError("FORBIDDEN", {
+                code: "NOT_IN_PROJECT_GROUP",
+                message:
+                  "Your CMU account is not on this project in Goldador, so it cannot sign in. " +
+                  "Ask a ScottyLabs administrator to add your Andrew ID to the team.",
+              });
+            }
+            // Every field is left to the provider's own claims; this hook is
+            // only here for the check above.
+            return {};
+          },
         },
       ],
     }),

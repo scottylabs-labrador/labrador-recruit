@@ -14,11 +14,20 @@ import { $api } from "@/lib/apiClient";
  * common case by far is a configured deployment, and briefly disabling the
  * button on every page load would be worse than the rare wrong guess.
  */
-export function useIdentityProvider(): { configured: boolean; isPending: boolean } {
+export function useIdentityProvider(): {
+  configured: boolean;
+  passwordSignInEnabled: boolean;
+  isPending: boolean;
+} {
   const { data, isPending } = $api.useQuery("get", "/auth/config", {});
 
   return {
     configured: data?.identityProviderConfigured ?? true,
+    // Assumed unavailable while loading, matching the assumption above that a
+    // deployment is configured: the two together mean the first paint offers
+    // single sign-on rather than briefly showing a password form that the API
+    // would refuse.
+    passwordSignInEnabled: data?.passwordSignInEnabled ?? false,
     isPending,
   };
 }

@@ -5,6 +5,11 @@ process.env["ADMIN_GROUP"] ??= "test-admins";
 process.env["ALLOWED_ORIGINS_REGEX"] ??= ".*";
 process.env["AUTH_ISSUER"] ??= "https://auth.example.com";
 process.env["AUTH_CLIENT_ID"] ??= "test-client-id";
+// The harness signs bearer tokens with `AUTH_CLIENT_ID` as the audience, so the
+// tests need a registered-looking client - which would otherwise switch password
+// sign-in off and take the local-account tests with it. Both doors are forced
+// open here so each can be tested on its own terms.
+process.env["PASSWORD_SIGN_IN"] ??= "on";
 process.env["AUTH_CLIENT_SECRET"] ??= "test-client-secret";
 process.env["AUTH_JWKS_URI"] ??= "https://auth.example.com/.well-known/jwks.json";
 process.env["BETTER_AUTH_URL"] ??= "https://auth.example.com";

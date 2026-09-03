@@ -48,16 +48,16 @@ function IndexComponent() {
           reviewer, and every figure the platform reports is arithmetic over those scores.
         </p>
 
-        <SignInForm />
+        {identityProvider.passwordSignInEnabled ? <SignInForm /> : null}
 
         {identityProvider.configured ? (
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Button variant="outline" onClick={() => signIn()}>
-              Or sign in with your Andrew ID
-            </Button>
-            <span className="text-sm text-muted-foreground">
-              You will reach the cycles you are enrolled in.
-            </span>
+          <div className="mt-8">
+            <Button onClick={() => signIn()}>Sign in with your Andrew ID</Button>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              You will be sent to CMU to sign in, then back here to the cycles you are enrolled in.
+              Access comes from the ScottyLabs team register, so if CMU accepts your login and this
+              site still refuses it, ask an administrator to add your Andrew ID to the project.
+            </p>
           </div>
         ) : (
           <div className="mt-8 rounded-[10px] border border-border bg-muted/40 p-4">
