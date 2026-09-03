@@ -10,7 +10,7 @@
     "@commitlint/cli": "^20.3.1",
     "@commitlint/config-conventional": "^21.2.0",
     "@electric-sql/pglite": "^0.5.5",
-    "@electric-sql/pglite-socket": "^0.2.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
     "@labrador/db": "workspace:*",
     "@playwright/test": "^1.62.1",
     "dotenv-cli": "^11.0.0",

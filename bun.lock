@@ -8,7 +8,7 @@
         "@commitlint/cli": "^20.3.1",
         "@commitlint/config-conventional": "^21.2.0",
         "@electric-sql/pglite": "^0.5.5",
-        "@electric-sql/pglite-socket": "^0.2.8",
+        "@electric-sql/pglite-socket": "^0.2.11",
         "@labrador/db": "workspace:*",
         "@playwright/test": "^1.62.1",
         "dotenv-cli": "^11.0.0",
@@ -328,7 +328,7 @@
 
     "@electric-sql/pglite-pgvector": ["@electric-sql/pglite-pgvector@0.0.6", "", { "peerDependencies": { "@electric-sql/pglite": "0.5.5" } }, "sha512-KiPeiS/BMmjO71igzgexJAu5aPb3Y2yUjNTSMdti4ZL3zlqZFl4eLgbzLBGyG5Cxr9xFwYFmHh61ZTq6w6hUJA=="],
 
-    "@electric-sql/pglite-socket": ["@electric-sql/pglite-socket@0.2.8", "", { "peerDependencies": { "@electric-sql/pglite": "0.5.5", "@electric-sql/pglite-age": "0.0.6", "@electric-sql/pglite-pg_hashids": "0.0.6", "@electric-sql/pglite-pg_ivm": "0.0.6", "@electric-sql/pglite-pg_textsearch": "0.0.7", "@electric-sql/pglite-pg_uuidv7": "0.0.6", "@electric-sql/pglite-pgtap": "0.0.6", "@electric-sql/pglite-pgvector": "0.0.6" }, "bin": { "pglite-server": "dist/scripts/server.js" } }, "sha512-s/hDC799oT1YLrQoyfiBKqwFcIn0m6OUEuU2ENdzr3uxW5rJBM73hpQeiBmSs+pqDD2A3PH4a8839ExqoROVmQ=="],
+    "@electric-sql/pglite-socket": ["@electric-sql/pglite-socket@0.2.11", "", { "peerDependencies": { "@electric-sql/pglite": "0.5.8", "@electric-sql/pglite-age": "0.0.9", "@electric-sql/pglite-pg_hashids": "0.0.9", "@electric-sql/pglite-pg_ivm": "0.0.9", "@electric-sql/pglite-pg_textsearch": "0.0.10", "@electric-sql/pglite-pg_uuidv7": "0.0.9", "@electric-sql/pglite-pgtap": "0.0.9", "@electric-sql/pglite-pgvector": "0.0.9" }, "bin": { "pglite-server": "dist/scripts/server.js" } }, "sha512-DKnJBf7+5zFCXXGZAGUvGoWKetPPvaQ7fLSGVqP5onzgBhV9vvTcHigireMROMglgovvhoXHaMOKqt69/vts4A=="],
 
     "@emnapi/core": ["@emnapi/core@1.11.3", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.3", "tslib": "^2.4.0" } }, "sha512-zLpS5asjEb7lq8jYLq37N6XKaE41DIexlY1rF/z4/tIl3wo13Sqm28fRyfIsKZD+NZ8mM5RoKkpW/rBcuoSZSg=="],
 
