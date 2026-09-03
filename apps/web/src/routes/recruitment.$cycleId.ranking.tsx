@@ -3,6 +3,11 @@ import { Flag } from "lucide-react";
 import { useState } from "react";
 
 import { CommitteePicker } from "@/components/recruitment/CommitteePicker.tsx";
+import {
+  DecisionBadge,
+  DecisionControls,
+  type DecisionValue,
+} from "@/components/recruitment/DecisionControls.tsx";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/recruitment/StateViews.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import {
@@ -13,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table.tsx";
+import { useRecruitmentUser } from "@/hooks/useRecruitmentUser";
 import { useScopedCommittees } from "@/hooks/useScopedCommittees";
 import { $api } from "@/lib/apiClient";
 import {
@@ -34,7 +40,11 @@ const COLUMNS = [
   "Recommendations",
   "Flags",
   "Status",
+  "Decision",
 ];
+
+/** The same columns plus the decision controls, for a caller who may decide. */
+const DECIDING_COLUMNS = [...COLUMNS, ""];
 
 const SHORT_RECOMMENDATION_LABELS: Record<string, string> = {
   strong_yes: "SY",
@@ -69,6 +79,27 @@ function RankingPage() {
 
   const rows = ranking.data ?? [];
 
+  const { canDecideForCommittee } = useRecruitmentUser(cycleId);
+  const canDecide = canDecideForCommittee(committeeId);
+  const [deciding, setDeciding] = useState<string | null>(null);
+
+  const decide = $api.useMutation("put", "/recruitment/candidacies/{candidacyId}/decision", {
+    onSettled: () => {
+      setDeciding(null);
+      void ranking.refetch();
+    },
+  });
+
+  function record(candidacyId: string, status: DecisionValue) {
+    setDeciding(candidacyId);
+    decide.mutate({
+      params: { path: { candidacyId } },
+      body: { status },
+    });
+  }
+
+  const columns = canDecide ? DECIDING_COLUMNS : COLUMNS;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -97,7 +128,7 @@ function RankingPage() {
       ) : ranking.isError ? (
         <ErrorState title="Could not load the ranking" error={ranking.error} />
       ) : ranking.isLoading || committees.isLoading ? (
-        <TableSkeleton columns={COLUMNS} />
+        <TableSkeleton columns={columns} />
       ) : rows.length === 0 ? (
         <EmptyState
           title="Nothing to rank yet"
@@ -169,6 +200,20 @@ function RankingPage() {
                       </Badge>
                     )}
                   </TableCell>
+                  <TableCell>
+                    <DecisionBadge status={row.decisionStatus} />
+                  </TableCell>
+                  {canDecide ? (
+                    <TableCell className="text-right">
+                      <DecisionControls
+                        applicantLabel={applicantLabel(row.applicantName)}
+                        decisionStatus={row.decisionStatus}
+                        reviewsShortBy={row.reviewsShortBy}
+                        busy={deciding === row.candidacyId}
+                        onDecide={(status) => record(row.candidacyId, status)}
+                      />
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               );
             })}

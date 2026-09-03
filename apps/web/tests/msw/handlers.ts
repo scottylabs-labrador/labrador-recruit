@@ -224,6 +224,13 @@ export function resetAuthProbes() {
   rejectCredentials = false;
 }
 
+/** The last committee decision recorded, so a test can assert on it. */
+export let lastDecision: { candidacyId: string; status: string } | null = null;
+
+export function resetDecisions() {
+  lastDecision = null;
+}
+
 export const handlers = [
   http.get(`${API_URL}/auth/config`, () => {
     return HttpResponse.json({ identityProviderConfigured });
@@ -280,6 +287,13 @@ export const handlers = [
     return progress === null
       ? new HttpResponse(null, { status: 404 })
       : HttpResponse.json(progress);
+  }),
+
+  http.put(`${RECRUITMENT}/candidacies/:candidacyId/decision`, async ({ request, params }) => {
+    await record("PUT", request);
+    const body = (await request.json()) as { status: string };
+    lastDecision = { candidacyId: String(params["candidacyId"]), status: body.status };
+    return HttpResponse.json({ candidacyId: lastDecision.candidacyId, status: body.status });
   }),
 
   http.get(`${RECRUITMENT}/cycles/:cycleId/committees`, async ({ request }) => {

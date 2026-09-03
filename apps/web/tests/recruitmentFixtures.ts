@@ -51,6 +51,8 @@ export function cycle(overrides: Partial<Cycle> = {}): Cycle {
     // Unpinned by default: most screens should offer every committee the cycle
     // runs, and a test that wants the single-committee behaviour says so.
     reviewCommitteeId: null,
+    decisionCutoffAdmit: null,
+    decisionCutoffReject: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     ...overrides,
   };
@@ -256,6 +258,10 @@ export function rankingRow(overrides: Partial<RankingEntry> = {}): RankingEntry 
     applicantRank: 1,
     submittedCount: 2,
     minimumReviews: 3,
+    // Undecided and one review short, which is the state most rows are in
+    // while a cycle is still being reviewed.
+    decisionStatus: "pending",
+    reviewsShortBy: 1,
     mean: 3.5,
     median: 3.5,
     spread: 3,

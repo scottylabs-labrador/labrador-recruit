@@ -29,6 +29,12 @@ export interface CycleSummary {
    * every committee the cycle runs is in scope.
    */
   reviewCommitteeId: string | null;
+  /**
+   * Where leadership intends to draw the admit and reject lines. Null means no
+   * line. These are shown on the ranking and never applied automatically.
+   */
+  decisionCutoffAdmit: number | null;
+  decisionCutoffReject: number | null;
   createdAt: Date;
 }
 
@@ -97,6 +103,8 @@ export const recruitmentCycleService = {
       candidacyTopN: recruitmentCycle.candidacyTopN,
       disagreementSpreadThreshold: recruitmentCycle.disagreementSpreadThreshold,
       reviewCommitteeId: recruitmentCycle.reviewCommitteeId,
+      decisionCutoffAdmit: recruitmentCycle.decisionCutoffAdmit,
+      decisionCutoffReject: recruitmentCycle.decisionCutoffReject,
       createdAt: recruitmentCycle.createdAt,
     };
 
@@ -200,6 +208,8 @@ export const recruitmentCycleService = {
       preferenceScoreMap?: Record<string, number>;
       /** Null widens the cycle back out to every committee it runs. */
       reviewCommitteeId?: string | null;
+      decisionCutoffAdmit?: number | null;
+      decisionCutoffReject?: number | null;
     },
   ) => {
     if (!canConfigureCycle({ user: acUser })) {

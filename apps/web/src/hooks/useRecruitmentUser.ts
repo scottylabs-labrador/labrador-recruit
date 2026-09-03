@@ -1,4 +1,5 @@
 import type { Membership, RecruitmentRole, RecruitmentUser, Role } from "@labrador/access-control";
+import { canDecideCommittee } from "@labrador/access-control";
 
 import { $api } from "@/lib/apiClient";
 
@@ -19,6 +20,15 @@ export interface RecruitmentStanding {
    * memberships the server sent, not re-derived from anything else.
    */
   isLeadership: boolean;
+  /**
+   * Whether the caller may record a committee decision for this committee.
+   *
+   * Asks the same predicate the server asks, so the interface offers a control
+   * exactly when the API would accept it. A committee lead may decide only for
+   * the committees they lead - being a reviewer elsewhere is not enough - which
+   * is why this takes the committee rather than being a single boolean.
+   */
+  canDecideForCommittee: (committeeId: string) => boolean;
 }
 
 /**
@@ -60,6 +70,9 @@ export function useRecruitmentUser(cycleId: string | null): RecruitmentStanding 
       (membership) =>
         membership.role === "committee_lead" || membership.role === "recruitment_admin",
     ),
+    canDecideForCommittee: (committeeId: string) =>
+      committeeId !== "" &&
+      canDecideCommittee({ user, decision: { candidacyId: "", committeeId } }),
   };
 }
 

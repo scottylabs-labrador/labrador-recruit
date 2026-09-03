@@ -25,6 +25,7 @@ import {
   setRubricValidation,
   setRubricVersions,
   resetAuthProbes,
+  resetDecisions,
   setIdentityProviderConfigured,
   setSession,
   setSignInFails,
@@ -67,6 +68,7 @@ beforeEach(() => {
   setSignInFails(false);
   setIdentityProviderConfigured(true);
   resetAuthProbes();
+  resetDecisions();
   setAdminUsers([]);
   setCycles([]);
   setCommittees([]);

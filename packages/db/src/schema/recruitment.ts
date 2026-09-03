@@ -61,6 +61,19 @@ export const recruitmentCycle = pgTable(
     /** Also create a candidacy for any committee whose questions were answered. */
     candidacyIncludeOptIns: boolean("candidacy_include_opt_ins").notNull().default(true),
 
+    /**
+     * Mean score at or above which leadership intends to admit, and below
+     * which they intend to reject. Null means no line has been drawn.
+     *
+     * These draw two lines on the ranking and let an administrator select
+     * everyone above one of them. They never apply themselves: product rule 1
+     * forbids an automatic accept or reject "including by numeric cutoff", so
+     * the cutoff proposes and a named person decides. They live on the cycle
+     * rather than in code because recruitment policy changes between rounds.
+     */
+    decisionCutoffAdmit: integer("decision_cutoff_admit"),
+    decisionCutoffReject: integer("decision_cutoff_reject"),
+
     /** Score spread, in normalised points, above which reviewers disagree. */
     disagreementSpreadThreshold: integer("disagreement_spread_threshold").notNull().default(20),
 

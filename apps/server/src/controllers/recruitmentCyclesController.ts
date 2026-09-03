@@ -39,6 +39,13 @@ export interface UpdateCycleRequest {
    * either way.
    */
   reviewCommitteeId?: string | null;
+  /**
+   * Where the admit and reject lines sit on the ranking. Shown to an
+   * administrator so they can select everyone above a line; never applied on
+   * their behalf.
+   */
+  decisionCutoffAdmit?: number | null;
+  decisionCutoffReject?: number | null;
 }
 
 @Route("recruitment/cycles")
