@@ -63,7 +63,12 @@ COPY --from=builder --chown=server:server \
   /app/packages/db/drizzle.config.ts \
   /app/apps/server/drizzle.config.ts
 
+COPY --from=builder --chown=server:server \
+  /app/apps/server/docker-entrypoint.sh \
+  /app/apps/server/docker-entrypoint.sh
+RUN chmod +x /app/apps/server/docker-entrypoint.sh
+
 USER server
 EXPOSE 3000
 WORKDIR /app/apps/server
-CMD ["bun", "--preload", "./src/instrument.ts", "dist/server.js"]
+CMD ["./docker-entrypoint.sh"]
