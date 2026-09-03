@@ -95,7 +95,12 @@ export const decisionService = {
       throw new HttpError(404, "Candidacy not found");
     }
 
-    if (!canDecideCommittee({ user: acUser, decision: { candidacyId } })) {
+    if (
+      !canDecideCommittee({
+        user: acUser,
+        decision: { candidacyId, committeeId: candidacy.committeeId },
+      })
+    ) {
       throw new HttpError(403, "You are not allowed to decide on this candidacy");
     }
 
