@@ -79,6 +79,10 @@ export function queueEntry(overrides: Partial<QueueEntry> = {}): QueueEntry {
     year: "sophomore",
     major: "Information Systems",
     applicantRank: 1,
+    // A first choice who wrote something: the top of the queue, which is the
+    // case most tests want without having to say so.
+    hasCommitteeResponse: true,
+    priorityTier: 1,
     hasDraft: false,
     submitted: false,
     ...overrides,
