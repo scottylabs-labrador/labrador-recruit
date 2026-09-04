@@ -19,6 +19,7 @@ import {
   aggregate,
   application,
   applicationDetail,
+  COMMITTEE_TECH,
   committee,
   cycle,
   cycleProgress,
@@ -125,5 +126,79 @@ describe("leadership-only context", () => {
 
     expect(await screen.findByText(FRIEND_REQUEST)).toBeDefined();
     expect(screen.getByText(/never contributes to a score/)).toBeDefined();
+  });
+});
+
+describe("applicant filters", () => {
+  const sophomore = application({
+    applicationId: "app-soph",
+    applicantName: "Robin Fixture",
+    year: "sophomore",
+  });
+  const firstYear = application({
+    applicationId: "app-first",
+    applicantName: "Casey Firstyear",
+    year: "first_year",
+    committees: [{ committeeId: COMMITTEE_TECH, name: "Tech", rank: 1, hasCandidacy: false }],
+  });
+
+  it("narrows the list by year", async () => {
+    const user = userEvent.setup();
+    seed();
+    setApplications([sophomore, firstYear]);
+
+    await renderApp("/recruitment/cycle-1/applicants");
+    expect(await screen.findByText("Casey Firstyear")).toBeDefined();
+
+    await user.selectOptions(screen.getByLabelText("Year"), "sophomore");
+
+    await waitFor(() => {
+      expect(screen.queryByText("Casey Firstyear")).toBeNull();
+    });
+    expect(screen.getByText("Robin Fixture")).toBeDefined();
+  });
+
+  it("separates people with a candidacy from those who only ranked", async () => {
+    const user = userEvent.setup();
+    seed();
+    setApplications([sophomore, firstYear]);
+
+    await renderApp("/recruitment/cycle-1/applicants");
+    expect(await screen.findByText("Robin Fixture")).toBeDefined();
+
+    await user.selectOptions(screen.getByLabelText("Candidacy"), "without");
+
+    // Casey ranked Tech but generates no review work there; Robin has a candidacy.
+    await waitFor(() => {
+      expect(screen.queryByText("Robin Fixture")).toBeNull();
+    });
+    expect(screen.getByText("Casey Firstyear")).toBeDefined();
+  });
+
+  it("keeps the filters in the URL so a view can be shared", async () => {
+    seed();
+    setApplications([sophomore, firstYear]);
+
+    await renderApp("/recruitment/cycle-1/applicants?year=first_year");
+
+    expect(await screen.findByText("Casey Firstyear")).toBeDefined();
+    expect(screen.queryByText("Robin Fixture")).toBeNull();
+    expect(screen.getByText("1 of 2 applicants shown")).toBeDefined();
+  });
+
+  it("offers a way back to the unfiltered list", async () => {
+    const user = userEvent.setup();
+    seed();
+    setApplications([sophomore, firstYear]);
+
+    await renderApp("/recruitment/cycle-1/applicants?year=first_year");
+    expect(await screen.findByText("Casey Firstyear")).toBeDefined();
+
+    await user.click(screen.getByRole("button", { name: /Clear filters/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Robin Fixture")).toBeDefined();
+    });
+    expect(screen.getByText("2 of 2 applicants shown")).toBeDefined();
   });
 });

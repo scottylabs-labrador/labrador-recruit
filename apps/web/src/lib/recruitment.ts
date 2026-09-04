@@ -233,3 +233,39 @@ const YEAR_LABELS: Record<string, string> = {
 export function yearLabel(value: string): string {
   return YEAR_LABELS[value] ?? value;
 }
+
+/**
+ * Year values offered as a filter, in academic order rather than the
+ * alphabetical order a `Record` would give. `unknown` is offered too: a year
+ * the form did not supply is a real state someone may want to find and fix,
+ * not a row to hide.
+ */
+export const YEAR_FILTER_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "first_year", label: "First Year" },
+  { value: "sophomore", label: "Sophomore" },
+  { value: "junior", label: "Junior" },
+  { value: "senior", label: "Senior" },
+  { value: "grad", label: "Grad" },
+  { value: "unknown", label: "Unknown" },
+];
+
+/**
+ * Whether an applicant is being reviewed for a committee or merely ranked it.
+ *
+ * The distinction is the one that matters when chasing coverage: ranking a
+ * committee is the applicant's stated preference, whereas a candidacy is what
+ * generates review work. Someone who ranked a committee but has no candidacy
+ * there is invisible to that committee's queue, and that is worth being able
+ * to look for.
+ */
+export type CandidacyFilter = "all" | "with" | "without";
+
+export const CANDIDACY_FILTER_OPTIONS: ReadonlyArray<{ value: CandidacyFilter; label: string }> = [
+  { value: "all", label: "Any candidacy status" },
+  { value: "with", label: "Has a candidacy" },
+  { value: "without", label: "Ranked, but no candidacy" },
+];
+
+export function isCandidacyFilter(value: string): value is CandidacyFilter {
+  return CANDIDACY_FILTER_OPTIONS.some((option) => option.value === value);
+}
