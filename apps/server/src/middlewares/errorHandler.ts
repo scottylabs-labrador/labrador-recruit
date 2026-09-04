@@ -66,12 +66,37 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     return res.status(err.status).json({ name: err.name, message: err.message });
   }
 
+  // CASL raises this when the caller holds no rule at all for a subject - a
+  // person with no recruitment standing asking about applicant data. That is a
+  // refusal, not a failure, so it must not reach the 500 branch below. Matched
+  // by name because the class lives in @casl/ability, which this package does
+  // not depend on directly.
+  if (err instanceof Error && err.name === "ForbiddenError") {
+    return res.status(403).json({ name: "Forbidden", message: "You are not allowed to do that" });
+  }
+
+  // Postgres 22P02 is invalid_text_representation: a path parameter that is not
+  // a well-formed uuid. Such an id cannot name anything, so it is a plain 404.
+  // Drizzle wraps the driver error, so the code sits on `cause`.
+  if (isPostgresError(err, "22P02")) {
+    return res.status(404).json({ name: "NotFound", message: "Not found" });
+  }
+
   if (err instanceof Error) {
     captureUnexpectedError(`Unexpected error in ${req.path}: ${err}`);
-    return res.status(500).json({ message: `Internal Server Error: ${err.message}` });
+    // The detail goes to the log or Sentry, never to the client: an unexpected
+    // error's message can carry the failing SQL and its parameters.
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 
   return next();
+}
+
+function isPostgresError(err: unknown, code: string): boolean {
+  const candidates = [err, (err as { cause?: unknown })?.cause];
+  return candidates.some(
+    (c) => typeof c === "object" && c !== null && (c as { code?: unknown }).code === code,
+  );
 }
 
 /**

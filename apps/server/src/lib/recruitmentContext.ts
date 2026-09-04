@@ -1,4 +1,5 @@
 import type { Membership, RecruitmentUser } from "@labrador/access-control";
+import { candidacyVisibilityWhere } from "@labrador/access-control/visibility";
 import {
   application,
   committeeCandidacy,
@@ -9,6 +10,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import type { Request as ExpressRequest } from "express";
 
+import { HttpError } from "../middlewares/errorHandler.ts";
 import { getAcUserFromRequest } from "./accessControl.ts";
 import { db } from "./db.ts";
 
@@ -121,4 +123,32 @@ export async function getCycleIdForCandidacy(candidacyId: string): Promise<strin
     .where(eq(committeeCandidacy.id, candidacyId));
 
   return row?.cycleId ?? null;
+}
+
+/**
+ * Fails with 404 unless the caller may see the candidacy.
+ *
+ * A row the caller cannot see must be indistinguishable from one that does not
+ * exist, or a probe learns which ids are real. Services that list things
+ * belonging to a candidacy call this first: their own visibility predicates
+ * already return nothing for an invisible candidacy, but an empty 200 is not
+ * the same answer as a 404.
+ */
+export async function assertCandidacyVisible(
+  acUser: RecruitmentUser,
+  candidacyId: string,
+): Promise<void> {
+  const [row] = await db
+    .select({ id: committeeCandidacy.id })
+    .from(committeeCandidacy)
+    .where(
+      and(
+        eq(committeeCandidacy.id, candidacyId),
+        candidacyVisibilityWhere(acUser, committeeCandidacy),
+      ),
+    );
+
+  if (!row) {
+    throw new HttpError(404, "Candidacy not found");
+  }
 }

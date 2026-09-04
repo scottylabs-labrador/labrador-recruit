@@ -1,3 +1,4 @@
+import { canReadLeadershipContext } from "@labrador/access-control";
 import type { Request as ExpressRequest } from "express";
 import {
   Body,
@@ -14,6 +15,7 @@ import {
 
 import { BEARER_AUTH, OIDC_AUTH } from "../lib/authentication.ts";
 import { getRecruitmentUser } from "../lib/recruitmentContext.ts";
+import { HttpError } from "../middlewares/errorHandler.ts";
 import { auditService } from "../services/auditService.ts";
 import { recruitmentCycleService } from "../services/recruitmentCycleService.ts";
 
@@ -172,9 +174,12 @@ export class RecruitmentCyclesController extends Controller {
   @SuccessResponse(200)
   async listAuditEvents(@Request() req: ExpressRequest, @Path() cycleId: string) {
     const user = await getRecruitmentUser(req, cycleId);
-    // Reuse the cycle read check: an audit log is only visible to a caller who
-    // can already see the cycle it belongs to.
     await recruitmentCycleService.getCycle(user, cycleId);
+    // The log names who decided, exported and reopened what. That is leadership
+    // context; a reviewer could see the cycle and still has no business here.
+    if (!canReadLeadershipContext({ user, application: { cycleId } })) {
+      throw new HttpError(403, "You are not allowed to read the audit log");
+    }
     return auditService.listEvents(cycleId);
   }
 }

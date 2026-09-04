@@ -101,7 +101,16 @@ export interface ImportCommitReport {
  */
 async function parseUpload(filename: string, contentBase64: string): Promise<ParsedSheet> {
   const lower = filename.toLowerCase();
-  const buffer = Buffer.from(contentBase64, "base64");
+
+  // `Buffer.from(x, "base64")` never fails: it skips characters it does not
+  // understand and decodes the rest. Garbage therefore arrived as a "sheet"
+  // whose only header was a few stray bytes, and was stored as a real import
+  // row. Refuse anything that is not actually base64 before decoding it.
+  const compact = contentBase64.replaceAll(/\s+/gu, "");
+  if (compact === "" || !/^[A-Za-z0-9+/]*={0,2}$/u.test(compact) || compact.length % 4 !== 0) {
+    throw new HttpError(422, "The file content is not valid base64");
+  }
+  const buffer = Buffer.from(compact, "base64");
 
   if (lower.endsWith(".xlsx")) {
     return parseXlsx(buffer);

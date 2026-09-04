@@ -4,6 +4,7 @@ import { fromNodeHeaders } from "better-auth/node";
 import { eq } from "drizzle-orm";
 import type { Request as ExpressRequest } from "express";
 
+import { AuthenticationError } from "../middlewares/errorHandler.ts";
 import { auth } from "./auth.ts";
 import { verifyBearer, verifyOidc } from "./authentication.ts";
 import { db } from "./db.ts";
@@ -26,9 +27,21 @@ export async function getAcUserFromRequest(req: ExpressRequest): Promise<User> {
       .innerJoin(account, eq(user.id, account.userId))
       .where(eq(account.accountId, sub));
 
-    const dbUser = rows[0]?.user;
+    let dbUser = rows[0]?.user;
+
+    // When no provider token is readable, `verifyOidc` synthesises the subject
+    // from the user id rather than the provider account id. Look the person up
+    // that way before giving up, or an expired provider token turns every
+    // request from a valid session into a failure.
     if (!dbUser) {
-      throw new Error("User not found");
+      const [byId] = await db.select().from(user).where(eq(user.id, sub));
+      dbUser = byId;
+    }
+
+    if (!dbUser) {
+      // A verified subject that matches nobody is an authentication problem to
+      // report as one, not an internal error to page someone about.
+      throw new AuthenticationError();
     }
 
     return { id: dbUser.id, role: getRoleFromJwt(jwtPayload) };

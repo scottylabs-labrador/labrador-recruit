@@ -17,6 +17,7 @@ import {
 import { and, asc, count, eq, inArray, isNotNull, ne } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";
+import { assertCandidacyVisible } from "../lib/recruitmentContext.ts";
 import { HttpError } from "../middlewares/errorHandler.ts";
 import { recordAuditEvent } from "./auditService.ts";
 
@@ -196,6 +197,8 @@ export const assignmentService = {
 
   /** Assignments on one candidacy, for leads and admins managing coverage. */
   listForCandidacy: async (acUser: RecruitmentUser, candidacyId: string) => {
+    await assertCandidacyVisible(acUser, candidacyId);
+
     const rows = await db
       .select({
         assignmentId: reviewAssignment.id,

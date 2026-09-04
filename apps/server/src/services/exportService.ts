@@ -1,5 +1,9 @@
 import type { RecruitmentUser } from "@labrador/access-control";
-import { canAssignReviewers, canDecidePlacement } from "@labrador/access-control";
+import {
+  canAssignReviewers,
+  canDecidePlacement,
+  canReadLeadershipContext,
+} from "@labrador/access-control";
 import { candidacyVisibilityWhere } from "@labrador/access-control/visibility";
 import {
   applicant,
@@ -96,6 +100,14 @@ export const exportService = {
     cycleId: string,
     committeeId: string,
   ): Promise<RankingExportRow[]> => {
+    // This file carries every applicant's name and email alongside peer
+    // aggregates. Aggregate visibility belongs to leads and admins; a reviewer
+    // downloading it would see peers' scores for candidacies they have not yet
+    // reviewed, which product rule 3 forbids.
+    if (!canReadLeadershipContext({ user: acUser, application: { cycleId } })) {
+      throw new HttpError(403, "You are not allowed to export the committee ranking");
+    }
+
     const aggregates = await aggregateService.listCommitteeAggregates(acUser, cycleId, committeeId);
     if (aggregates.length === 0) {
       return [];

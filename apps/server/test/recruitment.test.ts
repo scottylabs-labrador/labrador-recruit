@@ -541,9 +541,11 @@ describe("aggregates and ranking", () => {
       .get(`/recruitment/cycles/${cycle.id}/committees/${design.id}/aggregates`)
       .set(aliceAuth());
 
-    // Alice reviews for Tech only, so Design yields nothing rather than an error.
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(0);
+    // Alice reviews for Tech only. Design is invisible to her, and an invisible
+    // committee answers 404 like an invisible row does: an empty 200 would tell
+    // a probe that the committee id is real, which a 404 for a made-up id
+    // would not.
+    expect(res.status).toBe(404);
   });
 });
 

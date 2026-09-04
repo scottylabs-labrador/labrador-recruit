@@ -23,6 +23,7 @@ import {
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";
+import { assertCandidacyVisible } from "../lib/recruitmentContext.ts";
 import { HttpError } from "../middlewares/errorHandler.ts";
 
 export interface CandidacyAggregate {
@@ -123,6 +124,16 @@ export const aggregateService = {
       throw new HttpError(404, "Cycle not found");
     }
 
+    // A committee the caller holds no membership in is invisible, and an
+    // invisible committee answers 404 like an invisible row would. An admin's
+    // cycle-wide membership (null committee) covers every committee.
+    const coversCommittee = acUser.recruitment.memberships.some(
+      (m) => m.committeeId === null || m.committeeId === committeeId,
+    );
+    if (!coversCommittee) {
+      throw new HttpError(404, "Committee not found");
+    }
+
     // A committee may set its own review minimum when it is attached to the
     // cycle. That column was written from the beginning and read by nothing, so
     // a committee that asked for three reviews silently got the cycle's two.
@@ -134,7 +145,7 @@ export const aggregateService = {
 
     const minimumReviews = attachment?.minimumReviews ?? cycle.minimumReviews;
 
-    const candidacies = await db
+    const visibleCandidacies = await db
       .select({
         candidacyId: committeeCandidacy.id,
         committeeId: committeeCandidacy.committeeId,
@@ -153,6 +164,18 @@ export const aggregateService = {
           candidacyVisibilityWhere(acUser, committeeCandidacy),
         ),
       );
+
+    // Product rule 3: an ordinary reviewer stays blinded to peer reviews until
+    // their own is submitted, and an aggregate is peer reviews in another
+    // shape. Leads and admins hold aggregate visibility; everyone else sees
+    // aggregates only for the candidacies they have already submitted on.
+    const holdsAggregateVisibility = acUser.recruitment.memberships.some(
+      (m) => m.role === "recruitment_admin" || m.role === "committee_lead",
+    );
+    const unblinded = new Set(acUser.recruitment.unblindedCandidacyIds ?? []);
+    const candidacies = holdsAggregateVisibility
+      ? visibleCandidacies
+      : visibleCandidacies.filter((row) => unblinded.has(row.candidacyId));
 
     if (candidacies.length === 0) {
       return [];
@@ -359,6 +382,8 @@ export const aggregateService = {
     acUser: RecruitmentUser,
     candidacyId: string,
   ): Promise<CandidacyReviewSummary[]> => {
+    await assertCandidacyVisible(acUser, candidacyId);
+
     const unblinded = acUser.recruitment.unblindedCandidacyIds ?? [];
     const isPrivileged = acUser.recruitment.memberships.some(
       (m) => m.role === "recruitment_admin" || m.role === "committee_lead",
