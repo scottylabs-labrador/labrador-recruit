@@ -7,7 +7,6 @@ import {
   setAggregates,
   setApplications,
   setCommitReport,
-  setCommitteeDecisions,
   setCommittees,
   setCycles,
   setDecisionExport,
@@ -79,7 +78,6 @@ beforeEach(() => {
   setAdminUsers([]);
   setCycles([]);
   setCommittees([]);
-  setCommitteeDecisions({});
   setQueue([]);
   setApplications([]);
   setRubric(null);

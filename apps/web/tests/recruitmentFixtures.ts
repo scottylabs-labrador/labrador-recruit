@@ -523,34 +523,3 @@ export function reviewerLoadExportRow(
     ...overrides,
   };
 }
-
-/** The committee-decisions response the ranking screen reads. */
-export interface CommitteeDecisions {
-  capacity: number | null;
-  acceptedCount: number;
-  overCapacity: boolean;
-  decisions: Array<{
-    candidacyId: string;
-    applicationId: string;
-    applicantName: string | null;
-    status: string | null;
-    notes: string | null;
-    decidedBy: string | null;
-    decidedAt: string | null;
-  }>;
-}
-
-export function committeeDecision(
-  overrides: Partial<CommitteeDecisions["decisions"][number]> = {},
-): CommitteeDecisions["decisions"][number] {
-  return {
-    candidacyId: CANDIDACY_ID,
-    applicationId: APPLICATION_ID,
-    applicantName: "Robin Fixture",
-    status: "pending",
-    notes: null,
-    decidedBy: null,
-    decidedAt: null,
-    ...overrides,
-  };
-}
