@@ -155,3 +155,24 @@ describe("reading a cached GitHub profile", () => {
     );
   });
 });
+
+/**
+ * `GITHUB_ENRICHMENT` is what makes the carve-out in `docs/product-rules.md` §1
+ * an opt-in. A deployment that has not opted in must not fetch an applicant's
+ * link at all - not on a schedule, and not because somebody pressed a button.
+ *
+ * The tests run with it unset, which is the default and means off, so this
+ * exercises the shipped default rather than a value the test invented.
+ */
+describe("the enrichment switch", () => {
+  it("refuses an on-demand refresh, and fetches nothing, while it is off", async () => {
+    const { cycle, application } = await setup();
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    await expect(githubService.refreshOne(adminFor(cycle.id), application.id)).rejects.toThrow(
+      /switched off/iu,
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});

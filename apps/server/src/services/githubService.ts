@@ -7,6 +7,7 @@ import {
 } from "@labrador/db/schema";
 import { and, eq, isNull, or, sql } from "drizzle-orm";
 
+import { env } from "../env.ts";
 import { db } from "../lib/db.ts";
 import {
   fetchRepos,
@@ -197,11 +198,22 @@ export const githubService = {
     return { attempted: due.length, stored, rateLimited: false };
   },
 
-  /** Refreshes one application now, for the button beside a reviewer's page. */
+  /**
+   * Refreshes one application now, for the button beside a reviewer's page.
+   *
+   * Refuses when enrichment is off. The switch means "this deployment does not
+   * fetch applicant links", and an endpoint that fetched anyway would leave
+   * that promise true only for the scheduled pass - which is not the promise
+   * `docs/product-rules.md` §1 makes.
+   */
   refreshOne: async (
     acUser: RecruitmentUser,
     applicationId: string,
   ): Promise<GithubProfileView | null> => {
+    if (env.GITHUB_ENRICHMENT !== "on") {
+      throw new HttpError(409, "GitHub enrichment is switched off for this deployment");
+    }
+
     await assertVisible(acUser, applicationId);
 
     const [row] = await db
