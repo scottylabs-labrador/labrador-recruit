@@ -9,16 +9,20 @@ A **global** ScottyLabs admin (someone in the Keycloak admin group) creates the
 cycle. That is deliberately the _only_ thing the global admin role grants here —
 it confers no access to applicant data.
 
+Open **Recruitment** and use **Start a cycle**: a slug and a name. You land on
+the new cycle's **Settings**, because a cycle with no committee and nobody
+enrolled cannot do anything yet.
+
+Then grant yourself a recruitment admin membership under **Who may review**.
+Doing this explicitly, and recording it in the audit log, is the point: nobody
+reads applications by accident of holding an infrastructure role.
+
+The underlying API, if you would rather script it:
+
 ```http
 POST /recruitment/cycles
 { "slug": "fall-2026", "name": "Fall 2026", "minimumReviews": 3, "candidacyTopN": 3 }
-```
 
-Then grant yourself a recruitment admin membership. Doing this explicitly, and
-recording it in the audit log, is the point: nobody reads applications by
-accident of holding an infrastructure role.
-
-```http
 POST /recruitment/cycles/{cycleId}/memberships
 { "userId": "your-andrew-id", "role": "recruitment_admin" }
 ```
@@ -35,6 +39,10 @@ Andrew ID.
 | `committee_lead`    | one committee | Everything a reviewer can, plus their committee's pool, aggregates, assignments, and proposed decisions |
 | `recruitment_admin` | whole cycle   | Everything, including import, settings, reopening reviews, and final placement                          |
 
+Grant and revoke under **Settings → Who may review**: an Andrew ID, a role, and
+a committee. Granting the same role twice updates it rather than failing, and
+re-granting a revoked one reactivates it.
+
 A reviewer sees only the committees they were enrolled in. To assign someone
 across committees, grant them a membership for each — assignment never silently
 widens access.
@@ -44,8 +52,10 @@ resolvable author.
 
 ## 3. Import the applications
 
-Export the Google Form as `.xlsx` or `.csv`, then upload. Nothing is written
-until you confirm.
+Export the Google Form as `.xlsx` or `.csv` and upload it on **Import**, or
+connect the sheet directly under **Settings → Application source** and press
+**Sync now**. Both paths produce the same preview and the same commit step —
+nothing is written until you confirm.
 
 1. **Upload** — the file is parsed, every raw row stored, and a preview returned.
 2. **Check the mapping.** Unrecognised and missing headers are reported rather
