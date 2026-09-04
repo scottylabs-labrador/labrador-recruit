@@ -96,6 +96,7 @@ what to provision before `bun run dev` will resolve.
 
 | Document                                                 | Contents                                             |
 | -------------------------------------------------------- | ---------------------------------------------------- |
+| [`docs/handover.md`](docs/handover.md)                   | Taking this over: deployment, access, traps, debt    |
 | [`docs/running-a-cycle.md`](docs/running-a-cycle.md)     | Operational runbook: import, assign, review, decide  |
 | [`docs/architecture.md`](docs/architecture.md)           | Where recruitment code lives and how a request flows |
 | [`docs/product-rules.md`](docs/product-rules.md)         | The no-AI-evaluation rule and privacy constraints    |
