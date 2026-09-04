@@ -1,4 +1,4 @@
-# Labrador Recruit
+# Recruit
 
 Internal recruitment review platform for ScottyLabs leadership.
 
@@ -94,12 +94,14 @@ what to provision before `bun run dev` will resolve.
 
 ## Documentation
 
-| Document                                                 | Contents                                             |
-| -------------------------------------------------------- | ---------------------------------------------------- |
-| [`docs/running-a-cycle.md`](docs/running-a-cycle.md)     | Operational runbook: import, assign, review, decide  |
-| [`docs/architecture.md`](docs/architecture.md)           | Where recruitment code lives and how a request flows |
-| [`docs/product-rules.md`](docs/product-rules.md)         | The no-AI-evaluation rule and privacy constraints    |
-| [`docs/local-development.md`](docs/local-development.md) | Setup, secrets, database, troubleshooting            |
+| Document                                                 | Contents                                              |
+| -------------------------------------------------------- | ----------------------------------------------------- |
+| [`docs/guide.md`](docs/guide.md)                         | The complete guide: usage, features, stack, internals |
+| [`docs/handover.md`](docs/handover.md)                   | Taking this over: deployment, access, traps, debt     |
+| [`docs/running-a-cycle.md`](docs/running-a-cycle.md)     | Operational runbook: import, assign, review, decide   |
+| [`docs/architecture.md`](docs/architecture.md)           | Where recruitment code lives and how a request flows  |
+| [`docs/product-rules.md`](docs/product-rules.md)         | The no-AI-evaluation rule and privacy constraints     |
+| [`docs/local-development.md`](docs/local-development.md) | Setup, secrets, database, troubleshooting             |
 
 ## License
 

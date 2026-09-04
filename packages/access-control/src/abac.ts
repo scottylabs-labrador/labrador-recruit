@@ -113,7 +113,11 @@ export function getRecruitmentAbility(user: RecruitmentUser): RecruitmentAbility
     // committee. The committee scope itself is applied through the Candidacy
     // predicate, which services `and()` alongside this one.
     allow(["read", "readPeerReview"], "Review");
-    allow(["read", "decide"], "Decision");
+    // Scoped to the committees they actually lead. Leaving this unconditional
+    // let a lead of one committee record decisions for another they merely
+    // review for: the visibility predicate is the union of both roles, so it
+    // was never going to catch it.
+    allow(["read", "decide"], "Decision", { committeeId: { $in: leadCommitteeIds } });
     allow("read", "Placement");
   }
 

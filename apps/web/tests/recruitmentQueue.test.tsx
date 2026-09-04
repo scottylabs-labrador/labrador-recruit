@@ -124,3 +124,42 @@ describe("my review queue", () => {
     expect(await screen.findByText("Nothing in your queue")).toBeDefined();
   });
 });
+
+/**
+ * The queue is ordered rather than arbitrary, and an order whose reason is
+ * invisible reads as arbitrary — which is the fastest way to get reviewers to
+ * ignore it and work top to bottom anyway.
+ */
+describe("queue priority", () => {
+  it("says why a row is at the top", async () => {
+    seed();
+    setQueue([queueEntry({ applicantRank: 2, hasCommitteeResponse: true, priorityTier: 2 })]);
+    await renderApp("/recruitment/cycle-1/queue");
+
+    expect(await screen.findByText("#2 + wrote")).toBeDefined();
+  });
+
+  it("distinguishes an applicant who wrote nothing from one who did", async () => {
+    seed();
+    setQueue([
+      queueEntry({
+        assignmentId: "a-silent",
+        applicantName: "Silent",
+        applicantRank: 1,
+        hasCommitteeResponse: false,
+        priorityTier: 4,
+      }),
+      queueEntry({
+        assignmentId: "a-wrote",
+        applicantName: "Wrote",
+        applicantRank: 5,
+        hasCommitteeResponse: true,
+        priorityTier: 4,
+      }),
+    ]);
+    await renderApp("/recruitment/cycle-1/queue");
+
+    expect(await screen.findByText("no response")).toBeDefined();
+    expect(screen.getByText("wrote")).toBeDefined();
+  });
+});

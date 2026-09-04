@@ -301,3 +301,59 @@ export const committeeCandidacyRelations = relations(committeeCandidacy, ({ one,
   assignments: many(reviewAssignment),
   decision: one(committeeDecision),
 }));
+
+/**
+ * Facts GitHub states about an applicant who supplied a GitHub link.
+ *
+ * A cache, not a source of truth: everything here can be re-fetched, and a row
+ * missing or stale is an ordinary state rather than an error. Keyed one-to-one
+ * on the application so a reviewer's page is a single lookup and can never
+ * trigger a fetch of its own.
+ *
+ * `docs/product-rules.md` §1 forbids fetching applicant links and carves out
+ * github.com specifically for verbatim facts. Nothing derived from this is
+ * stored: no summary, no score, no signal.
+ */
+export const applicantGithubProfile = pgTable(
+  "applicant_github_profile",
+  {
+    applicationId: uuid("application_id")
+      .primaryKey()
+      .references(() => application.id, { onDelete: "cascade" }),
+
+    /** The account name taken from the link the applicant themselves supplied. */
+    username: text("username").notNull(),
+
+    /**
+     * Repositories exactly as GitHub described them.
+     *
+     * Stored as JSON rather than a table: it is a cached document that is
+     * replaced wholesale on every refresh, never queried across applicants,
+     * and never joined to anything.
+     */
+    repos: jsonb("repos"),
+
+    /**
+     * Why the last attempt produced nothing, in words a reviewer can read.
+     *
+     * A private account, a deleted one, or a rate limit are all ordinary
+     * outcomes, so this is shown as context rather than as a failure.
+     */
+    error: text("error"),
+    httpStatus: integer("http_status"),
+
+    /** When GitHub was last asked. Shown on screen beside the data. */
+    fetchedAt: timestamp("fetched_at"),
+
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [index("applicant_github_profile_fetchedAt_idx").on(table.fetchedAt)],
+);
+
+export const applicantGithubProfileRelations = relations(applicantGithubProfile, ({ one }) => ({
+  application: one(application, {
+    fields: [applicantGithubProfile.applicationId],
+    references: [application.id],
+  }),
+}));

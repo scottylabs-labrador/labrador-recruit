@@ -13,7 +13,6 @@ export type ApplicationDetail = components["schemas"]["ApplicationDetail"];
 export type AnswerSection = components["schemas"]["AnswerSection"];
 export type RecommendationValue = components["schemas"]["RecommendationValue"];
 export type ConfidenceValue = "high" | "medium" | "low";
-export type DecisionStatus = "pending" | "discuss" | "accept" | "waitlist" | "reject";
 export type SaveReviewRequest = components["schemas"]["SaveReviewRequest"];
 
 /** The caller's own recruitment standing in one cycle. */
@@ -121,40 +120,6 @@ export const CONFIDENCE_OPTIONS: ReadonlyArray<{ value: ConfidenceValue; label: 
   { value: "medium", label: "Medium" },
   { value: "low", label: "Low" },
 ];
-
-/**
- * A committee's proposed outcome, as offered on the ranking screen.
- *
- * `redirect` is deliberately absent: the schema supports it, but a redirect has
- * to name the committee being suggested, and a one-click control on a ranking
- * row has nowhere to ask. Offering it here would produce a 422 the person could
- * not act on.
- */
-export const DECISION_OPTIONS: ReadonlyArray<{ value: DecisionStatus; label: string }> = [
-  { value: "pending", label: "Undecided" },
-  { value: "discuss", label: "Discuss" },
-  { value: "accept", label: "Admit" },
-  { value: "waitlist", label: "Waitlist" },
-  { value: "reject", label: "Reject" },
-];
-
-export function decisionLabel(value: string | null | undefined): string {
-  return DECISION_OPTIONS.find((option) => option.value === value)?.label ?? "Undecided";
-}
-
-export function isDecisionStatus(value: string): value is DecisionStatus {
-  return DECISION_OPTIONS.some((option) => option.value === value);
-}
-
-export function decisionBadgeVariant(
-  value: string | null | undefined,
-): "success" | "warning" | "danger" | "outline" | "muted" {
-  if (value === "accept") return "success";
-  if (value === "waitlist") return "warning";
-  if (value === "reject") return "danger";
-  if (value === "discuss") return "outline";
-  return "muted";
-}
 
 /** The placeholder shown wherever blind review has withheld applicant identity. */
 export const HIDDEN_APPLICANT_LABEL = "Hidden";

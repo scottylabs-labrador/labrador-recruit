@@ -27,3 +27,70 @@ export function isClientIdRegistered(clientId: string): boolean {
   const trimmed = clientId.trim();
   return trimmed !== "" && trimmed !== UNREGISTERED_CLIENT_ID;
 }
+
+/**
+ * Splits the configured allow-list into group names.
+ *
+ * Comma-separated because it is carried in one environment variable, and blank
+ * entries are dropped so a trailing comma is not a group nobody is in.
+ */
+export function parseAllowedGroups(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((group) => group.trim())
+    .filter((group) => group !== "");
+}
+
+/**
+ * Whether an identity provider's `groups` claim permits signing in.
+ *
+ * Goldador is the register of who works on this project: `infra/keycloak/teams.tf`
+ * puts every `teams[slug].members.andrew_ids` in a Keycloak group named after
+ * the slug, and every admin in `<slug>-admins`. Gating on that claim is what
+ * makes the Goldador entry the thing that grants access, rather than a second
+ * list maintained here that would immediately drift from it.
+ *
+ * Denying when the claim is missing is deliberate. Keycloak's group-membership
+ * mapper emits an empty array for somebody in no groups, so an absent claim
+ * means the mapper is not reaching this token at all - and treating that as
+ * "no restriction" would turn a misconfiguration into an open door silently.
+ * Failing closed is recoverable: returning `AUTH_CLIENT_ID` to the sentinel
+ * restores password sign-in immediately.
+ *
+ * An empty allow-list denies for the same reason. `ADMIN_GROUP` is always
+ * appended by the caller, so the list is never empty in practice and an
+ * administrator can always get in to fix the configuration.
+ */
+export function isInAllowedGroup(claim: unknown, allowed: readonly string[]): boolean {
+  if (allowed.length === 0 || !Array.isArray(claim)) {
+    return false;
+  }
+
+  return claim.some((group) => {
+    if (typeof group !== "string") {
+      return false;
+    }
+    // Goldador sets `full_path = false`, so names arrive bare. Tolerating a
+    // leading slash costs nothing and means flipping that flag on does not
+    // lock everybody out.
+    return allowed.includes(group.startsWith("/") ? group.slice(1) : group);
+  });
+}
+
+/**
+ * Whether password sign-in should be available.
+ *
+ * Password accounts exist so a cycle can run before an identity provider does.
+ * Leaving them enabled alongside one would be a way around the Goldador group
+ * gate - and the passwords issued in that window were deliberately short-lived
+ * shared credentials, so they are exactly what should stop working.
+ */
+export function isPasswordSignInEnabled(
+  setting: "auto" | "on" | "off",
+  identityProviderConfigured: boolean,
+): boolean {
+  if (setting === "auto") {
+    return !identityProviderConfigured;
+  }
+  return setting === "on";
+}

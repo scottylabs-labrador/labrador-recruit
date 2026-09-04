@@ -9,6 +9,7 @@
 export * from "./aggregate.ts";
 export * from "./disagreement.ts";
 export * from "./preference.ts";
+export * from "./queueOrder.ts";
 export * from "./ranking.ts";
 export * from "./round.ts";
 export * from "./rubric.ts";

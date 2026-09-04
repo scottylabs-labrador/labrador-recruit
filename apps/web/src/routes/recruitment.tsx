@@ -1,11 +1,16 @@
-import { canConfigureCycle, canImportApplications } from "@labrador/access-control";
+import { canConfigureCycle, canCreateCycle, canImportApplications } from "@labrador/access-control";
 import { createFileRoute, Link, Outlet, useNavigate, useParams } from "@tanstack/react-router";
 
+import { NewCycleForm } from "@/components/recruitment/NewCycleForm.tsx";
 import { EmptyState, ErrorState } from "@/components/recruitment/StateViews.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Label, Select } from "@/components/ui/field.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
-import { type RecruitmentStanding, useRecruitmentUser } from "@/hooks/useRecruitmentUser.ts";
+import {
+  type RecruitmentStanding,
+  useGlobalRecruitmentUser,
+  useRecruitmentUser,
+} from "@/hooks/useRecruitmentUser.ts";
 import { $api } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +33,8 @@ type NavPath =
   | "/recruitment/$cycleId/disagreements"
   | "/recruitment/$cycleId/import"
   | "/recruitment/$cycleId/rubric"
-  | "/recruitment/$cycleId/exports";
+  | "/recruitment/$cycleId/exports"
+  | "/recruitment/$cycleId/settings";
 
 interface NavItem {
   to: NavPath;
@@ -73,6 +79,12 @@ const NAV_ITEMS: readonly NavItem[] = [
     exact: false,
     visible: (standing) => standing.isLeadership,
   },
+  {
+    to: "/recruitment/$cycleId/settings",
+    label: "Settings",
+    exact: false,
+    visible: (standing) => canConfigureCycle({ user: standing.user }),
+  },
 ];
 
 function RecruitmentLayout() {
@@ -80,6 +92,7 @@ function RecruitmentLayout() {
   const params = useParams({ strict: false });
   const cycleId = params.cycleId;
   const standing = useRecruitmentUser(cycleId ?? null);
+  const globalUser = useGlobalRecruitmentUser();
 
   const { data: cycles, isLoading, isError, error } = $api.useQuery("get", "/recruitment/cycles");
 
@@ -201,32 +214,35 @@ function RecruitmentLayout() {
 
       <div className="min-h-0 flex-1 pt-5">
         {cycleId === undefined ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {list.map((cycle) => (
-              <Card key={cycle.id}>
-                <CardHeader>
-                  <CardTitle>
-                    <Link
-                      to="/recruitment/$cycleId"
-                      params={{ cycleId: cycle.id }}
-                      className="text-primary-strong underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                    >
-                      {cycle.name}
-                    </Link>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
-                    <dt className="font-medium text-foreground">Status</dt>
-                    <dd>{cycle.status}</dd>
-                    <dt className="font-medium text-foreground">Minimum reviews</dt>
-                    <dd>{cycle.minimumReviews}</dd>
-                    <dt className="font-medium text-foreground">Blind review</dt>
-                    <dd>{cycle.blindReviewEnabled ? "On" : "Off"}</dd>
-                  </dl>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="flex flex-col gap-5">
+            {canCreateCycle({ user: globalUser }) ? <NewCycleForm /> : null}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {list.map((cycle) => (
+                <Card key={cycle.id}>
+                  <CardHeader>
+                    <CardTitle>
+                      <Link
+                        to="/recruitment/$cycleId"
+                        params={{ cycleId: cycle.id }}
+                        className="text-primary-strong underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      >
+                        {cycle.name}
+                      </Link>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground">
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      <dt className="font-medium text-foreground">Status</dt>
+                      <dd>{cycle.status}</dd>
+                      <dt className="font-medium text-foreground">Minimum reviews</dt>
+                      <dd>{cycle.minimumReviews}</dd>
+                      <dt className="font-medium text-foreground">Blind review</dt>
+                      <dd>{cycle.blindReviewEnabled ? "On" : "Off"}</dd>
+                    </dl>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
         ) : (
           <Outlet />

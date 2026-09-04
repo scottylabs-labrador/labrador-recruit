@@ -1,10 +1,12 @@
 import {
   applicant,
   application,
+  applicationAnswer,
   committee,
   committeeCandidacy,
   committeePreference,
   cycleCommittee,
+  questionDefinition,
   recruitmentCycle,
   recruitmentMembership,
   review,
@@ -82,11 +84,12 @@ export async function linkCommitteeToCycle(
   cycleId: string,
   committeeId: string,
   capacity: number | null = null,
+  minimumReviews: number | null = null,
 ) {
   const now = new Date();
   const [row] = await testDb
     .insert(cycleCommittee)
-    .values({ cycleId, committeeId, capacity, createdAt: now, updatedAt: now })
+    .values({ cycleId, committeeId, capacity, minimumReviews, createdAt: now, updatedAt: now })
     .returning();
   return row;
 }
@@ -288,4 +291,54 @@ export async function seedReview(opts: { assignmentId: string; rubricId: string 
     throw new Error("Failed to seed review");
   }
   return row;
+}
+
+/**
+ * Gives an application a committee-scoped answer.
+ *
+ * The queue's priority order asks "did they write anything for this
+ * committee", which is answered by joining `application_answer` to a
+ * `question_definition` that carries a `committee_id` — so a fixture for it
+ * has to create both.
+ */
+export async function seedCommitteeAnswer(opts: {
+  cycleId: string;
+  applicationId: string;
+  committeeId: string;
+  key?: string;
+  answerText?: string | null;
+}) {
+  const now = new Date();
+  const key = opts.key ?? `answer_${opts.committeeId.slice(0, 8)}`;
+
+  const [question] = await testDb
+    .insert(questionDefinition)
+    .values({
+      cycleId: opts.cycleId,
+      externalHeader: `Why this committee? (${key})`,
+      key,
+      section: "committee",
+      committeeId: opts.committeeId,
+      questionText: "Why this committee?",
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
+
+  if (!question) {
+    throw new Error("failed to seed question definition");
+  }
+
+  const [answer] = await testDb
+    .insert(applicationAnswer)
+    .values({
+      applicationId: opts.applicationId,
+      questionDefinitionId: question.id,
+      answerText: opts.answerText === undefined ? "Because I want to." : opts.answerText,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
+
+  return { question, answer };
 }

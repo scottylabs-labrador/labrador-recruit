@@ -24,7 +24,46 @@ import {
   yearLabel,
 } from "@/lib/recruitment.ts";
 
-const COLUMNS = ["Committee", "Applicant", "Year", "Major", "Their rank", "Review", ""];
+const COLUMNS = ["Priority", "Committee", "Applicant", "Year", "Major", "Their rank", "Review", ""];
+
+/**
+ * Why this row is where it is.
+ *
+ * The queue is ordered rather than arbitrary, and an order whose reason is
+ * invisible reads as arbitrary - which is the fastest way to get reviewers to
+ * ignore it and work top to bottom anyway.
+ */
+function PriorityCell({
+  tier,
+  hasCommitteeResponse,
+}: {
+  tier: number;
+  hasCommitteeResponse: boolean;
+}) {
+  if (tier <= 3) {
+    return (
+      <span
+        className="text-sm font-medium tabular-nums"
+        title={`Ranked this committee #${tier} and answered its questions`}
+      >
+        {`#${tier} + wrote`}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="text-sm text-muted-foreground"
+      title={
+        hasCommitteeResponse
+          ? "Answered this committee's questions but ranked it below third"
+          : "Did not answer this committee's questions"
+      }
+    >
+      {hasCommitteeResponse ? "wrote" : "no response"}
+    </span>
+  );
+}
 
 export const Route = createFileRoute("/recruitment/$cycleId/queue")({
   component: MyQueuePage,
@@ -125,6 +164,12 @@ function MyQueuePage() {
           <TableBody>
             {items.map((item) => (
               <TableRow key={item.assignmentId}>
+                <TableCell>
+                  <PriorityCell
+                    tier={item.priorityTier}
+                    hasCommitteeResponse={item.hasCommitteeResponse}
+                  />
+                </TableCell>
                 <TableCell>{item.committeeName}</TableCell>
                 <TableCell className="font-medium">{applicantLabel(item.applicantName)}</TableCell>
                 <TableCell>{yearLabel(item.year)}</TableCell>

@@ -9,6 +9,7 @@ import {
   alice,
   aliceAuth,
   bob,
+  bobAuth,
   seedAdmin,
   seedAlice,
   seedBob,
@@ -344,5 +345,67 @@ describe("memberships", () => {
     expect(ids).toContain(alice.id);
     expect(ids).toContain(adminUser.id);
     expect(ids).not.toContain(bob.id);
+  });
+});
+
+/**
+ * A committee lead who also reviews for a second committee could record that
+ * second committee's decisions. The CASL rule granting `decide` on Decision
+ * carried no committee condition, and the only other narrowing — the candidacy
+ * visibility predicate — is the union of what someone leads and what they
+ * review, so it was never going to catch it.
+ */
+describe("committee decisions stay inside the committee", () => {
+  it("refuses a lead of one committee deciding on a committee they only review", async () => {
+    const { cycle, tech, design, designCandidacy } = await setupTwoCommitteeScenario();
+
+    // Bob leads Tech and merely reviews Design.
+    await seedMembership({
+      cycleId: cycle.id,
+      userId: bob.id,
+      role: "committee_lead",
+      committeeId: tech.id,
+    });
+    await seedMembership({
+      cycleId: cycle.id,
+      userId: bob.id,
+      role: "reviewer",
+      committeeId: design.id,
+    });
+
+    const res = await request(app)
+      .put(`/recruitment/candidacies/${designCandidacy.id}/decision`)
+      .set(bobAuth())
+      .send({ status: "accept" });
+
+    expect(res.status).toBe(403);
+  });
+
+  it("still lets that lead decide on the committee they do lead", async () => {
+    const { cycle, tech, techCandidacy } = await setupTwoCommitteeScenario();
+    await seedMembership({
+      cycleId: cycle.id,
+      userId: bob.id,
+      role: "committee_lead",
+      committeeId: tech.id,
+    });
+
+    const res = await request(app)
+      .put(`/recruitment/candidacies/${techCandidacy.id}/decision`)
+      .set(bobAuth())
+      .send({ status: "accept" });
+
+    expect(res.status).toBe(200);
+  });
+
+  it("leaves a recruitment admin able to decide anywhere", async () => {
+    const { designCandidacy } = await setupTwoCommitteeScenario();
+
+    const res = await request(app)
+      .put(`/recruitment/candidacies/${designCandidacy.id}/decision`)
+      .set(adminAuth())
+      .send({ status: "accept" });
+
+    expect(res.status).toBe(200);
   });
 });

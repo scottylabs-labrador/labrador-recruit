@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "bun install",
-  "buildCommand": "bun run --filter @labrador/server build:vercel && bun run --filter @labrador/web build",
+  "buildCommand": "bun run --filter @labrador/db migrate:deploy && bun run --filter @labrador/server build:vercel && bun run --filter @labrador/web build",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
     {

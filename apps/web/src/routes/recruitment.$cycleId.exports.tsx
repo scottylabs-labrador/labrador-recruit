@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table.tsx";
 import { useRecruitmentUser } from "@/hooks/useRecruitmentUser.ts";
+import { useScopedCommittees } from "@/hooks/useScopedCommittees";
 import { $api } from "@/lib/apiClient";
 import { type CsvColumn, csvFilename, downloadCsv, toCsv } from "@/lib/csv.ts";
 import {
@@ -96,15 +97,10 @@ function ExportsPage() {
   const cycles = $api.useQuery("get", "/recruitment/cycles");
   const cycleSlug = (cycles.data ?? []).find((cycle) => cycle.id === cycleId)?.slug ?? "cycle";
 
-  const committees = $api.useQuery(
-    "get",
-    "/recruitment/cycles/{cycleId}/committees",
-    { params: { path: { cycleId } } },
-    { enabled: isLeadership },
-  );
+  const committees = useScopedCommittees(cycleId);
 
-  const committeeList = committees.data ?? [];
-  const committeeId = selected === "" ? (committeeList[0]?.id ?? "") : selected;
+  const committeeList = committees.committees;
+  const committeeId = selected === "" ? committees.defaultCommitteeId : selected;
   const committeeSlug = committeeList.find((item) => item.id === committeeId)?.slug ?? "committee";
 
   const ranking = $api.useQuery(

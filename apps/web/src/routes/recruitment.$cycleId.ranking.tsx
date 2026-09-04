@@ -1,16 +1,18 @@
-import { canDecideCommittee } from "@labrador/access-control";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Flag } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
-import {
-  BulkDecisionBar,
-  type BulkDecisionTarget,
-} from "@/components/recruitment/BulkDecisionBar.tsx";
+import { BulkDecisionBar, type BulkProgress } from "@/components/recruitment/BulkDecisionBar.tsx";
 import { CommitteePicker } from "@/components/recruitment/CommitteePicker.tsx";
+import {
+  DecisionBadge,
+  DecisionControls,
+  type DecisionValue,
+} from "@/components/recruitment/DecisionControls.tsx";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/recruitment/StateViews.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
-import { Checkbox, Select } from "@/components/ui/field.tsx";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/field.tsx";
 import {
   Table,
   TableBody,
@@ -19,23 +21,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table.tsx";
-import { useRecruitmentUser } from "@/hooks/useRecruitmentUser.ts";
+import { useRecruitmentUser } from "@/hooks/useRecruitmentUser";
+import { useScopedCommittees } from "@/hooks/useScopedCommittees";
 import { $api } from "@/lib/apiClient";
 import {
   applicantLabel,
   countFor,
-  type DecisionStatus,
-  DECISION_OPTIONS,
-  decisionBadgeVariant,
-  decisionLabel,
-  formatDateTime,
   formatRank,
   formatStatistic,
-  isDecisionStatus,
   RECOMMENDATION_OPTIONS,
 } from "@/lib/recruitment.ts";
 
-const BASE_COLUMNS = [
+const COLUMNS = [
   "Rank",
   "Applicant",
   "Preference",
@@ -48,6 +45,13 @@ const BASE_COLUMNS = [
   "Status",
   "Decision",
 ];
+
+/**
+ * The same columns wrapped in a selection box and the decision controls, for a
+ * caller who may decide. Both ends are unlabelled, so the header reads as the
+ * table's own columns rather than announcing two empty ones.
+ */
+const DECIDING_COLUMNS = ["", ...COLUMNS, ""];
 
 const SHORT_RECOMMENDATION_LABELS: Record<string, string> = {
   strong_yes: "SY",
@@ -64,18 +68,11 @@ export const Route = createFileRoute("/recruitment/$cycleId/ranking")({
 function RankingPage() {
   const { cycleId } = Route.useParams();
   const [selected, setSelected] = useState("");
-  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
-  const [failures, setFailures] = useState<readonly string[]>([]);
-  const [applying, setApplying] = useState(false);
 
-  const standing = useRecruitmentUser(cycleId);
+  const committees = useScopedCommittees(cycleId);
 
-  const committees = $api.useQuery("get", "/recruitment/cycles/{cycleId}/committees", {
-    params: { path: { cycleId } },
-  });
-
-  const committeeList = committees.data ?? [];
-  const committeeId = selected === "" ? (committeeList[0]?.id ?? "") : selected;
+  const committeeList = committees.committees;
+  const committeeId = selected === "" ? committees.defaultCommitteeId : selected;
   const hasCommittee = committeeId !== "";
 
   // `RankingRow` now carries `minimumReviews` and `recommendationCounts`, so the
@@ -87,83 +84,108 @@ function RankingPage() {
     { enabled: hasCommittee },
   );
 
-  // Decisions come from their own endpoint rather than being joined onto
-  // `RankingRow`, so the ranking query stays a pure ordering over review data.
-  // It also carries the committee's capacity, which is the number a person
-  // admitting people actually needs next to the button.
-  const decisions = $api.useQuery(
-    "get",
-    "/recruitment/cycles/{cycleId}/committees/{committeeId}/decisions",
-    { params: { path: { cycleId, committeeId } } },
-    { enabled: hasCommittee },
-  );
-
-  const setDecision = $api.useMutation("put", "/recruitment/candidacies/{candidacyId}/decision");
-
   const rows = ranking.data ?? [];
-  const decisionRows = decisions.data?.decisions ?? [];
-  const decisionByCandidacy = new Map(decisionRows.map((row) => [row.candidacyId, row]));
 
-  function statusFor(candidacyId: string): string {
-    return decisionByCandidacy.get(candidacyId)?.status ?? "pending";
+  const { canDecideForCommittee } = useRecruitmentUser(cycleId);
+  const canDecide = canDecideForCommittee(committeeId);
+  const [deciding, setDeciding] = useState<string | null>(null);
+
+  const decide = $api.useMutation("put", "/recruitment/candidacies/{candidacyId}/decision", {
+    onSettled: () => {
+      setDeciding(null);
+      void ranking.refetch();
+    },
+  });
+
+  function record(candidacyId: string, status: DecisionValue) {
+    setDeciding(candidacyId);
+    decide.mutate({
+      params: { path: { candidacyId } },
+      body: { status },
+    });
   }
 
-  // Evaluated per row with the same predicate the server uses, rather than
-  // inferred from a role name here.
-  const mayDecide =
-    standing.isLoaded &&
-    rows.some((row) =>
-      canDecideCommittee({ user: standing.user, decision: { candidacyId: row.candidacyId } }),
-    );
+  const columns = canDecide ? DECIDING_COLUMNS : COLUMNS;
 
-  const columns = mayDecide ? ["", ...BASE_COLUMNS] : BASE_COLUMNS;
+  // The cycle carries where leadership intends to draw the lines. They are
+  // drawn on the table and offered as a selection; nothing is ever decided from
+  // them, which product rule 1 requires.
+  const cycle = $api.useQuery("get", "/recruitment/cycles/{cycleId}", {
+    params: { path: { cycleId } },
+  });
+  const admitLine = cycle.data?.decisionCutoffAdmit ?? null;
+  const rejectLine = cycle.data?.decisionCutoffReject ?? null;
+
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const [progress, setProgress] = useState<BulkProgress | null>(null);
+  const [applying, setApplying] = useState(false);
+
+  const selectedRows = rows.filter((row) => selectedIds.has(row.candidacyId));
+  const shortCount = selectedRows.filter((row) => row.reviewsShortBy > 0).length;
+  const allVisibleSelected = rows.length > 0 && selectedRows.length === rows.length;
 
   function toggle(candidacyId: string) {
-    setFailures([]);
-    setChecked((previous) => {
-      const next = new Set(previous);
-      if (next.has(candidacyId)) next.delete(candidacyId);
-      else next.add(candidacyId);
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(candidacyId)) {
+        next.delete(candidacyId);
+      } else {
+        next.add(candidacyId);
+      }
       return next;
     });
   }
 
-  const targets: BulkDecisionTarget[] = rows
-    .filter((row) => checked.has(row.candidacyId))
-    .map((row) => ({
-      candidacyId: row.candidacyId,
-      applicantName: applicantLabel(row.applicantName),
-      currentStatus: statusFor(row.candidacyId),
-    }));
-
-  async function applyOne(candidacyId: string, status: DecisionStatus, label: string) {
-    try {
-      await setDecision.mutateAsync({ params: { path: { candidacyId } }, body: { status } });
-      return null;
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : "the server refused the change";
-      return `${label}: ${detail}`;
-    }
+  function toggleAllVisible() {
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(rows.map((row) => row.candidacyId)));
   }
 
-  async function applyBulk(status: DecisionStatus) {
-    setApplying(true);
-    setFailures([]);
+  function selectAboveAdmitLine() {
+    if (admitLine === null) return;
+    setSelectedIds(
+      new Set(rows.filter((row) => row.rank <= admitLine).map((row) => row.candidacyId)),
+    );
+  }
 
-    // Applied one at a time against the existing single-decision endpoint so
-    // each outcome gets its own audit event and its own author, exactly as a
-    // decision made row by row would.
-    const collected: string[] = [];
-    for (const target of targets) {
-      if ((target.currentStatus ?? "pending") === status) continue;
-      const failure = await applyOne(target.candidacyId, status, target.applicantName);
-      if (failure !== null) collected.push(failure);
+  /**
+   * Writes one decision per candidacy rather than in a single call.
+   *
+   * Slower, and deliberately so: each write is its own audited act by the
+   * person who pressed the button, and a failure part-way through leaves the
+   * rows that succeeded recorded rather than rolling back work somebody meant
+   * to do. The count of failures is reported instead of swallowed.
+   */
+  async function applyBulk(status: DecisionValue) {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+
+    setApplying(true);
+    setProgress({ done: 0, total: ids.length, failed: 0 });
+
+    let failed = 0;
+    for (const [index, candidacyId] of ids.entries()) {
+      try {
+        const recorded = await decide.mutateAsync({
+          params: { path: { candidacyId } },
+          body: { status },
+        });
+        // openapi-react-query only throws when the error body parses, so a
+        // refusal that carries no body resolves as though it succeeded. The
+        // endpoint answers with the decision it wrote, so a missing one means
+        // nothing was written - counting that as success is precisely the
+        // silent failure this screen must not have.
+        if (recorded === undefined || recorded === null) {
+          failed += 1;
+        }
+      } catch {
+        failed += 1;
+      }
+      setProgress({ done: index + 1, total: ids.length, failed });
     }
 
-    setFailures(collected);
     setApplying(false);
-    if (collected.length === 0) setChecked(new Set());
-    await decisions.refetch();
+    setSelectedIds(new Set());
+    void ranking.refetch();
   }
 
   return (
@@ -184,25 +206,27 @@ function RankingPage() {
         />
       </div>
 
-      {mayDecide && decisions.data ? (
-        <CapacityNote
-          capacity={decisions.data.capacity}
-          acceptedCount={decisions.data.acceptedCount}
-          overCapacity={decisions.data.overCapacity}
-        />
-      ) : null}
-
-      {mayDecide ? (
-        <BulkDecisionBar
-          targets={targets}
-          onClear={() => {
-            setChecked(new Set());
-            setFailures([]);
-          }}
-          onApply={(status) => void applyBulk(status)}
-          isPending={applying}
-          failures={failures}
-        />
+      {canDecide && rows.length > 0 ? (
+        <div className="flex flex-col gap-3">
+          {admitLine !== null ? (
+            <div>
+              <Button size="sm" variant="outline" onClick={selectAboveAdmitLine}>
+                {`Select everyone above the admit line (rank ${admitLine})`}
+              </Button>
+            </div>
+          ) : null}
+          <BulkDecisionBar
+            selectedCount={selectedRows.length}
+            shortCount={shortCount}
+            progress={progress}
+            busy={applying}
+            onApply={(status) => void applyBulk(status)}
+            onClear={() => {
+              setSelectedIds(new Set());
+              setProgress(null);
+            }}
+          />
+        </div>
       ) : null}
 
       {committees.isError ? (
@@ -226,8 +250,18 @@ function RankingPage() {
           <TableHeader>
             <TableRow>
               {columns.map((column, index) => (
-                <TableHead key={column === "" ? `select-${index}` : column}>
-                  {column === "" ? <span className="sr-only">Select</span> : column}
+                // Two columns are deliberately unlabelled, so the key cannot be
+                // the label alone.
+                <TableHead key={`${column}-${String(index)}`}>
+                  {canDecide && index === 0 ? (
+                    <Checkbox
+                      checked={allVisibleSelected}
+                      onChange={toggleAllVisible}
+                      aria-label="Select every row shown"
+                    />
+                  ) : (
+                    column
+                  )}
                 </TableHead>
               ))}
             </TableRow>
@@ -235,158 +269,109 @@ function RankingPage() {
           <TableBody>
             {rows.map((row) => {
               const complete = row.submittedCount >= row.minimumReviews;
-              const decision = decisionByCandidacy.get(row.candidacyId);
-              const status = statusFor(row.candidacyId);
+              const line =
+                row.rank === admitLine
+                  ? "Admit line"
+                  : row.rank === rejectLine
+                    ? "Reject line"
+                    : null;
               return (
-                <TableRow key={row.candidacyId}>
-                  {mayDecide ? (
-                    <TableCell>
-                      <Checkbox
-                        checked={checked.has(row.candidacyId)}
-                        disabled={applying}
-                        onChange={() => toggle(row.candidacyId)}
-                        aria-label={`Select ${applicantLabel(row.applicantName)}`}
-                      />
+                <Fragment key={row.candidacyId}>
+                  <TableRow>
+                    {canDecide ? (
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(row.candidacyId)}
+                          onChange={() => toggle(row.candidacyId)}
+                          aria-label={`Select ${applicantLabel(row.applicantName)}`}
+                        />
+                      </TableCell>
+                    ) : null}
+                    <TableCell className="tabular-nums">
+                      {row.rank}
+                      {row.tied ? <span className="text-muted-foreground"> (tied)</span> : null}
                     </TableCell>
-                  ) : null}
-                  <TableCell className="tabular-nums">
-                    {row.rank}
-                    {row.tied ? <span className="text-muted-foreground"> (tied)</span> : null}
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    <Link
-                      to="/recruitment/$cycleId/applicant/$applicationId"
-                      params={{ cycleId, applicationId: row.applicationId }}
-                      className="rounded-md text-primary-strong underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                    >
-                      {applicantLabel(row.applicantName)}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="tabular-nums">{formatRank(row.applicantRank)}</TableCell>
-                  <TableCell className="tabular-nums">
-                    {row.submittedCount}/{row.minimumReviews}
-                  </TableCell>
-                  <TableCell className="tabular-nums">{formatStatistic(row.mean)}</TableCell>
-                  <TableCell className="tabular-nums">{formatStatistic(row.median)}</TableCell>
-                  <TableCell className="tabular-nums">{formatStatistic(row.spread)}</TableCell>
-                  <TableCell>
-                    <RecommendationDistribution counts={row.recommendationCounts} />
-                  </TableCell>
-                  <TableCell className="max-w-80 whitespace-normal">
-                    {row.flagged ? (
-                      <div className="flex flex-col gap-1">
-                        <Badge variant="warning">
-                          <Flag aria-hidden /> Flagged
+                    <TableCell className="font-medium">
+                      <Link
+                        to="/recruitment/$cycleId/applicant/$applicationId"
+                        params={{ cycleId, applicationId: row.applicationId }}
+                        className="rounded-md text-primary-strong underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      >
+                        {applicantLabel(row.applicantName)}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="tabular-nums">{formatRank(row.applicantRank)}</TableCell>
+                    <TableCell className="tabular-nums">
+                      {row.submittedCount}/{row.minimumReviews}
+                    </TableCell>
+                    <TableCell className="tabular-nums">{formatStatistic(row.mean)}</TableCell>
+                    <TableCell className="tabular-nums">{formatStatistic(row.median)}</TableCell>
+                    <TableCell className="tabular-nums">{formatStatistic(row.spread)}</TableCell>
+                    <TableCell>
+                      <RecommendationDistribution counts={row.recommendationCounts} />
+                    </TableCell>
+                    <TableCell className="max-w-80 whitespace-normal">
+                      {row.flagged ? (
+                        <div className="flex flex-col gap-1">
+                          <Badge variant="warning">
+                            <Flag aria-hidden /> Flagged
+                          </Badge>
+                          <ul className="flex list-disc flex-col gap-0.5 pl-4 text-sm leading-6">
+                            {row.reasons.length === 0 ? (
+                              <li className="list-none pl-0 text-muted-foreground">
+                                No reason was recorded for this flag.
+                              </li>
+                            ) : (
+                              row.reasons.map((reason) => <li key={reason}>{reason}</li>)
+                            )}
+                          </ul>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {complete ? (
+                        <Badge variant="success">Complete</Badge>
+                      ) : (
+                        <Badge variant="muted">
+                          {Math.max(0, row.minimumReviews - row.submittedCount)} more needed
                         </Badge>
-                        <ul className="flex list-disc flex-col gap-0.5 pl-4 text-sm leading-6">
-                          {row.reasons.length === 0 ? (
-                            <li className="list-none pl-0 text-muted-foreground">
-                              No reason was recorded for this flag.
-                            </li>
-                          ) : (
-                            row.reasons.map((reason) => <li key={reason}>{reason}</li>)
-                          )}
-                        </ul>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {complete ? (
-                      <Badge variant="success">Complete</Badge>
-                    ) : (
-                      <Badge variant="muted">
-                        {Math.max(0, row.minimumReviews - row.submittedCount)} more needed
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="whitespace-normal">
-                    {mayDecide ? (
-                      <div className="flex flex-col gap-1">
-                        <Select
-                          className="w-36"
-                          value={status}
-                          disabled={applying}
-                          aria-label={`Decision for ${applicantLabel(row.applicantName)}`}
-                          onChange={(event) => {
-                            const next = event.target.value;
-                            if (!isDecisionStatus(next)) return;
-                            setFailures([]);
-                            void applyOne(
-                              row.candidacyId,
-                              next,
-                              applicantLabel(row.applicantName),
-                            ).then(async (failure) => {
-                              if (failure !== null) setFailures([failure]);
-                              await decisions.refetch();
-                            });
-                          }}
-                        >
-                          {DECISION_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </Select>
-                        {decision?.decidedBy ? (
-                          <span className="text-sm leading-5 text-muted-foreground">
-                            {decision.decidedBy} · {formatDateTime(decision.decidedAt)}
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <DecisionBadge status={row.decisionStatus} />
+                    </TableCell>
+                    {canDecide ? (
+                      <TableCell className="text-right">
+                        <DecisionControls
+                          applicantLabel={applicantLabel(row.applicantName)}
+                          decisionStatus={row.decisionStatus}
+                          reviewsShortBy={row.reviewsShortBy}
+                          busy={deciding === row.candidacyId}
+                          onDecide={(status) => record(row.candidacyId, status)}
+                        />
+                      </TableCell>
+                    ) : null}
+                  </TableRow>
+                  {line === null ? null : (
+                    <TableRow aria-hidden={false}>
+                      <TableCell colSpan={columns.length} className="p-0">
+                        <div className="flex items-center gap-3 border-t-2 border-dashed border-primary/60 px-2 py-1">
+                          <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                            {line}
                           </span>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <Badge variant={decisionBadgeVariant(status)}>{decisionLabel(status)}</Badge>
-                    )}
-                  </TableCell>
-                </TableRow>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </Fragment>
               );
             })}
           </TableBody>
         </Table>
       )}
     </div>
-  );
-}
-
-/**
- * The committee's capacity against how many it has proposed accepting.
- *
- * Stated rather than enforced. Going over capacity is a conversation for the
- * committee to have, not something the interface should refuse — and a cap that
- * silently blocked an admission would be the numeric cutoff product rule §1
- * forbids, wearing a different hat.
- */
-function CapacityNote({
-  capacity,
-  acceptedCount,
-  overCapacity,
-}: {
-  capacity: number | null;
-  acceptedCount: number;
-  overCapacity: boolean;
-}) {
-  if (capacity === null) {
-    return (
-      <p className="text-sm leading-6 text-muted-foreground">
-        <span className="tabular-nums">{acceptedCount}</span> proposed for admission. This committee
-        has no configured capacity.
-      </p>
-    );
-  }
-
-  return (
-    <p
-      className={
-        overCapacity
-          ? "text-sm leading-6 text-destructive"
-          : "text-sm leading-6 text-muted-foreground"
-      }
-    >
-      <span className="tabular-nums">{acceptedCount}</span> of{" "}
-      <span className="tabular-nums">{capacity}</span> places proposed for admission.
-      {overCapacity ? " That is over this committee's capacity." : null}
-    </p>
   );
 }
 

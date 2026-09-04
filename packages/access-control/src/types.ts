@@ -70,7 +70,19 @@ export interface AssignmentSubject {
 
 export type ReviewSubject = AssignmentSubject;
 
-export type DecisionSubject = Pick<DatabaseDecision, "candidacyId">;
+/**
+ * A decision, and the committee whose decision it is.
+ *
+ * `committeeId` is not on the decision row itself - it reaches this through the
+ * candidacy - but the rule cannot be committee-scoped without it, and a rule
+ * that cannot be scoped is a rule that applies everywhere. A committee lead who
+ * also reviews for another committee could otherwise record that committee's
+ * decisions, because the only narrowing was the visibility predicate, and that
+ * is the union of what someone leads and what they review.
+ */
+export type DecisionSubject = Pick<DatabaseDecision, "candidacyId"> & {
+  committeeId: string;
+};
 
 /** Applicant identity fields, gated separately from the application body. */
 export interface IdentitySubject {

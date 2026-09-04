@@ -1,5 +1,5 @@
 {
-  "name": "LabradorRecruit",
+  "name": "Recruit",
   "dockerComposeFile": "./docker-compose.yml",
   "service": "dev",
   "workspaceFolder": "/workspace",

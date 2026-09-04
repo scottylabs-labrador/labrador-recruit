@@ -11,7 +11,9 @@ import {
   applicant,
   application,
   committeeCandidacy,
+  committeeDecision,
   committeePreference,
+  cycleCommittee,
   recruitmentCycle,
   review,
   reviewAssignment,
@@ -56,6 +58,22 @@ export interface RankingRow {
   recommendationCounts: Record<string, number>;
   flagged: boolean;
   reasons: string[];
+  /**
+   * The committee's recorded decision, or "pending" when none exists.
+   *
+   * Carried on the ranking row so the screen that records decisions can also
+   * show them, rather than the reader having to hold in their head which of
+   * eighty rows they already dealt with.
+   */
+  decisionStatus: string;
+  /**
+   * How many reviews this candidacy is short of the cycle's minimum.
+   *
+   * An administrator may decide before that is met, but the interface has to
+   * say so at the moment of deciding: admitting somebody nobody has read is a
+   * real thing to do occasionally and a terrible thing to do by accident.
+   */
+  reviewsShortBy: number;
 }
 
 /** One review as the interface consumes it, with the numeric column parsed. */
@@ -104,6 +122,17 @@ export const aggregateService = {
     if (!cycle) {
       throw new HttpError(404, "Cycle not found");
     }
+
+    // A committee may set its own review minimum when it is attached to the
+    // cycle. That column was written from the beginning and read by nothing, so
+    // a committee that asked for three reviews silently got the cycle's two.
+    // Null means "no opinion", which is not the same as zero.
+    const [attachment] = await db
+      .select({ minimumReviews: cycleCommittee.minimumReviews })
+      .from(cycleCommittee)
+      .where(and(eq(cycleCommittee.cycleId, cycleId), eq(cycleCommittee.committeeId, committeeId)));
+
+    const minimumReviews = attachment?.minimumReviews ?? cycle.minimumReviews;
 
     const candidacies = await db
       .select({
@@ -223,11 +252,11 @@ export const aggregateService = {
         applicantRank: rankBy.get(candidacy.applicationId) ?? null,
         assignedCount: activeAssignments.length,
         submittedCount: submitted.length,
-        minimumReviews: cycle.minimumReviews,
+        minimumReviews,
         completionPercent:
-          cycle.minimumReviews === 0
+          minimumReviews === 0
             ? 100
-            : Math.min(100, Math.round((submitted.length / cycle.minimumReviews) * 100)),
+            : Math.min(100, Math.round((submitted.length / minimumReviews) * 100)),
         statistics,
         recommendationCounts: countBy(submitted.map((row) => row.recommendation)),
         confidenceCounts: countBy(submitted.map((row) => row.confidence)),
@@ -266,6 +295,25 @@ export const aggregateService = {
 
     const byId = new Map(aggregates.map((row) => [row.candidacyId, row]));
 
+    // One extra query rather than a join, so the aggregate path stays exactly
+    // as it was and this cannot change which rows are visible.
+    const decisions =
+      aggregates.length === 0
+        ? []
+        : await db
+            .select({
+              candidacyId: committeeDecision.candidacyId,
+              status: committeeDecision.status,
+            })
+            .from(committeeDecision)
+            .where(
+              inArray(
+                committeeDecision.candidacyId,
+                aggregates.map((row) => row.candidacyId),
+              ),
+            );
+    const decisionBy = new Map(decisions.map((row) => [row.candidacyId, row.status]));
+
     return ranked.map((row) => {
       const aggregate = byId.get(row.candidacyId);
       if (!aggregate) {
@@ -286,6 +334,8 @@ export const aggregateService = {
         recommendationCounts: aggregate.recommendationCounts,
         flagged: aggregate.disagreement.flagged,
         reasons: aggregate.disagreement.reasons,
+        decisionStatus: decisionBy.get(row.candidacyId) ?? "pending",
+        reviewsShortBy: Math.max(0, aggregate.minimumReviews - aggregate.submittedCount),
       };
     });
   },

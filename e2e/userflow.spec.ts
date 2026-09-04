@@ -10,9 +10,13 @@ test.beforeEach(async () => {
 test("a guest is told what the platform is and how to get in", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
-  await expect(page.getByText("LabradorRecruit")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Labrador Recruit" })).toBeVisible();
+  // Both assertions are exact on purpose. The nav's "Sign In" and the password
+  // form's "Sign in" differ only in case, and Playwright matches an accessible
+  // name case-insensitively, so a loose match resolves to two buttons whenever
+  // password sign-in is enabled. "Recruit" is a substring of the nav's
+  // "Recruitment" for the same reason.
+  await expect(page.getByRole("button", { name: "Sign In", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recruit", exact: true })).toBeVisible();
   await expect(page.getByText(/not evaluated by any model/)).toBeVisible();
 });
 

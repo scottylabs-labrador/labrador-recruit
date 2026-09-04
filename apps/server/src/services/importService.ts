@@ -13,9 +13,16 @@ import {
   questionDefinition,
   recruitmentCycle,
 } from "@labrador/db/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
 
+import { env } from "../env.ts";
 import { db } from "../lib/db.ts";
+
+/** A transaction handle, as drizzle hands one to a `db.transaction` callback. */
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Somewhere to run a statement: the pool, or a transaction inside it. */
+type Executor = typeof db | Transaction;
 import { detectMapping } from "../lib/import/headerMap.ts";
 import { normalizeRow } from "../lib/import/normalizeRow.ts";
 import { parseCsv, parseXlsx } from "../lib/import/parseWorkbook.ts";
@@ -25,6 +32,7 @@ import type {
   ParsedSheet,
   RawRow,
 } from "../lib/import/types.ts";
+import { fetchSheet, parseServiceAccountKey, SheetError } from "../lib/sheets/googleSheets.ts";
 import { HttpError } from "../middlewares/errorHandler.ts";
 import { recordAuditEvent } from "./auditService.ts";
 
@@ -162,6 +170,132 @@ async function upsertQuestionDefinitions(
   return idByKey;
 }
 
+/** Refuses an import the caller may not make, or that the cycle will not accept. */
+async function assertCycleAcceptsImports(acUser: RecruitmentUser, cycleId: string): Promise<void> {
+  if (!canImportApplications({ user: acUser })) {
+    throw new HttpError(403, "You are not allowed to import applications");
+  }
+
+  const [cycle] = await db
+    .select({ id: recruitmentCycle.id, status: recruitmentCycle.status })
+    .from(recruitmentCycle)
+    .where(eq(recruitmentCycle.id, cycleId));
+
+  if (!cycle) {
+    throw new HttpError(404, "Cycle not found");
+  }
+  if (cycle.status === "archived") {
+    throw new HttpError(409, "This cycle is archived and is read-only");
+  }
+}
+
+/**
+ * Records a parsed sheet as a previewed import.
+ *
+ * Shared by the upload and the sheet sync so both produce the same preview,
+ * the same `import_batch`/`import_row` rows and the same audit event. A second
+ * importer for the sync path would drift from this one within a season.
+ */
+async function stageSheet(
+  cycleId: string,
+  sheet: ParsedSheet,
+  /** What the import came from, shown in the history: a filename or a sheet id. */
+  filename: string,
+  /**
+   * Who staged it, or null when the schedule did.
+   *
+   * Null rather than a synthetic "system" account: both columns are nullable
+   * foreign keys, and recording an unattended pull as though a person made it
+   * would put a name in the audit log that did not do the thing.
+   */
+  actorUserId: string | null,
+): Promise<{ importId: string; preview: ImportPreviewSummary }> {
+  const mapping = detectMapping(sheet.headers);
+  const results = sheet.rows.map((row) => normalizeRow(row, mapping));
+
+  const okCount = results.filter((result) => result.ok).length;
+  const seen = new Map<string, number>();
+  for (const result of results) {
+    if (!result.ok) continue;
+    seen.set(result.application.email, (seen.get(result.application.email) ?? 0) + 1);
+  }
+  const duplicateEmails = [...seen.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([email]) => email);
+
+  const now = new Date();
+  const [batch] = await db
+    .insert(importBatch)
+    .values({
+      cycleId,
+      filename,
+      status: "previewed",
+      headerMapping: mapping as unknown as Record<string, unknown>,
+      rowCount: sheet.rows.length,
+      successCount: okCount,
+      errorCount: sheet.rows.length - okCount,
+      createdBy: actorUserId,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
+
+  if (!batch) {
+    throw new HttpError(500, "Failed to record the import");
+  }
+
+  // Persist raw rows verbatim so a commit never depends on the file being
+  // re-uploaded, and so an import can be debugged after the fact.
+  if (sheet.rows.length > 0) {
+    await db.insert(importRow).values(
+      sheet.rows.map((row, index) => {
+        const result = results[index];
+        return {
+          importId: batch.id,
+          sourceRowNumber: row.sourceRowNumber,
+          rawJson: row as unknown as Record<string, unknown>,
+          rowHash:
+            result && !result.ok ? result.rowHash : result?.ok ? result.application.rowHash : "",
+          status: result?.ok ? ("pending" as const) : ("error" as const),
+          errorMessage:
+            result && !result.ok
+              ? result.errors.map((e) => `${e.column}: ${e.message}`).join("; ")
+              : null,
+          createdAt: now,
+          updatedAt: now,
+        };
+      }),
+    );
+  }
+
+  await recordAuditEvent({
+    cycleId,
+    actorUserId,
+    action: "import.previewed",
+    entityType: "import_batch",
+    entityId: batch.id,
+    metadata: { filename, rowCount: sheet.rows.length, errorCount: sheet.rows.length - okCount },
+  });
+
+  return {
+    importId: batch.id,
+    preview: {
+      sheetName: sheet.sheetName,
+      mapping,
+      rowCount: sheet.rows.length,
+      okCount,
+      errorCount: sheet.rows.length - okCount,
+      failures: results
+        .filter((result) => !result.ok)
+        .map((result) => ({
+          sourceRowNumber: result.sourceRowNumber,
+          errors: result.ok ? [] : result.errors,
+        })),
+      duplicateEmails,
+    },
+  };
+}
+
 export const importService = {
   /**
    * Parses an upload, stores every raw row, and returns a preview.
@@ -176,107 +310,97 @@ export const importService = {
     filename: string,
     contentBase64: string,
   ): Promise<{ importId: string; preview: ImportPreviewSummary }> => {
-    if (!canImportApplications({ user: acUser })) {
-      throw new HttpError(403, "You are not allowed to import applications");
-    }
+    await assertCycleAcceptsImports(acUser, cycleId);
+    const sheet = await parseUpload(filename, contentBase64);
+    return stageSheet(cycleId, sheet, filename, acUser.id);
+  },
+
+  /**
+   * Stages a preview from the cycle's Google Sheet.
+   *
+   * Deliberately stops at a preview. A scheduled pull that committed itself
+   * would rewrite applicant records with nobody watching, and an accidental
+   * edit in the sheet - or a reordered column - would propagate silently. A
+   * named admin still presses commit, and the audit log still names them.
+   */
+  syncFromSheet: async (
+    acUser: RecruitmentUser,
+    cycleId: string,
+  ): Promise<{ importId: string; preview: ImportPreviewSummary }> => {
+    await assertCycleAcceptsImports(acUser, cycleId);
 
     const [cycle] = await db
-      .select({ id: recruitmentCycle.id, status: recruitmentCycle.status })
+      .select({
+        sourceSheetId: recruitmentCycle.sourceSheetId,
+        sourceSheetRange: recruitmentCycle.sourceSheetRange,
+      })
       .from(recruitmentCycle)
       .where(eq(recruitmentCycle.id, cycleId));
 
-    if (!cycle) {
-      throw new HttpError(404, "Cycle not found");
+    if (cycle?.sourceSheetId == null || cycle.sourceSheetId === "") {
+      throw new HttpError(409, "This cycle has no Google Sheet configured");
     }
-    if (cycle.status === "archived") {
-      throw new HttpError(409, "This cycle is archived and is read-only");
-    }
-
-    const sheet = await parseUpload(filename, contentBase64);
-    const mapping = detectMapping(sheet.headers);
-    const results = sheet.rows.map((row) => normalizeRow(row, mapping));
-
-    const okCount = results.filter((result) => result.ok).length;
-    const seen = new Map<string, number>();
-    for (const result of results) {
-      if (!result.ok) continue;
-      seen.set(result.application.email, (seen.get(result.application.email) ?? 0) + 1);
-    }
-    const duplicateEmails = [...seen.entries()]
-      .filter(([, count]) => count > 1)
-      .map(([email]) => email);
-
-    const now = new Date();
-    const [batch] = await db
-      .insert(importBatch)
-      .values({
-        cycleId,
-        filename,
-        status: "previewed",
-        headerMapping: mapping as unknown as Record<string, unknown>,
-        rowCount: sheet.rows.length,
-        successCount: okCount,
-        errorCount: sheet.rows.length - okCount,
-        createdBy: acUser.id,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
-    if (!batch) {
-      throw new HttpError(500, "Failed to record the import");
-    }
-
-    // Persist raw rows verbatim so a commit never depends on the file being
-    // re-uploaded, and so an import can be debugged after the fact.
-    if (sheet.rows.length > 0) {
-      await db.insert(importRow).values(
-        sheet.rows.map((row, index) => {
-          const result = results[index];
-          return {
-            importId: batch.id,
-            sourceRowNumber: row.sourceRowNumber,
-            rawJson: row as unknown as Record<string, unknown>,
-            rowHash:
-              result && !result.ok ? result.rowHash : result?.ok ? result.application.rowHash : "",
-            status: result?.ok ? ("pending" as const) : ("error" as const),
-            errorMessage:
-              result && !result.ok
-                ? result.errors.map((e) => `${e.column}: ${e.message}`).join("; ")
-                : null,
-            createdAt: now,
-            updatedAt: now,
-          };
-        }),
+    if (env.GOOGLE_SERVICE_ACCOUNT_KEY === undefined) {
+      throw new HttpError(
+        503,
+        "This deployment has no Google service account configured, so it cannot read a sheet",
       );
     }
 
-    await recordAuditEvent({
-      cycleId,
-      actorUserId: acUser.id,
-      action: "import.previewed",
-      entityType: "import_batch",
-      entityId: batch.id,
-      metadata: { filename, rowCount: sheet.rows.length, errorCount: sheet.rows.length - okCount },
-    });
+    let sheet: ParsedSheet;
+    try {
+      const key = parseServiceAccountKey(env.GOOGLE_SERVICE_ACCOUNT_KEY);
+      sheet = await fetchSheet(key, cycle.sourceSheetId, cycle.sourceSheetRange);
+    } catch (error) {
+      // The reason matters more than the stack: "share it with this address" is
+      // something an admin can act on, and a bare 500 is not.
+      if (error instanceof SheetError) {
+        throw new HttpError(502, error.message);
+      }
+      throw error;
+    }
 
-    return {
-      importId: batch.id,
-      preview: {
-        sheetName: sheet.sheetName,
-        mapping,
-        rowCount: sheet.rows.length,
-        okCount,
-        errorCount: sheet.rows.length - okCount,
-        failures: results
-          .filter((result) => !result.ok)
-          .map((result) => ({
-            sourceRowNumber: result.sourceRowNumber,
-            errors: result.ok ? [] : result.errors,
-          })),
-        duplicateEmails,
-      },
-    };
+    return stageSheet(cycleId, sheet, `sheet:${cycle.sourceSheetId}`, acUser.id);
+  },
+
+  /** Every cycle configured to read from a sheet, for the scheduled pull. */
+  listSheetBackedCycles: async (): Promise<
+    Array<{ id: string; sourceSheetId: string; sourceSheetRange: string | null }>
+  > => {
+    const rows = await db
+      .select({
+        id: recruitmentCycle.id,
+        sourceSheetId: recruitmentCycle.sourceSheetId,
+        sourceSheetRange: recruitmentCycle.sourceSheetRange,
+      })
+      .from(recruitmentCycle)
+      .where(
+        and(isNotNull(recruitmentCycle.sourceSheetId), ne(recruitmentCycle.status, "archived")),
+      );
+
+    return rows.flatMap((row) =>
+      row.sourceSheetId === null ? [] : [{ ...row, sourceSheetId: row.sourceSheetId }],
+    );
+  },
+
+  /**
+   * Stages a preview for one cycle without a person asking.
+   *
+   * Separate from `syncFromSheet` because there is no caller to authorise: the
+   * schedule is the deployment's own, and the resulting import is attributed to
+   * nobody. It still only ever previews.
+   */
+  syncOnSchedule: async (cycle: {
+    id: string;
+    sourceSheetId: string;
+    sourceSheetRange: string | null;
+  }): Promise<{ importId: string; preview: ImportPreviewSummary }> => {
+    if (env.GOOGLE_SERVICE_ACCOUNT_KEY === undefined) {
+      throw new SheetError("No Google service account is configured");
+    }
+    const key = parseServiceAccountKey(env.GOOGLE_SERVICE_ACCOUNT_KEY);
+    const sheet = await fetchSheet(key, cycle.sourceSheetId, cycle.sourceSheetRange);
+    return stageSheet(cycle.id, sheet, `sheet:${cycle.sourceSheetId}`, null);
   },
 
   /**
@@ -331,6 +455,64 @@ export const importService = {
 
     const storedRows = await db.select().from(importRow).where(eq(importRow.importId, importId));
 
+    /**
+     * The hash of the last row committed for each applicant in this cycle.
+     *
+     * `import_row.row_hash` has been written since the table was created with a
+     * comment saying it detects an unchanged re-import, and never compared - so
+     * every commit re-normalised and re-upserted every row, and `skipped` was
+     * always zero. Harmless while imports were occasional and manual; an hourly
+     * sheet sync would rewrite every applicant every hour.
+     *
+     * Keyed on the applicant's email rather than on the hash alone: "identical
+     * to something we once saw" is not the same as "identical to what this
+     * applicant currently is", and only the second is safe to skip.
+     */
+    const committedRows = await db
+      .select({
+        email: applicant.email,
+        rowHash: importRow.rowHash,
+        updatedAt: importRow.updatedAt,
+      })
+      .from(importRow)
+      .innerJoin(application, eq(importRow.applicationId, application.id))
+      .innerJoin(applicant, eq(application.applicantId, applicant.id))
+      .where(
+        and(
+          eq(application.cycleId, batch.cycleId),
+          inArray(importRow.status, ["imported", "updated"]),
+        ),
+      );
+
+    /**
+     * How many rows in this batch claim each email.
+     *
+     * A file can carry the same applicant twice - the sample export does - and
+     * the commit loop resolves that by letting the later row win. Skipping
+     * either of them would break that: the survivor would depend on which one
+     * happened to match a stored hash. So a duplicated email is always
+     * processed in full, and only rows that are alone for their applicant are
+     * eligible to be skipped.
+     */
+    const emailCounts = new Map<string, number>();
+    for (const stored of storedRows) {
+      if (stored.status === "error") continue;
+      const parsed = normalizeRow(stored.rawJson as unknown as RawRow, mapping);
+      if (!parsed.ok) continue;
+      emailCounts.set(
+        parsed.application.email,
+        (emailCounts.get(parsed.application.email) ?? 0) + 1,
+      );
+    }
+
+    const lastHashByEmail = new Map<string, { hash: string; at: Date }>();
+    for (const row of committedRows) {
+      const previous = lastHashByEmail.get(row.email);
+      if (previous === undefined || row.updatedAt > previous.at) {
+        lastHashByEmail.set(row.email, { hash: row.rowHash, at: row.updatedAt });
+      }
+    }
+
     const report: ImportCommitReport = {
       importId,
       rowCount: storedRows.length,
@@ -365,14 +547,35 @@ export const importService = {
         continue;
       }
 
-      const outcome = await importService.upsertApplication(
-        batch.cycleId,
-        result.application,
-        committeeIdBySlug,
-        questionIdByKey,
-        { candidacyTopN: cycle.candidacyTopN, includeOptIns: cycle.includeOptIns },
-        unknownSlugs,
-        now,
+      const unique = (emailCounts.get(result.application.email) ?? 0) === 1;
+      if (
+        unique &&
+        lastHashByEmail.get(result.application.email)?.hash === result.application.rowHash
+      ) {
+        report.skipped += 1;
+        await db
+          .update(importRow)
+          .set({ status: "skipped", errorMessage: null, updatedAt: now })
+          .where(eq(importRow.id, stored.id));
+        continue;
+      }
+
+      // One transaction per row. The application, its answers, its preferences
+      // and its candidacies are one applicant's state, and a sync interrupted
+      // between them would leave an applicant half-written - which nothing
+      // downstream is built to notice. Per row rather than per import so a
+      // single bad row does not discard the ones already done.
+      const outcome = await db.transaction(async (tx) =>
+        importService.upsertApplication(
+          batch.cycleId,
+          result.application,
+          committeeIdBySlug,
+          questionIdByKey,
+          { candidacyTopN: cycle.candidacyTopN, includeOptIns: cycle.includeOptIns },
+          unknownSlugs,
+          now,
+          tx,
+        ),
       );
 
       report[outcome.action] += 1;
@@ -428,12 +631,21 @@ export const importService = {
     settings: { candidacyTopN: number; includeOptIns: boolean },
     unknownSlugs: Set<string>,
     now: Date,
+    /**
+     * The transaction to write through, when the caller has one.
+     *
+     * Defaults to the pool so the seed script and the tests can call this
+     * directly; the commit loop passes its transaction so one applicant's
+     * application, answers, preferences and candidacies land together or not
+     * at all.
+     */
+    executor: Executor = db,
   ): Promise<{
     action: "created" | "updated" | "skipped";
     applicationId: string;
     candidaciesCreated: number;
   }> => {
-    const [person] = await db
+    const [person] = await executor
       .insert(applicant)
       .values({
         email: normalized.email,
@@ -452,12 +664,12 @@ export const importService = {
       throw new HttpError(500, `Failed to upsert applicant ${normalized.email}`);
     }
 
-    const [existing] = await db
+    const [existing] = await executor
       .select({ id: application.id })
       .from(application)
       .where(and(eq(application.cycleId, cycleId), eq(application.applicantId, person.id)));
 
-    const [applicationRow] = await db
+    const [applicationRow] = await executor
       .insert(application)
       .values({
         cycleId,
@@ -497,7 +709,7 @@ export const importService = {
       const questionId = questionIdByKey.get(answer.questionKey);
       if (!questionId) continue;
 
-      await db
+      await executor
         .insert(applicationAnswer)
         .values({
           applicationId: applicationRow.id,
@@ -526,7 +738,7 @@ export const importService = {
       }
       rankedSlugs.push({ slug, rank: entry.rank });
 
-      await db
+      await executor
         .insert(committeePreference)
         .values({
           applicationId: applicationRow.id,
@@ -557,7 +769,7 @@ export const importService = {
 
     const wanted = [...new Set([...topSlugs, ...optInSlugs])];
 
-    const already = await db
+    const already = await executor
       .select({ committeeId: committeeCandidacy.committeeId })
       .from(committeeCandidacy)
       .where(eq(committeeCandidacy.applicationId, applicationRow.id));
@@ -572,7 +784,7 @@ export const importService = {
       }
       if (existingCommitteeIds.has(committeeId)) continue;
 
-      await db.insert(committeeCandidacy).values({
+      await executor.insert(committeeCandidacy).values({
         applicationId: applicationRow.id,
         committeeId,
         source: topSlugs.includes(slug) ? "top_preference" : "committee_question_opt_in",

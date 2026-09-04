@@ -1,17 +1,20 @@
 import type { RecruitmentUser } from "@labrador/access-control";
 import { canAssignReviewers } from "@labrador/access-control";
 import { assignmentVisibilityWhere } from "@labrador/access-control/visibility";
+import { orderQueue, queuePriorityTier } from "@labrador/common/recruitment";
 import {
   applicant,
   application,
+  applicationAnswer,
   committee,
   committeeCandidacy,
   committeePreference,
+  questionDefinition,
   recruitmentMembership,
   review,
   reviewAssignment,
 } from "@labrador/db/schema";
-import { and, asc, count, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull, ne } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";
 import { HttpError } from "../middlewares/errorHandler.ts";
@@ -30,6 +33,20 @@ export interface QueueItem {
   major: string | null;
   /** The applicant's own rank for this committee. */
   applicantRank: number | null;
+  /**
+   * Whether the applicant answered any of this committee's own questions.
+   *
+   * Computed from the answers themselves rather than from the form's opt-in
+   * checkbox, which the importer never persists. It also asks the more useful
+   * question: "is there something here to read", not "did they tick a box".
+   */
+  hasCommitteeResponse: boolean;
+  /**
+   * 1-3 for an applicant who both ranked this committee that highly and wrote
+   * something for it, 4 for everyone else. Shown in the queue so the order has
+   * a visible reason.
+   */
+  priorityTier: number;
   hasDraft: boolean;
   submitted: boolean;
 }
@@ -49,6 +66,12 @@ export const assignmentService = {
    * Starts from `review_assignment` filtered to the caller, so an applicant is
    * only ever reachable through an assignment that exists. Applicant identity is
    * withheld when the cycle runs in blind review mode.
+   *
+   * Ordered by `compareQueueItems` rather than by when the assignment was
+   * created. Reviewing is finite and whoever is last may not be read carefully,
+   * so the order is a policy decision: applicants who both ranked this
+   * committee highly and wrote something for it come first. Both signals are
+   * the applicant's own, which is what keeps this ordering rather than scoring.
    */
   listMyQueue: async (
     acUser: RecruitmentUser,
@@ -112,20 +135,63 @@ export const assignmentService = {
 
     const rankBy = new Map(ranks.map((r) => [`${r.applicationId}:${r.committeeId}`, r.rank]));
 
-    return rows.map((row) => ({
-      assignmentId: row.assignmentId,
-      candidacyId: row.candidacyId,
-      status: row.status,
-      committeeId: row.committeeId,
-      committeeName: row.committeeName,
-      applicationId: row.applicationId,
-      applicantName: blind ? null : row.applicantName,
-      year: row.year,
-      major: row.major,
-      applicantRank: rankBy.get(`${row.applicationId}:${row.committeeId}`) ?? null,
-      hasDraft: row.reviewId !== null,
-      submitted: row.submittedAt !== null,
-    }));
+    // Which (application, committee) pairs have something written for that
+    // committee. `question_definition.committee_id` scopes a question to a
+    // committee and is indexed, so this is one indexed pass rather than a
+    // lookup per row. Blank answers are dropped at import, so an applicant who
+    // ticked the opt-in and then wrote nothing correctly counts as no response.
+    const answered = await db
+      .selectDistinct({
+        applicationId: applicationAnswer.applicationId,
+        committeeId: questionDefinition.committeeId,
+      })
+      .from(applicationAnswer)
+      .innerJoin(
+        questionDefinition,
+        eq(applicationAnswer.questionDefinitionId, questionDefinition.id),
+      )
+      .where(
+        and(
+          inArray(
+            applicationAnswer.applicationId,
+            rows.map((row) => row.applicationId),
+          ),
+          isNotNull(questionDefinition.committeeId),
+          isNotNull(applicationAnswer.answerText),
+        ),
+      );
+
+    const answeredKeys = new Set(
+      answered.map((row) => `${row.applicationId}:${row.committeeId ?? ""}`),
+    );
+
+    const items = rows.map((row) => {
+      const hasCommitteeResponse = answeredKeys.has(`${row.applicationId}:${row.committeeId}`);
+      const applicantRank = rankBy.get(`${row.applicationId}:${row.committeeId}`) ?? null;
+
+      return {
+        assignmentId: row.assignmentId,
+        candidacyId: row.candidacyId,
+        status: row.status,
+        committeeId: row.committeeId,
+        committeeName: row.committeeName,
+        applicationId: row.applicationId,
+        applicantName: blind ? null : row.applicantName,
+        year: row.year,
+        major: row.major,
+        applicantRank,
+        hasCommitteeResponse,
+        priorityTier: queuePriorityTier({
+          applicantRank,
+          hasCommitteeResponse,
+          candidacyId: row.candidacyId,
+        }),
+        hasDraft: row.reviewId !== null,
+        submitted: row.submittedAt !== null,
+      };
+    });
+
+    return orderQueue(items);
   },
 
   /** Assignments on one candidacy, for leads and admins managing coverage. */

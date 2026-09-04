@@ -31,8 +31,33 @@ export interface UpdateCycleRequest {
   minimumReviews?: number;
   candidacyTopN?: number;
   blindReviewEnabled?: boolean;
+  /**
+   * Whether a committee opt-in creates a candidacy alongside the ranked
+   * top-N. Present on the cycle since the schema was written; no API path
+   * could set it until now.
+   */
+  candidacyIncludeOptIns?: boolean;
+  /**
+   * The Google Sheet to pull applications from. A pasted URL is accepted; the
+   * spreadsheet id is taken out of it. Null disconnects the sheet.
+   */
+  sourceSheetId?: string | null;
+  sourceSheetRange?: string | null;
   disagreementSpreadThreshold?: number;
   disagreementOnExtremeConflict?: boolean;
+  /**
+   * Scopes the whole interface to one committee. Null widens it back out to
+   * every committee the cycle runs; no candidacy or preference is touched
+   * either way.
+   */
+  reviewCommitteeId?: string | null;
+  /**
+   * Where the admit and reject lines sit on the ranking. Shown to an
+   * administrator so they can select everyone above a line; never applied on
+   * their behalf.
+   */
+  decisionCutoffAdmit?: number | null;
+  decisionCutoffReject?: number | null;
 }
 
 @Route("recruitment/cycles")

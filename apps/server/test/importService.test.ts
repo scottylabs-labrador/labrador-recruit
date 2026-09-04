@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { RecruitmentUser } from "@labrador/access-control";
-import { application, committeeCandidacy, review } from "@labrador/db/schema";
+import { applicant, application, committeeCandidacy, review } from "@labrador/db/schema";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
@@ -252,9 +252,13 @@ describe("import commit", () => {
     );
     const secondReport = await importService.commitImport(admin, second.importId);
 
-    // Nothing new is created, and every parseable row resolves to an update.
+    // Nothing new is created, and every parseable row is accounted for - now
+    // as a skip where the content is unchanged, rather than as a rewrite.
     expect(secondReport.created).toBe(0);
-    expect(secondReport.updated).toBe(firstReport.created + firstReport.updated);
+    expect(secondReport.skipped + secondReport.updated).toBe(
+      firstReport.created + firstReport.updated,
+    );
+    expect(secondReport.skipped).toBeGreaterThan(0);
     // No new candidacies, because the applicant's ranking has not changed.
     expect(secondReport.candidaciesCreated).toBe(0);
 
@@ -345,5 +349,91 @@ describe("import commit", () => {
     expect(errored.length).toBeGreaterThan(0);
     // Every failure names something actionable rather than failing silently.
     expect(errored.every((row) => (row.errorMessage ?? "").length > 0)).toBe(true);
+  });
+});
+
+/**
+ * `import_row.row_hash` was written from the day the table existed, with a
+ * comment saying it detects an unchanged re-import, and compared by nothing.
+ * Every commit therefore re-normalised and re-upserted every row and the
+ * `skipped` counter was always zero. That was survivable while imports were
+ * occasional and manual. A scheduled sheet sync makes it the normal case: an
+ * hourly pull would rewrite all 118 applicants every hour.
+ */
+describe("re-importing the same rows", () => {
+  it("skips every row whose content has not changed", async () => {
+    const { cycle } = await setupCycle();
+    const admin = adminFor(cycle.id);
+
+    const first = await importService.createImport(
+      admin,
+      cycle.id,
+      "fall-2026-sample.xlsx",
+      fixtureBase64(),
+    );
+    const firstReport = await importService.commitImport(admin, first.importId);
+    expect(firstReport.created).toBeGreaterThan(0);
+
+    const second = await importService.createImport(
+      admin,
+      cycle.id,
+      "fall-2026-sample.xlsx",
+      fixtureBase64(),
+    );
+    const secondReport = await importService.commitImport(admin, second.importId);
+
+    // Every row is accounted for, and the only ones re-applied are the two
+    // that share an email: a duplicated applicant is always processed in full
+    // so the later row still wins.
+    expect(secondReport.created).toBe(0);
+    expect(secondReport.skipped + secondReport.updated).toBe(
+      firstReport.created + firstReport.updated,
+    );
+    expect(secondReport.skipped).toBeGreaterThan(0);
+    expect(secondReport.updated).toBe(second.preview.duplicateEmails.length * 2);
+  });
+
+  it("writes nothing on the second run", async () => {
+    const { cycle } = await setupCycle();
+    const admin = adminFor(cycle.id);
+
+    const first = await importService.createImport(
+      admin,
+      cycle.id,
+      "fall-2026-sample.xlsx",
+      fixtureBase64(),
+    );
+    await importService.commitImport(admin, first.importId);
+
+    const before = await testDb
+      .select({ id: application.id, updatedAt: application.updatedAt })
+      .from(application)
+      .where(eq(application.cycleId, cycle.id));
+
+    const second = await importService.createImport(
+      admin,
+      cycle.id,
+      "fall-2026-sample.xlsx",
+      fixtureBase64(),
+    );
+    await importService.commitImport(admin, second.importId);
+
+    const after = await testDb
+      .select({ id: application.id, updatedAt: application.updatedAt, email: applicant.email })
+      .from(application)
+      .innerJoin(applicant, eq(application.applicantId, applicant.id))
+      .where(eq(application.cycleId, cycle.id));
+
+    expect(after).toHaveLength(before.length);
+
+    // The applicant who appears twice in the file is rewritten on purpose;
+    // everyone else must be untouched, down to the timestamp.
+    const duplicated = new Set(second.preview.duplicateEmails);
+    const beforeById = new Map(before.map((row) => [row.id, row.updatedAt?.getTime()]));
+    const untouched = after.filter((row) => !duplicated.has(row.email));
+    expect(untouched.length).toBeGreaterThan(0);
+    for (const row of untouched) {
+      expect(row.updatedAt?.getTime()).toBe(beforeById.get(row.id));
+    }
   });
 });

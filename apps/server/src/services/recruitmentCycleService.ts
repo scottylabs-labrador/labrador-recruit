@@ -12,6 +12,7 @@ import {
 import { and, asc, desc, eq } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";
+import { parseSpreadsheetId } from "../lib/sheets/googleSheets.ts";
 import { HttpError } from "../middlewares/errorHandler.ts";
 import { recordAuditEvent } from "./auditService.ts";
 
@@ -23,7 +24,23 @@ export interface CycleSummary {
   minimumReviews: number;
   blindReviewEnabled: boolean;
   candidacyTopN: number;
+  /** Whether a committee opt-in creates a candidacy alongside the ranked top-N. */
+  candidacyIncludeOptIns: boolean;
+  /** The Google Sheet this cycle is pulled from, or null for uploads only. */
+  sourceSheetId: string | null;
+  sourceSheetRange: string | null;
   disagreementSpreadThreshold: number;
+  /**
+   * When set, the whole interface scopes to this one committee. Null means
+   * every committee the cycle runs is in scope.
+   */
+  reviewCommitteeId: string | null;
+  /**
+   * Where leadership intends to draw the admit and reject lines. Null means no
+   * line. These are shown on the ranking and never applied automatically.
+   */
+  decisionCutoffAdmit: number | null;
+  decisionCutoffReject: number | null;
   createdAt: Date;
 }
 
@@ -90,7 +107,13 @@ export const recruitmentCycleService = {
       minimumReviews: recruitmentCycle.minimumReviews,
       blindReviewEnabled: recruitmentCycle.blindReviewEnabled,
       candidacyTopN: recruitmentCycle.candidacyTopN,
+      candidacyIncludeOptIns: recruitmentCycle.candidacyIncludeOptIns,
+      sourceSheetId: recruitmentCycle.sourceSheetId,
+      sourceSheetRange: recruitmentCycle.sourceSheetRange,
       disagreementSpreadThreshold: recruitmentCycle.disagreementSpreadThreshold,
+      reviewCommitteeId: recruitmentCycle.reviewCommitteeId,
+      decisionCutoffAdmit: recruitmentCycle.decisionCutoffAdmit,
+      decisionCutoffReject: recruitmentCycle.decisionCutoffReject,
       createdAt: recruitmentCycle.createdAt,
     };
 
@@ -189,9 +212,24 @@ export const recruitmentCycleService = {
       minimumReviews?: number;
       candidacyTopN?: number;
       blindReviewEnabled?: boolean;
+      /**
+       * Whether ticking a committee's opt-in question creates a candidacy for
+       * it, on top of the top-N preferences the applicant ranked.
+       *
+       * Stored on the cycle since the schema was written and, until now,
+       * settable by nothing - so it behaved as though hardcoded true.
+       */
+      candidacyIncludeOptIns?: boolean;
+      /** Null disconnects the cycle from its sheet without touching any data. */
+      sourceSheetId?: string | null;
+      sourceSheetRange?: string | null;
       disagreementSpreadThreshold?: number;
       disagreementOnExtremeConflict?: boolean;
       preferenceScoreMap?: Record<string, number>;
+      /** Null widens the cycle back out to every committee it runs. */
+      reviewCommitteeId?: string | null;
+      decisionCutoffAdmit?: number | null;
+      decisionCutoffReject?: number | null;
     },
   ) => {
     if (!canConfigureCycle({ user: acUser })) {
@@ -213,9 +251,26 @@ export const recruitmentCycleService = {
       throw new HttpError(409, "This cycle is archived and is read-only");
     }
 
+    // An admin pastes the link from their browser, not an id out of the API
+    // documentation. Refusing something that is obviously a sheet URL because
+    // it is not a bare id would be a needless obstacle; refusing something that
+    // is neither is worth doing loudly, because the alternative is a sync that
+    // 404s with no visible cause.
+    const normalised = { ...input };
+    if (typeof input.sourceSheetId === "string" && input.sourceSheetId.trim() !== "") {
+      const spreadsheetId = parseSpreadsheetId(input.sourceSheetId);
+      if (spreadsheetId === null) {
+        throw new HttpError(422, "That does not look like a Google Sheets link or id");
+      }
+      normalised.sourceSheetId = spreadsheetId;
+    } else if (input.sourceSheetId !== undefined) {
+      // An empty box disconnects the sheet rather than storing "".
+      normalised.sourceSheetId = null;
+    }
+
     const [updated] = await db
       .update(recruitmentCycle)
-      .set({ ...input, updatedAt: new Date() })
+      .set({ ...normalised, updatedAt: new Date() })
       .where(eq(recruitmentCycle.id, cycleId))
       .returning();
 

@@ -1,11 +1,12 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { userSession } from "./fixtures.ts";
 import {
   lastPasswordChange,
   lastSignIn,
+  setIdentityProviderConfigured,
   setRejectCredentials,
   setSession,
 } from "./msw/handlers.ts";
@@ -18,6 +19,13 @@ import { renderApp } from "./render.tsx";
  * rather than self-asserted.
  */
 describe("password sign-in", () => {
+  // Password sign-in only exists on a deployment with no identity provider.
+  // Once Goldador has issued a client, CMU single sign-on is the only way in
+  // and this form is not rendered at all.
+  beforeEach(() => {
+    setIdentityProviderConfigured(false);
+  });
+
   it("asks for an Andrew ID and password, and never offers to create an account", async () => {
     await renderApp("/");
 

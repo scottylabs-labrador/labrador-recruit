@@ -9,6 +9,7 @@ export * from "./reviews.ts";
 
 import type {
   applicant,
+  applicantGithubProfile,
   application,
   applicationAnswer,
   committeeCandidacy,
@@ -35,6 +36,7 @@ export type Applicant = typeof applicant.$inferSelect;
 export type Application = typeof application.$inferSelect;
 export type QuestionDefinition = typeof questionDefinition.$inferSelect;
 export type ApplicationAnswer = typeof applicationAnswer.$inferSelect;
+export type ApplicantGithubProfile = typeof applicantGithubProfile.$inferSelect;
 export type CommitteePreference = typeof committeePreference.$inferSelect;
 export type CommitteeCandidacy = typeof committeeCandidacy.$inferSelect;
 
