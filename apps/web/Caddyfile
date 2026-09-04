@@ -59,12 +59,38 @@
         }
     }
 
+    # Build output, served without the SPA fallback.
+    #
+    # `try_files` sends anything it cannot find to index.html, which for a
+    # missing asset means answering a JavaScript request with HTML, and a 200
+    # at that. The browser then fails to parse the module and renders nothing -
+    # a blank page with no error that names the cause.
+    #
+    # That is not hypothetical: a browser holding an index.html from before a
+    # deploy asks for the previous build's hashed bundle, which no longer
+    # exists. Letting it 404 honestly means the reload that follows fixes it.
+    #
+    # Vite hashes these filenames, so the contents behind one can never change
+    # and a year is safe.
+    handle /assets/* {
+        root * dist
+        encode gzip
+        header Cache-Control "public, max-age=31536000, immutable"
+        file_server
+    }
+
     handle {
         # serve from the 'dist' folder (Vite builds into the 'dist' folder)
         root * dist
 
         # enable gzipping responses
         encode gzip
+
+        # index.html names the hashed bundles, so a stale copy points at files
+        # that a deploy has already removed. Revalidating every time is what
+        # keeps a returning visitor from loading yesterday's shell against
+        # today's assets.
+        header Cache-Control "no-cache"
 
         # if path doesn't exist, redirect it to 'index.html' for client side routing
         try_files {path} /index.html
