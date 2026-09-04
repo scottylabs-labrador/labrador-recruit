@@ -84,16 +84,16 @@ export function TableSkeleton({ columns, rows = 6 }: TableSkeletonProps) {
     <Table>
       <TableHeader>
         <TableRow>
-          {columns.map((column) => (
-            <TableHead key={column}>{column}</TableHead>
+          {columns.map((column, index) => (
+            <TableHead key={`${column}-${String(index)}`}>{column}</TableHead>
           ))}
         </TableRow>
       </TableHeader>
       <TableBody>
         {Array.from({ length: rows }, (_, rowIndex) => (
           <TableRow key={rowIndex}>
-            {columns.map((column) => (
-              <TableCell key={column}>
+            {columns.map((column, index) => (
+              <TableCell key={`${column}-${String(index)}`}>
                 <Skeleton className="h-4 w-24" />
               </TableCell>
             ))}

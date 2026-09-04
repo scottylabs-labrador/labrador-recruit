@@ -40,7 +40,13 @@ import { server } from "./msw/server.ts";
 // these routes import invalidates the transform cache, and the first test in a
 // file then renders nothing within the window. This is a ceiling rather than a
 // delay, so raising it costs nothing when the tests pass.
-configure({ asyncUtilTimeout: 30_000 });
+//
+// Raised again to 45s. The review page is the heaviest render in the suite and
+// takes about 15 seconds on its own; `turbo run test` puts the server suite on
+// the same machine at the same time, and under that the review test reliably
+// crossed 30s. This is headroom for a slow render, not a fix for it - the
+// render being that slow is worth looking at on its own terms.
+configure({ asyncUtilTimeout: 45_000 });
 
 vi.mock("posthog-js/react", () => ({
   PostHogProvider: ({ children }: { children: unknown }) => children,

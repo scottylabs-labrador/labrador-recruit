@@ -31,6 +31,12 @@ export interface UpdateCycleRequest {
   minimumReviews?: number;
   candidacyTopN?: number;
   blindReviewEnabled?: boolean;
+  /**
+   * Whether a committee opt-in creates a candidacy alongside the ranked
+   * top-N. Present on the cycle since the schema was written; no API path
+   * could set it until now.
+   */
+  candidacyIncludeOptIns?: boolean;
   disagreementSpreadThreshold?: number;
   disagreementOnExtremeConflict?: boolean;
   /**

@@ -227,8 +227,44 @@ export function resetAuthProbes() {
 /** The last committee decision recorded, so a test can assert on it. */
 export let lastDecision: { candidacyId: string; status: string } | null = null;
 
+/** Every decision written, so a bulk action can be checked row by row. */
+export let decisionLog: Array<{ candidacyId: string; status: string }> = [];
+
+/** Candidacy ids the API should refuse, for testing a partial bulk failure. */
+let rejectedCandidacyIds = new Set<string>();
+
+export function setRejectedCandidacies(ids: readonly string[]) {
+  rejectedCandidacyIds = new Set(ids);
+}
+
 export function resetDecisions() {
   lastDecision = null;
+  decisionLog = [];
+  rejectedCandidacyIds = new Set();
+}
+
+/** What the settings screen last sent, so a test can assert on the payload. */
+export let lastCycleCreate: Record<string, unknown> | null = null;
+export let lastCycleUpdate: Record<string, unknown> | null = null;
+export let lastMembershipGrant: Record<string, unknown> | null = null;
+export let lastRevokedMembershipId: string | null = null;
+export let lastCommitteeAttach: Record<string, unknown> | null = null;
+export let lastAccountCreate: Record<string, unknown> | null = null;
+
+let memberships: Array<Record<string, unknown>> = [];
+
+export function setMemberships(next: typeof memberships) {
+  memberships = next;
+}
+
+export function resetAdminRecorders() {
+  lastCycleCreate = null;
+  lastCycleUpdate = null;
+  lastMembershipGrant = null;
+  lastRevokedMembershipId = null;
+  lastCommitteeAttach = null;
+  lastAccountCreate = null;
+  memberships = [];
 }
 
 export const handlers = [
@@ -299,13 +335,72 @@ export const handlers = [
   http.put(`${RECRUITMENT}/candidacies/:candidacyId/decision`, async ({ request, params }) => {
     await record("PUT", request);
     const body = (await request.json()) as { status: string };
-    lastDecision = { candidacyId: String(params["candidacyId"]), status: body.status };
-    return HttpResponse.json({ candidacyId: lastDecision.candidacyId, status: body.status });
+    const candidacyId = String(params["candidacyId"]);
+    if (rejectedCandidacyIds.has(candidacyId)) {
+      // Deliberately bodyless. openapi-react-query throws only when the error
+      // body parses, so this is the refusal that a naive bulk loop counts as a
+      // success - which is the case worth having a test for.
+      return new HttpResponse(null, { status: 409 });
+    }
+    lastDecision = { candidacyId, status: body.status };
+    decisionLog.push(lastDecision);
+    return HttpResponse.json({ candidacyId, status: body.status });
   }),
 
   http.get(`${RECRUITMENT}/cycles/:cycleId/committees`, async ({ request }) => {
     await record("GET", request);
     return HttpResponse.json(committees);
+  }),
+
+  http.post(`${RECRUITMENT}/cycles`, async ({ request }) => {
+    await record("POST", request);
+    lastCycleCreate = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json({ id: "cycle-created", ...lastCycleCreate }, { status: 201 });
+  }),
+
+  http.patch(`${RECRUITMENT}/cycles/:cycleId`, async ({ request, params }) => {
+    await record("PATCH", request);
+    lastCycleUpdate = (await request.json()) as Record<string, unknown>;
+    const match = cycles.find((cycle) => cycle.id === params["cycleId"]);
+    return HttpResponse.json({ ...match, ...lastCycleUpdate });
+  }),
+
+  http.post(`${RECRUITMENT}/cycles/:cycleId/committees`, async ({ request }) => {
+    await record("POST", request);
+    lastCommitteeAttach = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json({ id: "committee-new", ...lastCommitteeAttach }, { status: 201 });
+  }),
+
+  http.get(`${RECRUITMENT}/cycles/:cycleId/memberships`, async ({ request }) => {
+    await record("GET", request);
+    return HttpResponse.json(memberships);
+  }),
+
+  http.post(`${RECRUITMENT}/cycles/:cycleId/memberships`, async ({ request }) => {
+    await record("POST", request);
+    lastMembershipGrant = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json({ id: "membership-new", ...lastMembershipGrant }, { status: 201 });
+  }),
+
+  http.delete(`${RECRUITMENT}/memberships/:membershipId`, async ({ request, params }) => {
+    await record("DELETE", request);
+    lastRevokedMembershipId = String(params["membershipId"]);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.post(`${API_URL}/admin/users`, async ({ request }) => {
+    await record("POST", request);
+    lastAccountCreate = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json(
+      {
+        andrewId: String(lastAccountCreate["andrewId"]),
+        email: `${String(lastAccountCreate["andrewId"])}@andrew.cmu.edu`,
+        name: String(lastAccountCreate["name"]),
+        role: typeof lastAccountCreate["role"] === "string" ? lastAccountCreate["role"] : "user",
+        temporaryPassword: "fixture-temporary-password",
+      },
+      { status: 201 },
+    );
   }),
 
   http.get(`${RECRUITMENT}/cycles/:cycleId/my-queue`, async ({ request }) => {

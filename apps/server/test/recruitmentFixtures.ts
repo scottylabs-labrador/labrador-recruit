@@ -84,11 +84,12 @@ export async function linkCommitteeToCycle(
   cycleId: string,
   committeeId: string,
   capacity: number | null = null,
+  minimumReviews: number | null = null,
 ) {
   const now = new Date();
   const [row] = await testDb
     .insert(cycleCommittee)
-    .values({ cycleId, committeeId, capacity, createdAt: now, updatedAt: now })
+    .values({ cycleId, committeeId, capacity, minimumReviews, createdAt: now, updatedAt: now })
     .returning();
   return row;
 }

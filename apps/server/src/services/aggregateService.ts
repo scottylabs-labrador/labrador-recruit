@@ -13,6 +13,7 @@ import {
   committeeCandidacy,
   committeeDecision,
   committeePreference,
+  cycleCommittee,
   recruitmentCycle,
   review,
   reviewAssignment,
@@ -121,6 +122,17 @@ export const aggregateService = {
     if (!cycle) {
       throw new HttpError(404, "Cycle not found");
     }
+
+    // A committee may set its own review minimum when it is attached to the
+    // cycle. That column was written from the beginning and read by nothing, so
+    // a committee that asked for three reviews silently got the cycle's two.
+    // Null means "no opinion", which is not the same as zero.
+    const [attachment] = await db
+      .select({ minimumReviews: cycleCommittee.minimumReviews })
+      .from(cycleCommittee)
+      .where(and(eq(cycleCommittee.cycleId, cycleId), eq(cycleCommittee.committeeId, committeeId)));
+
+    const minimumReviews = attachment?.minimumReviews ?? cycle.minimumReviews;
 
     const candidacies = await db
       .select({
@@ -240,11 +252,11 @@ export const aggregateService = {
         applicantRank: rankBy.get(candidacy.applicationId) ?? null,
         assignedCount: activeAssignments.length,
         submittedCount: submitted.length,
-        minimumReviews: cycle.minimumReviews,
+        minimumReviews,
         completionPercent:
-          cycle.minimumReviews === 0
+          minimumReviews === 0
             ? 100
-            : Math.min(100, Math.round((submitted.length / cycle.minimumReviews) * 100)),
+            : Math.min(100, Math.round((submitted.length / minimumReviews) * 100)),
         statistics,
         recommendationCounts: countBy(submitted.map((row) => row.recommendation)),
         confidenceCounts: countBy(submitted.map((row) => row.confidence)),

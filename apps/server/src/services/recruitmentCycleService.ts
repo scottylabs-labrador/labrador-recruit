@@ -23,6 +23,8 @@ export interface CycleSummary {
   minimumReviews: number;
   blindReviewEnabled: boolean;
   candidacyTopN: number;
+  /** Whether a committee opt-in creates a candidacy alongside the ranked top-N. */
+  candidacyIncludeOptIns: boolean;
   disagreementSpreadThreshold: number;
   /**
    * When set, the whole interface scopes to this one committee. Null means
@@ -101,6 +103,7 @@ export const recruitmentCycleService = {
       minimumReviews: recruitmentCycle.minimumReviews,
       blindReviewEnabled: recruitmentCycle.blindReviewEnabled,
       candidacyTopN: recruitmentCycle.candidacyTopN,
+      candidacyIncludeOptIns: recruitmentCycle.candidacyIncludeOptIns,
       disagreementSpreadThreshold: recruitmentCycle.disagreementSpreadThreshold,
       reviewCommitteeId: recruitmentCycle.reviewCommitteeId,
       decisionCutoffAdmit: recruitmentCycle.decisionCutoffAdmit,
@@ -203,6 +206,14 @@ export const recruitmentCycleService = {
       minimumReviews?: number;
       candidacyTopN?: number;
       blindReviewEnabled?: boolean;
+      /**
+       * Whether ticking a committee's opt-in question creates a candidacy for
+       * it, on top of the top-N preferences the applicant ranked.
+       *
+       * Stored on the cycle since the schema was written and, until now,
+       * settable by nothing - so it behaved as though hardcoded true.
+       */
+      candidacyIncludeOptIns?: boolean;
       disagreementSpreadThreshold?: number;
       disagreementOnExtremeConflict?: boolean;
       preferenceScoreMap?: Record<string, number>;
