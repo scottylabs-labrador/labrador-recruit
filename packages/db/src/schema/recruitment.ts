@@ -74,6 +74,20 @@ export const recruitmentCycle = pgTable(
     decisionCutoffAdmit: integer("decision_cutoff_admit"),
     decisionCutoffReject: integer("decision_cutoff_reject"),
 
+    /**
+     * The Google Sheet this cycle's applications are pulled from.
+     *
+     * The spreadsheet id rather than the URL, because a URL carries a fragment
+     * and query parameters that are about the reader's browser rather than the
+     * document. Null means the cycle is fed by hand-uploaded files only.
+     */
+    sourceSheetId: text("source_sheet_id"),
+    /**
+     * The A1 range to read, including the header row. Null reads the first
+     * worksheet in full, which is what a form's response sheet wants.
+     */
+    sourceSheetRange: text("source_sheet_range"),
+
     /** Score spread, in normalised points, above which reviewers disagree. */
     disagreementSpreadThreshold: integer("disagreement_spread_threshold").notNull().default(20),
 

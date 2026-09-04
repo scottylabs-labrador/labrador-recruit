@@ -45,6 +45,22 @@ export class ImportsController extends Controller {
     return importService.createImport(user, cycleId, body.filename, body.contentBase64);
   }
 
+  /**
+   * Pulls the cycle's Google Sheet and stages a preview.
+   *
+   * Never commits, whether a person pressed the button or the schedule did.
+   * Applicant records change when a named admin confirms, and not before.
+   */
+  @Post("cycles/{cycleId}/sync")
+  @Security(OIDC_AUTH)
+  @Security(BEARER_AUTH)
+  @SuccessResponse(201)
+  async syncFromSheet(@Request() req: ExpressRequest, @Path() cycleId: string) {
+    this.setStatus(201);
+    const user = await getRecruitmentUser(req, cycleId);
+    return importService.syncFromSheet(user, cycleId);
+  }
+
   @Get("imports/{importId}/rows")
   @Security(OIDC_AUTH)
   @Security(BEARER_AUTH)

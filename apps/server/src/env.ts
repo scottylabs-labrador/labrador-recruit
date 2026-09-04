@@ -29,6 +29,21 @@ const envSchema = z.object({
   PASSWORD_SIGN_IN: z.enum(["auto", "on", "off"]).default("auto"),
   BETTER_AUTH_URL: z.url(), // https://www.better-auth.com/docs/installation#set-environment-variables
   DATABASE_URL: z.string(),
+  /**
+   * The whole Google service-account key JSON, for reading a cycle's sheet.
+   *
+   * Optional: a deployment that only ever imports uploaded files needs no
+   * Google credentials at all, and the sync endpoint says so rather than
+   * failing at boot.
+   */
+  GOOGLE_SERVICE_ACCOUNT_KEY: z.string().optional(),
+  /**
+   * How often to pull each cycle's sheet, in minutes. Unset means never.
+   *
+   * The pull only ever stages a preview, so a schedule cannot change applicant
+   * data on its own - an admin still commits.
+   */
+  SHEET_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().optional(),
   SENTRY_DSN: z.string().optional(),
   SERVER_URL: z.url(),
   SERVER_PORT: z.coerce.number().default(80),

@@ -250,6 +250,7 @@ export let lastMembershipGrant: Record<string, unknown> | null = null;
 export let lastRevokedMembershipId: string | null = null;
 export let lastCommitteeAttach: Record<string, unknown> | null = null;
 export let lastAccountCreate: Record<string, unknown> | null = null;
+export let syncCallCount = 0;
 
 let memberships: Array<Record<string, unknown>> = [];
 
@@ -264,6 +265,7 @@ export function resetAdminRecorders() {
   lastRevokedMembershipId = null;
   lastCommitteeAttach = null;
   lastAccountCreate = null;
+  syncCallCount = 0;
   memberships = [];
 }
 
@@ -369,6 +371,26 @@ export const handlers = [
     await record("POST", request);
     lastCommitteeAttach = (await request.json()) as Record<string, unknown>;
     return HttpResponse.json({ id: "committee-new", ...lastCommitteeAttach }, { status: 201 });
+  }),
+
+  http.post(`${RECRUITMENT}/cycles/:cycleId/sync`, async ({ request }) => {
+    await record("POST", request);
+    syncCallCount += 1;
+    return HttpResponse.json(
+      {
+        importId: "import-from-sheet",
+        preview: {
+          sheetName: "Form Responses 1",
+          mapping: {},
+          rowCount: 12,
+          okCount: 11,
+          errorCount: 1,
+          failures: [],
+          duplicateEmails: [],
+        },
+      },
+      { status: 201 },
+    );
   }),
 
   http.get(`${RECRUITMENT}/cycles/:cycleId/memberships`, async ({ request }) => {

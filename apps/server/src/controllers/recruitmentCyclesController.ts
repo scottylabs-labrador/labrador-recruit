@@ -37,6 +37,12 @@ export interface UpdateCycleRequest {
    * could set it until now.
    */
   candidacyIncludeOptIns?: boolean;
+  /**
+   * The Google Sheet to pull applications from. A pasted URL is accepted; the
+   * spreadsheet id is taken out of it. Null disconnects the sheet.
+   */
+  sourceSheetId?: string | null;
+  sourceSheetRange?: string | null;
   disagreementSpreadThreshold?: number;
   disagreementOnExtremeConflict?: boolean;
   /**

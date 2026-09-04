@@ -12,6 +12,7 @@ import {
 import { and, asc, desc, eq } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";
+import { parseSpreadsheetId } from "../lib/sheets/googleSheets.ts";
 import { HttpError } from "../middlewares/errorHandler.ts";
 import { recordAuditEvent } from "./auditService.ts";
 
@@ -25,6 +26,9 @@ export interface CycleSummary {
   candidacyTopN: number;
   /** Whether a committee opt-in creates a candidacy alongside the ranked top-N. */
   candidacyIncludeOptIns: boolean;
+  /** The Google Sheet this cycle is pulled from, or null for uploads only. */
+  sourceSheetId: string | null;
+  sourceSheetRange: string | null;
   disagreementSpreadThreshold: number;
   /**
    * When set, the whole interface scopes to this one committee. Null means
@@ -104,6 +108,8 @@ export const recruitmentCycleService = {
       blindReviewEnabled: recruitmentCycle.blindReviewEnabled,
       candidacyTopN: recruitmentCycle.candidacyTopN,
       candidacyIncludeOptIns: recruitmentCycle.candidacyIncludeOptIns,
+      sourceSheetId: recruitmentCycle.sourceSheetId,
+      sourceSheetRange: recruitmentCycle.sourceSheetRange,
       disagreementSpreadThreshold: recruitmentCycle.disagreementSpreadThreshold,
       reviewCommitteeId: recruitmentCycle.reviewCommitteeId,
       decisionCutoffAdmit: recruitmentCycle.decisionCutoffAdmit,
@@ -214,6 +220,9 @@ export const recruitmentCycleService = {
        * settable by nothing - so it behaved as though hardcoded true.
        */
       candidacyIncludeOptIns?: boolean;
+      /** Null disconnects the cycle from its sheet without touching any data. */
+      sourceSheetId?: string | null;
+      sourceSheetRange?: string | null;
       disagreementSpreadThreshold?: number;
       disagreementOnExtremeConflict?: boolean;
       preferenceScoreMap?: Record<string, number>;
@@ -242,9 +251,26 @@ export const recruitmentCycleService = {
       throw new HttpError(409, "This cycle is archived and is read-only");
     }
 
+    // An admin pastes the link from their browser, not an id out of the API
+    // documentation. Refusing something that is obviously a sheet URL because
+    // it is not a bare id would be a needless obstacle; refusing something that
+    // is neither is worth doing loudly, because the alternative is a sync that
+    // 404s with no visible cause.
+    const normalised = { ...input };
+    if (typeof input.sourceSheetId === "string" && input.sourceSheetId.trim() !== "") {
+      const spreadsheetId = parseSpreadsheetId(input.sourceSheetId);
+      if (spreadsheetId === null) {
+        throw new HttpError(422, "That does not look like a Google Sheets link or id");
+      }
+      normalised.sourceSheetId = spreadsheetId;
+    } else if (input.sourceSheetId !== undefined) {
+      // An empty box disconnects the sheet rather than storing "".
+      normalised.sourceSheetId = null;
+    }
+
     const [updated] = await db
       .update(recruitmentCycle)
-      .set({ ...input, updatedAt: new Date() })
+      .set({ ...normalised, updatedAt: new Date() })
       .where(eq(recruitmentCycle.id, cycleId))
       .returning();
 

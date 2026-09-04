@@ -17,6 +17,7 @@ import {
   setMemberships,
   setSession,
   setStanding,
+  syncCallCount,
 } from "./msw/handlers.ts";
 import { committee, COMMITTEE_TECH, cycle, CYCLE_ID, myStanding } from "./recruitmentFixtures.ts";
 import { renderApp } from "./render.tsx";
@@ -277,5 +278,58 @@ describe("starting a cycle", () => {
     // link rather than the text.
     await screen.findByRole("link", { name: "Spring 2026" });
     expect(screen.queryByRole("button", { name: "Create cycle" })).toBeNull();
+  });
+});
+
+describe("the cycle's application source", () => {
+  beforeEach(() => {
+    resetAdminRecorders();
+    setIdentityProviderConfigured(false);
+  });
+
+  it("saves a pasted sheet link", async () => {
+    asAdmin();
+    const user = userEvent.setup();
+    await renderApp(SETTINGS);
+
+    await user.type(
+      await screen.findByLabelText("Google Sheet"),
+      "https://docs.google.com/spreadsheets/d/abc123/edit",
+    );
+    await user.click(screen.getByRole("button", { name: "Save source" }));
+
+    await waitFor(() => {
+      expect(lastCycleUpdate?.["sourceSheetId"]).toBe(
+        "https://docs.google.com/spreadsheets/d/abc123/edit",
+      );
+    });
+    // The id is taken out of the URL on the server, where the rule lives.
+    expect(lastCycleUpdate?.["sourceSheetRange"]).toBeNull();
+  });
+
+  /** No sheet configured means nothing to sync, so the control is withheld. */
+  it("offers no sync button until a sheet is configured", async () => {
+    asAdmin();
+    await renderApp(SETTINGS);
+
+    await screen.findByLabelText("Google Sheet");
+    expect(screen.queryByRole("button", { name: "Sync now" })).toBeNull();
+  });
+
+  /**
+   * Syncing stages a preview and stops. Committing stays a separate, named act
+   * on the import screen, so a pull can never rewrite applicants on its own.
+   */
+  it("stages a preview and says to go and commit it", async () => {
+    asAdmin();
+    setCycles([cycle({ sourceSheetId: "abc123" })]);
+    const user = userEvent.setup();
+    await renderApp(SETTINGS);
+
+    await user.click(await screen.findByRole("button", { name: "Sync now" }));
+
+    expect(await screen.findByText(/Staged 12 rows/)).toBeDefined();
+    expect(screen.getByText(/Open the Import screen to review and commit it/)).toBeDefined();
+    expect(syncCallCount).toBe(1);
   });
 });

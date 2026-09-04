@@ -82,6 +82,7 @@ function SettingsPage() {
     <div className="flex flex-col gap-6">
       <CycleSettingsSection cycleId={cycleId} enabled={mayConfigure} />
       <CommitteesSection cycleId={cycleId} enabled={mayConfigure} />
+      <SheetSection cycleId={cycleId} enabled={mayConfigure} />
       <MembershipsSection cycleId={cycleId} enabled={mayConfigure} />
       <AccountsSection />
     </div>
@@ -366,6 +367,124 @@ function CommitteesSection({ cycleId, enabled }: { cycleId: string; enabled: boo
           committee.
         </FieldHint>
         {attach.isError ? <ErrorState title="Could not add" error={attach.error} /> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Where a cycle's applications are pulled from.
+ *
+ * Syncing stages a preview and stops. A scheduled pull that committed itself
+ * would rewrite applicant records with nobody watching, so the import screen's
+ * existing preview-then-commit step stays in the way on purpose.
+ */
+function SheetSection({ cycleId, enabled }: { cycleId: string; enabled: boolean }) {
+  const cycle = $api.useQuery(
+    "get",
+    "/recruitment/cycles/{cycleId}",
+    { params: { path: { cycleId } } },
+    { enabled },
+  );
+
+  const [saved, setSaved] = useState(false);
+  const save = $api.useMutation("patch", "/recruitment/cycles/{cycleId}", {
+    onSuccess: () => {
+      setSaved(true);
+      void cycle.refetch();
+    },
+  });
+  const sync = $api.useMutation("post", "/recruitment/cycles/{cycleId}/sync");
+
+  if (cycle.isPending || cycle.isError) {
+    return null;
+  }
+
+  const sheetId = cycle.data.sourceSheetId;
+
+  function connect(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaved(false);
+    const form = new FormData(event.currentTarget);
+    const range = text(form, "sourceSheetRange").trim();
+    save.mutate({
+      params: { path: { cycleId } },
+      body: {
+        sourceSheetId: text(form, "sourceSheetId").trim() || null,
+        sourceSheetRange: range === "" ? null : range,
+      },
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Application source</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <form className="flex flex-wrap items-end gap-3" onSubmit={connect}>
+          <div className="flex min-w-80 flex-1 flex-col gap-1.5">
+            <Label htmlFor="sheet-id">Google Sheet</Label>
+            <Input
+              id="sheet-id"
+              name="sourceSheetId"
+              defaultValue={sheetId ?? ""}
+              placeholder="Paste the sheet link"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="sheet-range">Range</Label>
+            <Input
+              id="sheet-range"
+              name="sourceSheetRange"
+              defaultValue={cycle.data.sourceSheetRange ?? ""}
+              placeholder="First worksheet"
+            />
+          </div>
+          <Button type="submit" variant="outline" disabled={save.isPending}>
+            {save.isPending ? "Saving…" : "Save source"}
+          </Button>
+          {saved && !save.isPending ? (
+            <span className="text-sm text-muted-foreground">Saved.</span>
+          ) : null}
+        </form>
+
+        <FieldHint>
+          Paste the link from your browser; the spreadsheet id is taken out of it. The sheet has to
+          be shared with this deployment&rsquo;s Google service account as a viewer, or the sync
+          will say it cannot read it. Leave the range blank to read the first worksheet whole, which
+          is what a form&rsquo;s response sheet wants.
+        </FieldHint>
+
+        {sheetId === null || sheetId === "" ? null : (
+          <div className="flex flex-col gap-2 border-t border-border pt-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                disabled={sync.isPending}
+                onClick={() => {
+                  sync.mutate({ params: { path: { cycleId } } });
+                }}
+              >
+                {sync.isPending ? "Syncing…" : "Sync now"}
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Reads the sheet and stages an import. Nothing changes until you commit it on the
+                Import screen.
+              </span>
+            </div>
+            {sync.isSuccess ? (
+              <p className="text-sm leading-6">
+                {`Staged ${String(sync.data.preview.rowCount)} rows, `}
+                {`${String(sync.data.preview.okCount)} ready and `}
+                {`${String(sync.data.preview.errorCount)} with errors. `}
+                Open the Import screen to review and commit it.
+              </p>
+            ) : null}
+            {sync.isError ? <ErrorState title="Could not sync" error={sync.error} /> : null}
+          </div>
+        )}
+        {save.isError ? <ErrorState title="Could not save" error={save.error} /> : null}
       </CardContent>
     </Card>
   );

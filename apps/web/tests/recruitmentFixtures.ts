@@ -48,6 +48,8 @@ export function cycle(overrides: Partial<Cycle> = {}): Cycle {
     blindReviewEnabled: false,
     candidacyTopN: 2,
     candidacyIncludeOptIns: true,
+    sourceSheetId: null,
+    sourceSheetRange: null,
     disagreementSpreadThreshold: 2,
     // Unpinned by default: most screens should offer every committee the cycle
     // runs, and a test that wants the single-committee behaviour says so.
