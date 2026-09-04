@@ -44,6 +44,14 @@ const envSchema = z.object({
    * data on its own - an admin still commits.
    */
   SHEET_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().optional(),
+  /**
+   * Whether to fetch verbatim GitHub facts for applicants who supplied a link.
+   *
+   * Off unless explicitly "on". Fetching an applicant-provided link at all is a
+   * carve-out from `docs/product-rules.md` §1, so a deployment opts in rather
+   * than inheriting it.
+   */
+  GITHUB_ENRICHMENT: z.enum(["on", "off"]).default("off"),
   SENTRY_DSN: z.string().optional(),
   SERVER_URL: z.url(),
   SERVER_PORT: z.coerce.number().default(80),

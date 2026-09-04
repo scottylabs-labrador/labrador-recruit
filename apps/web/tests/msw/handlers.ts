@@ -252,6 +252,14 @@ export let lastCommitteeAttach: Record<string, unknown> | null = null;
 export let lastAccountCreate: Record<string, unknown> | null = null;
 export let syncCallCount = 0;
 
+/** The cached GitHub profile the API reports, and how often it was refreshed. */
+let githubProfile: Record<string, unknown> | null = null;
+export let githubRefreshCount = 0;
+
+export function setGithubProfile(next: typeof githubProfile) {
+  githubProfile = next;
+}
+
 let memberships: Array<Record<string, unknown>> = [];
 
 export function setMemberships(next: typeof memberships) {
@@ -266,6 +274,8 @@ export function resetAdminRecorders() {
   lastCommitteeAttach = null;
   lastAccountCreate = null;
   syncCallCount = 0;
+  githubProfile = null;
+  githubRefreshCount = 0;
   memberships = [];
 }
 
@@ -449,6 +459,17 @@ export const handlers = [
             item.committees.some((committee) => committee.committeeId === committeeId),
           );
     return HttpResponse.json(filtered);
+  }),
+
+  http.get(`${RECRUITMENT}/applications/:applicationId/github`, async ({ request }) => {
+    await record("GET", request);
+    return HttpResponse.json({ profile: githubProfile });
+  }),
+
+  http.post(`${RECRUITMENT}/applications/:applicationId/github/refresh`, async ({ request }) => {
+    await record("POST", request);
+    githubRefreshCount += 1;
+    return HttpResponse.json({ profile: githubProfile });
   }),
 
   http.get(`${RECRUITMENT}/applications/:applicationId`, async ({ request, params }) => {

@@ -65,7 +65,7 @@ export interface ApplicationDetail {
  * assignments still yields one row. Leads and admins see their committees'
  * whole pool via the candidacy predicate.
  */
-function visibleApplicationWhere(acUser: RecruitmentUser, cycleId: string) {
+export function visibleApplicationWhere(acUser: RecruitmentUser, cycleId: string) {
   const isReviewerOnly = acUser.recruitment.memberships.every((m) => m.role === "reviewer");
 
   const candidacyScope = exists(

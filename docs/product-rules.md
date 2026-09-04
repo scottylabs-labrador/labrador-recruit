@@ -23,13 +23,41 @@ an LLM or any other ML model.
 
 - Generating applicant scores from essay text.
 - Inferring passion, competence, or fit from written responses.
-- Fetching, scraping, or crawling applicant-provided links (GitHub, LinkedIn, portfolios,
-  personal sites). These render as inert external links and are never requested by the
-  server or the browser on the applicant's behalf.
+- Fetching, scraping, or crawling applicant-provided links (LinkedIn, portfolios, personal
+  sites). These render as inert external links and are never requested by the server or the
+  browser on the applicant's behalf. GitHub is the one exception, narrowly drawn below.
 - Inferring protected or sensitive traits.
 - Making an automatic accept or reject decision, including by numeric cutoff.
 
 Final recruitment decisions are always made by ScottyLabs leadership.
+
+### Exception: verbatim GitHub facts
+
+Decided 4 September 2026 by ScottyLabs recruitment leadership, on the request that reviewers
+be able to see what an applicant has actually built without leaving the review page.
+
+The platform may fetch `github.com` for an applicant who supplied a GitHub link, and may
+display only facts as GitHub states them:
+
+- repository name
+- the description the applicant wrote themselves
+- primary language
+- star count
+- last-push date
+- the repository URL
+
+Everything else in section 1 stands unchanged, and applies to this data specifically:
+
+- No summary, characterisation, or paraphrase of a repository is generated.
+- No score, ranking, or signal is derived from it. It is not an input to any aggregate.
+- No inference is drawn from it about skill, passion, competence, or fit. A reviewer reads
+  it and forms their own view, exactly as with a submitted answer.
+- The carve-out is `github.com` only. No other host is fetched, and a link to anywhere else
+  stays an inert anchor.
+
+The data is cached, labelled on screen as fetched from GitHub with the time it was fetched,
+so a reviewer can tell it apart from what the applicant submitted to us. It is never
+requested while a page is being rendered.
 
 ## 2. Explainable math only
 

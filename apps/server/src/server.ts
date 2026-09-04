@@ -3,6 +3,7 @@ import process from "node:process";
 
 import { app } from "./app.ts";
 import { env } from "./env.ts";
+import { startGithubRefreshSchedule } from "./lib/github/githubRefreshSchedule.ts";
 import { startSheetSyncSchedule } from "./lib/sheets/sheetSyncSchedule.ts";
 
 const server = http.createServer(app);
@@ -13,6 +14,7 @@ server.listen(port, () => {
   // Started after the port is open so a failure to reach Google can never stop
   // the API serving; it only ever stages previews in any case.
   startSheetSyncSchedule();
+  startGithubRefreshSchedule();
 });
 
 process.on("SIGINT", () => {

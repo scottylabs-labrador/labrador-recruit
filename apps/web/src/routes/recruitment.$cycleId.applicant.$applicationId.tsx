@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 
 import { ApplicationView } from "@/components/recruitment/ApplicationView.tsx";
+import { GithubFacts } from "@/components/recruitment/GithubFacts.tsx";
 import { ErrorState } from "@/components/recruitment/StateViews.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { useRecruitmentUser } from "@/hooks/useRecruitmentUser.ts";
@@ -48,6 +49,14 @@ function ApplicantDetailPage() {
             unrelated predicate.
           */}
           <ApplicationView application={application.data} showLeadershipContext={isLeadership} />
+          {/*
+            Beside the application rather than inside it, because it is not
+            something the applicant submitted to us: it is what GitHub says,
+            fetched separately and labelled as such.
+          */}
+          <div className="mt-6">
+            <GithubFacts applicationId={applicationId} />
+          </div>
         </div>
       )}
     </div>
