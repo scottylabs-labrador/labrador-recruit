@@ -231,6 +231,15 @@ export const CANDIDACY_FILTER_OPTIONS: ReadonlyArray<{ value: CandidacyFilter; l
   { value: "without", label: "Ranked, but no candidacy" },
 ];
 
+/**
+ * Narrows a query-string year to one the filter offers. A URL is editable, and a
+ * year nobody has would otherwise filter silently to nothing, which reads as a
+ * bug rather than as a typo. Unknown values are treated as "all years".
+ */
+export function isYearFilter(value: string): boolean {
+  return YEAR_FILTER_OPTIONS.some((option) => option.value === value);
+}
+
 export function isCandidacyFilter(value: string): value is CandidacyFilter {
   return CANDIDACY_FILTER_OPTIONS.some((option) => option.value === value);
 }

@@ -201,4 +201,15 @@ describe("applicant filters", () => {
     });
     expect(screen.getByText("2 of 2 applicants shown")).toBeDefined();
   });
+
+  it("ignores a year the filter does not offer instead of hiding everyone", async () => {
+    seed();
+    setApplications([sophomore, firstYear]);
+
+    // A hand-edited URL. Filtering to a year nobody has would show an empty
+    // table that reads as a bug; an unknown value is treated as "all years".
+    await renderApp("/recruitment/cycle-1/applicants?year=nope");
+
+    expect(await screen.findByText("2 of 2 applicants shown")).toBeDefined();
+  });
 });

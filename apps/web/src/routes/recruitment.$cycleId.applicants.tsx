@@ -20,6 +20,7 @@ import {
   type CandidacyFilter,
   CANDIDACY_FILTER_OPTIONS,
   isCandidacyFilter,
+  isYearFilter,
   YEAR_FILTER_OPTIONS,
   yearLabel,
 } from "@/lib/recruitment.ts";
@@ -34,6 +35,10 @@ const PAGE_LIMIT = 500;
  * an object. Coercing those with `String()` would put "[object Object]" in a
  * filter box, so anything that is not already a string is treated as absent.
  */
+function readString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
 /** Drops defaulted filters so the URL carries only what someone chose. */
 function stripEmpty(next: ApplicantSearch): ApplicantSearch {
   const out: ApplicantSearch = {};
@@ -42,10 +47,6 @@ function stripEmpty(next: ApplicantSearch): ApplicantSearch {
   if (next.year) out.year = next.year;
   if (next.candidacy && next.candidacy !== "all") out.candidacy = next.candidacy;
   return out;
-}
-
-function readString(value: unknown): string {
-  return typeof value === "string" ? value : "";
 }
 
 /**
@@ -57,7 +58,8 @@ interface ApplicantSearch {
   q?: string;
   committee?: string;
   year?: string;
-  candidacy?: CandidacyFilter;
+  /** Kept as the raw string; narrowed to a CandidacyFilter where it is read. */
+  candidacy?: string;
 }
 
 /**
@@ -68,13 +70,17 @@ interface ApplicantSearch {
  */
 export const Route = createFileRoute("/recruitment/$cycleId/applicants")({
   component: ApplicantsPage,
+  // A pure parser, on purpose. If this coerced an unknown `year` or `candidacy`
+  // to a default, the validated search would differ from the URL and the
+  // router would rewrite the URL on load. Unknown values are kept here and
+  // interpreted where they are read, so a hand-edited link renders instead of
+  // redirecting.
   validateSearch: (raw: Record<string, unknown>): ApplicantSearch => {
-    const candidacy = readString(raw["candidacy"]);
     return stripEmpty({
       q: readString(raw["q"]),
       committee: readString(raw["committee"]),
       year: readString(raw["year"]),
-      candidacy: isCandidacyFilter(candidacy) ? candidacy : "all",
+      candidacy: readString(raw["candidacy"]),
     });
   },
 });
@@ -84,8 +90,10 @@ function ApplicantsPage() {
   const raw = Route.useSearch();
   const search = raw.q ?? "";
   const committeeFilter = raw.committee ?? "";
-  const yearFilter = raw.year ?? "";
-  const candidacy: CandidacyFilter = raw.candidacy ?? "all";
+  const rawYear = raw.year ?? "";
+  const yearFilter = isYearFilter(rawYear) ? rawYear : "";
+  const rawCandidacy = raw.candidacy ?? "";
+  const candidacy: CandidacyFilter = isCandidacyFilter(rawCandidacy) ? rawCandidacy : "all";
   const navigate = Route.useNavigate();
 
   function setFilters(patch: Partial<ApplicantSearch>) {
