@@ -86,6 +86,13 @@ export function getRecruitmentAbility(user: RecruitmentUser): RecruitmentAbility
     allow(["read", "assign"], "Assignment");
     // Admins hold aggregate visibility, so peer reviews are never blinded.
     allow(["read", "readPeerReview", "reopen"], "Review");
+    // An admin is usually also a reviewer with their own queue. This branch
+    // returns early, so anything it omits is simply absent - and omitting
+    // these meant they could open a review, score it, write the rationale and
+    // only then be refused at submit, losing the work at the one moment it
+    // cannot be recovered. Scoped to their own review: reading everyone's is
+    // an admin power, writing somebody else's is not.
+    allow(["create", "update", "submit"], "Review", { reviewerUserId: user.id });
     allow(["read", "decide"], "Decision");
     allow(["read", "decide"], "Placement");
     return build();

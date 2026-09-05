@@ -13,6 +13,7 @@ import {
   canReopenReview,
   canSubmitReview,
   canUpdateCandidacy,
+  canUpdateReview,
 } from "../src/permissions.ts";
 import type { Membership, RecruitmentUser } from "../src/types.ts";
 
@@ -241,5 +242,52 @@ describe("blind review", () => {
     });
 
     expect(canReadApplicantIdentity({ user: blindedAdmin, cycleId: CYCLE })).toBe(true);
+  });
+});
+
+/**
+ * A recruitment admin is very often also a reviewer with their own queue - on
+ * Fall 2026 the admin carries nineteen assignments. The admin branch of the
+ * ability returns early, so anything it does not grant is simply absent, and
+ * "submit" was absent: they could open a review, score it, write a rationale,
+ * and only then be told they were not allowed to submit it. The work is lost at
+ * the one moment it cannot be recovered.
+ */
+describe("an admin who also reviews", () => {
+  const adminReviewer = makeUser("radmin", [
+    { role: "recruitment_admin", committeeId: null },
+    { role: "reviewer", committeeId: TECH },
+  ]);
+
+  it("may submit their own review", () => {
+    expect(
+      canSubmitReview({
+        user: adminReviewer,
+        review: { reviewerUserId: "radmin", candidacyId: "candidacy-1" },
+      }),
+    ).toBe(true);
+  });
+
+  it("may still not submit somebody else's", () => {
+    expect(
+      canSubmitReview({
+        user: adminReviewer,
+        review: { reviewerUserId: "someone-else", candidacyId: "candidacy-1" },
+      }),
+    ).toBe(false);
+  });
+
+  /** The same hole existed for saving a draft through the ability. */
+  it("may update their own review", () => {
+    expect(
+      canUpdateReview({
+        user: adminReviewer,
+        review: { reviewerUserId: "radmin", candidacyId: "candidacy-1" },
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps the reopen power that being an admin grants", () => {
+    expect(canReopenReview({ user: adminReviewer })).toBe(true);
   });
 });

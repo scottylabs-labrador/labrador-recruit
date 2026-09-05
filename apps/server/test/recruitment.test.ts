@@ -586,3 +586,68 @@ describe("assignment management", () => {
     expect(res.status).toBe(409);
   });
 });
+
+/**
+ * A recruitment admin is usually also a reviewer with their own queue. The
+ * ability's admin branch returns early, and it granted read, readPeerReview
+ * and reopen on a review but not submit - so an admin could open their own
+ * review, score it, write the rationale, and only then be told they were not
+ * allowed to submit it. That is the one moment the work cannot be recovered.
+ */
+describe("an admin reviewing their own queue", () => {
+  async function setupAdminAsReviewer() {
+    const scenario = await setupScenario();
+
+    // The same person holds both roles, exactly as they do on the live cycle.
+    await seedMembership({
+      cycleId: scenario.cycle.id,
+      userId: adminUser.id,
+      role: "reviewer",
+      committeeId: scenario.tech.id,
+    });
+
+    const assignment = await seedAssignment({
+      candidacyId: scenario.candidacy.id,
+      reviewerUserId: adminUser.id,
+    });
+
+    return { ...scenario, assignment };
+  }
+
+  it("submits their own review rather than being refused", async () => {
+    const { assignment } = await setupAdminAsReviewer();
+
+    const res = await request(app)
+      .post(`/recruitment/assignments/${assignment.id}/review/submit`)
+      .set(adminAuth())
+      .send(COMPLETE_REVIEW);
+
+    expect(res.status).toBe(200);
+    // Submitting stamps the review, which is what makes it count toward the
+    // candidacy's aggregate.
+    expect(res.body.submittedAt).not.toBeNull();
+  });
+
+  it("saves a draft first, as the interface does", async () => {
+    const { assignment } = await setupAdminAsReviewer();
+
+    const res = await request(app)
+      .put(`/recruitment/assignments/${assignment.id}/review`)
+      .set(adminAuth())
+      .send({ scores: { interest: 4 } });
+
+    expect(res.status).toBe(200);
+  });
+
+  /** Reading everyone's review is an admin power; writing one is not. */
+  it("still cannot submit somebody else's review", async () => {
+    const { aliceAssignment } = await setupAdminAsReviewer();
+
+    const res = await request(app)
+      .post(`/recruitment/assignments/${aliceAssignment.id}/review/submit`)
+      .set(adminAuth())
+      .send(COMPLETE_REVIEW);
+
+    expect(res.status).toBe(403);
+  });
+});
