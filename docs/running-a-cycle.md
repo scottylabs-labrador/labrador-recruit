@@ -3,6 +3,8 @@
 The operational guide for ScottyLabs leadership. Everything here is
 configuration: none of it requires a code change or a deploy.
 
+What to send the reviewers themselves is [`start-reviewing.md`](start-reviewing.md).
+
 ## 1. Create the cycle
 
 A **global** ScottyLabs admin (someone in the Keycloak admin group) creates the
@@ -84,9 +86,57 @@ special handling — a committee with no questions simply contributes a ranking.
 
 ## 4. Assign reviewers
 
-Default is three reviewers per candidacy. `GET /recruitment/cycles/{id}/workloads`
-shows assigned, submitted, conflicted, and outstanding counts per reviewer so
-you can rebalance from real numbers.
+Nobody can review anything until they have a queue, and a queue is made of
+assignments. **Assignments** (visible to committee leads and recruitment admins)
+does the whole committee in one pass.
+
+1. Pick the committee.
+2. Set **Reviewers per applicant** — three by default, which is also the usual
+   `minimumReviews`.
+3. **Preview assignments.** Nothing is written. You get the plan named row by
+   row — which applicant goes to which reviewer — the per-reviewer totals, and
+   any applicant that cannot reach the number you asked for.
+4. **Assign N reviewers** writes exactly that plan.
+
+Preview and apply are the same endpoint with a flag, so what you confirmed is
+what gets written, and the whole run is one audit entry.
+
+It is safe to re-run at any point in the cycle. The rules it follows:
+
+- **It only ever adds.** Nobody is unassigned, and no review that has been
+  started or submitted is touched. A rebalance cannot destroy work.
+- **A declared conflict is never undone.** The reviewer keeps their single
+  conflicted row and is not added again — and that row does not count towards
+  coverage, so somebody else is assigned in their place.
+- **Load balances on outstanding work across the whole cycle**, not on total
+  assigned. Having submitted ten reviews is capacity; sitting on ten unstarted
+  ones is not. Somebody already busy in another committee is not handed a third
+  pile here.
+- **The same input gives the same plan.** Ties break on user id, so a run can
+  be checked after the fact.
+- **An admin is assignable but never volunteered.** A recruitment admin holds a
+  cycle-wide membership, which would otherwise make them eligible for every
+  committee. Running the cycle is not the same as being on the reading rota, so
+  a default split skips them. Naming them explicitly still works.
+
+If an applicant cannot reach the target — every eligible reviewer is already on
+them — it is reported as a **shortfall** with the name and the gap, rather than
+the same person being added twice. The fix is enrolling more reviewers for that
+committee, which is a human decision.
+
+**Reviewer workload** below the split shows assigned, submitted, conflicted and
+outstanding per person. Outstanding is what is actually waiting on someone, and
+is what the split balances on.
+
+To script it instead:
+
+```http
+POST /recruitment/cycles/{cycleId}/committees/{committeeId}/assignments/distribute
+{ "reviewersPerCandidacy": 3, "dryRun": true }
+```
+
+`reviewerUserIds` narrows the split to named people. `GET
+/recruitment/cycles/{id}/workloads` returns the same workload numbers.
 
 A reviewer who has already submitted cannot be unassigned — rebalancing must not
 destroy work.

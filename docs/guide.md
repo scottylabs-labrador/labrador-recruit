@@ -3,9 +3,10 @@
 What the platform is, how to use it, what it is built from, and how it works
 underneath. If you only read one document, read this one.
 
-For the operational sequence of running a cycle, see
-[`running-a-cycle.md`](running-a-cycle.md). For picking the work up as an
-engineer, see [`handover.md`](handover.md).
+To hand something to the team so they can start reviewing today, send them
+[`start-reviewing.md`](start-reviewing.md). For the operational sequence of
+running a cycle, see [`running-a-cycle.md`](running-a-cycle.md). For picking the
+work up as an engineer, see [`handover.md`](handover.md).
 
 ## What it is
 
@@ -92,6 +93,22 @@ Two things worth knowing:
 Drafts save as you go. Submitting locks the review; only a recruitment admin can
 reopen it.
 
+### Assigning — committee lead
+
+Reviewers see only what they are assigned, so a committee does nothing until
+somebody fills its queues. **Assignments** does that for the whole committee in
+one pass: choose how many reviewers each applicant should get, **Preview
+assignments** to see the plan named row by row, then confirm it. Nothing is
+written until you confirm, and preview and apply are the same call with a flag —
+what you approved is what gets written.
+
+Re-run it whenever coverage changes. It only ever adds: nobody is unassigned, no
+started review is touched, and a declared conflict is never undone. Load spreads
+by _outstanding_ work across the whole cycle, so somebody already buried in
+another committee is not handed a third pile. If an applicant cannot reach the
+number you asked for, it says so by name rather than putting the same person on
+them twice.
+
 ### Deciding — committee lead
 
 **Ranking** orders the committee by score and shows the arithmetic beside each
@@ -126,7 +143,7 @@ reviewers landed on opposite extremes. It is a prompt to talk, not a verdict.
 | **Idempotent re-import** | Identity is cycle + normalised email. Re-importing updates rather than duplicates, adds missing candidacies, and never deletes a candidacy or touches a review. Unchanged rows are skipped outright.                                    |
 | **Sheet sync**           | A cycle can name a Google Sheet. Manual **Sync now** or a schedule. Both stage a preview; neither commits.                                                                                                                              |
 | **Candidacies**          | Created from an applicant's top-N ranked committees, plus any committee whose questions they answered if opt-ins are enabled.                                                                                                           |
-| **Assignment**           | Reviewers assigned per candidacy, with workload visible to leads.                                                                                                                                                                       |
+| **Assignment**           | Reviewers assigned per candidacy, individually or by splitting a whole committee at once. Preview names every row before anything is written; re-running only adds, never undoes a conflict, and balances on outstanding work.          |
 | **Queue priority**       | Four tiers, ranked choice crossed with whether they wrote anything for you.                                                                                                                                                             |
 | **Blind review**         | Peer reviews withheld until you submit. Enforced in SQL.                                                                                                                                                                                |
 | **Conflicts**            | Declared without a reason, in one confirmed step.                                                                                                                                                                                       |
@@ -231,6 +248,7 @@ GitHub data never feeds a score.
 | `/recruitment/$cycleId/applicants`               | The pool the caller may see                       |
 | `/recruitment/$cycleId/applicant/$applicationId` | One application                                   |
 | `/recruitment/$cycleId/review/$assignmentId`     | Application beside the rubric                     |
+| `/recruitment/$cycleId/assignments`              | Bulk reviewer assignment — leads and admins       |
 | `/recruitment/$cycleId/ranking`                  | Ranking, decisions, cutoff lines                  |
 | `/recruitment/$cycleId/disagreements`            | Flagged candidacies with reasons                  |
 | `/recruitment/$cycleId/rubric`                   | Rubric editor — admins                            |

@@ -96,6 +96,7 @@ what to provision before `bun run dev` will resolve.
 
 | Document                                                 | Contents                                              |
 | -------------------------------------------------------- | ----------------------------------------------------- |
+| [`docs/start-reviewing.md`](docs/start-reviewing.md)     | For the team: signing in, reviewing, exports          |
 | [`docs/guide.md`](docs/guide.md)                         | The complete guide: usage, features, stack, internals |
 | [`docs/handover.md`](docs/handover.md)                   | Taking this over: deployment, access, traps, debt     |
 | [`docs/running-a-cycle.md`](docs/running-a-cycle.md)     | Operational runbook: import, assign, review, decide   |
