@@ -8,6 +8,7 @@ import type {
   Cycle,
   CycleProgress,
   DecisionExport,
+  DistributionPlan,
   ImportCommitReport,
   ImportPreview,
   ImportRowOutcome,
@@ -19,6 +20,7 @@ import type {
   RankingExport,
   Review,
   ReviewerLoadExport,
+  ReviewerWorkload,
   Rubric,
   RubricValidation,
   RubricVersion,
@@ -66,13 +68,10 @@ export let peerReviews: PeerReview[] = [];
 /** Null means `/me` 404s, which is how "no standing in this cycle" arrives. */
 export let standing: MyStanding | null = null;
 export let progress: CycleProgress | null = null;
-export let workloads: Array<{
-  userId: string;
-  assigned: number;
-  submitted: number;
-  conflicted: number;
-  outstanding: number;
-}> = [];
+export let workloads: ReviewerWorkload[] = [];
+
+/** What `POST .../assignments/distribute` answers with. Null means it 403s. */
+export let distributionPlan: DistributionPlan | null = null;
 
 /** Every recruitment request the handlers served, so tests can assert on calls. */
 export let recordedRequests: Array<{ method: string; url: string; body: unknown }> = [];
@@ -109,6 +108,9 @@ export function setPeerReviews(next: PeerReview[]) {
 }
 export function setWorkloads(next: typeof workloads) {
   workloads = next;
+}
+export function setDistributionPlan(next: DistributionPlan | null) {
+  distributionPlan = next;
 }
 export function setStanding(next: MyStanding | null) {
   standing = next;
@@ -178,6 +180,7 @@ async function record(method: string, request: Request) {
       .catch(() => null);
   }
   recordedRequests.push({ method, url: request.url, body });
+  return body;
 }
 
 const RECRUITMENT = `${API_URL}/recruitment`;
@@ -513,6 +516,24 @@ export const handlers = [
     await record("GET", request);
     return HttpResponse.json(workloads);
   }),
+
+  // Preview and apply are one endpoint with a flag, so the fake mirrors that:
+  // the same plan comes back, and `created` appears only once it is not a dry
+  // run. A test can therefore assert that what was shown is what was written.
+  http.post(
+    `${RECRUITMENT}/cycles/:cycleId/committees/:committeeId/assignments/distribute`,
+    async ({ request }) => {
+      const body = (await record("POST", request)) as { dryRun?: boolean } | null;
+      if (distributionPlan === null) {
+        return HttpResponse.json({ message: "Forbidden" }, { status: 403 });
+      }
+      return HttpResponse.json(
+        body?.dryRun === true
+          ? distributionPlan
+          : { ...distributionPlan, created: distributionPlan.planned.length },
+      );
+    },
+  ),
 
   http.get(`${RECRUITMENT}/assignments/:assignmentId/review`, async ({ request }) => {
     await record("GET", request);

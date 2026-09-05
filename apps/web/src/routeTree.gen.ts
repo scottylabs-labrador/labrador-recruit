@@ -14,6 +14,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as RecruitmentRouteImport } from './routes/recruitment'
 import { Route as RecruitmentCycleIdIndexRouteImport } from './routes/recruitment.$cycleId.index'
 import { Route as RecruitmentCycleIdApplicantsRouteImport } from './routes/recruitment.$cycleId.applicants'
+import { Route as RecruitmentCycleIdAssignmentsRouteImport } from './routes/recruitment.$cycleId.assignments'
 import { Route as RecruitmentCycleIdDisagreementsRouteImport } from './routes/recruitment.$cycleId.disagreements'
 import { Route as RecruitmentCycleIdExportsRouteImport } from './routes/recruitment.$cycleId.exports'
 import { Route as RecruitmentCycleIdImportRouteImport } from './routes/recruitment.$cycleId.import'
@@ -48,6 +49,12 @@ const RecruitmentCycleIdApplicantsRoute =
   RecruitmentCycleIdApplicantsRouteImport.update({
     id: '/$cycleId/applicants',
     path: '/$cycleId/applicants',
+    getParentRoute: () => RecruitmentRoute,
+  } as any)
+const RecruitmentCycleIdAssignmentsRoute =
+  RecruitmentCycleIdAssignmentsRouteImport.update({
+    id: '/$cycleId/assignments',
+    path: '/$cycleId/assignments',
     getParentRoute: () => RecruitmentRoute,
   } as any)
 const RecruitmentCycleIdDisagreementsRoute =
@@ -109,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/recruitment': typeof RecruitmentRouteWithChildren
   '/recruitment/$cycleId/applicants': typeof RecruitmentCycleIdApplicantsRoute
+  '/recruitment/$cycleId/assignments': typeof RecruitmentCycleIdAssignmentsRoute
   '/recruitment/$cycleId/disagreements': typeof RecruitmentCycleIdDisagreementsRoute
   '/recruitment/$cycleId/exports': typeof RecruitmentCycleIdExportsRoute
   '/recruitment/$cycleId/import': typeof RecruitmentCycleIdImportRoute
@@ -125,6 +133,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/recruitment': typeof RecruitmentRouteWithChildren
   '/recruitment/$cycleId/applicants': typeof RecruitmentCycleIdApplicantsRoute
+  '/recruitment/$cycleId/assignments': typeof RecruitmentCycleIdAssignmentsRoute
   '/recruitment/$cycleId/disagreements': typeof RecruitmentCycleIdDisagreementsRoute
   '/recruitment/$cycleId/exports': typeof RecruitmentCycleIdExportsRoute
   '/recruitment/$cycleId/import': typeof RecruitmentCycleIdImportRoute
@@ -142,6 +151,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/recruitment': typeof RecruitmentRouteWithChildren
   '/recruitment/$cycleId/applicants': typeof RecruitmentCycleIdApplicantsRoute
+  '/recruitment/$cycleId/assignments': typeof RecruitmentCycleIdAssignmentsRoute
   '/recruitment/$cycleId/disagreements': typeof RecruitmentCycleIdDisagreementsRoute
   '/recruitment/$cycleId/exports': typeof RecruitmentCycleIdExportsRoute
   '/recruitment/$cycleId/import': typeof RecruitmentCycleIdImportRoute
@@ -160,6 +170,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/recruitment'
     | '/recruitment/$cycleId/applicants'
+    | '/recruitment/$cycleId/assignments'
     | '/recruitment/$cycleId/disagreements'
     | '/recruitment/$cycleId/exports'
     | '/recruitment/$cycleId/import'
@@ -176,6 +187,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/recruitment'
     | '/recruitment/$cycleId/applicants'
+    | '/recruitment/$cycleId/assignments'
     | '/recruitment/$cycleId/disagreements'
     | '/recruitment/$cycleId/exports'
     | '/recruitment/$cycleId/import'
@@ -192,6 +204,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/recruitment'
     | '/recruitment/$cycleId/applicants'
+    | '/recruitment/$cycleId/assignments'
     | '/recruitment/$cycleId/disagreements'
     | '/recruitment/$cycleId/exports'
     | '/recruitment/$cycleId/import'
@@ -245,6 +258,13 @@ declare module '@tanstack/react-router' {
       path: '/$cycleId/applicants'
       fullPath: '/recruitment/$cycleId/applicants'
       preLoaderRoute: typeof RecruitmentCycleIdApplicantsRouteImport
+      parentRoute: typeof RecruitmentRoute
+    }
+    '/recruitment/$cycleId/assignments': {
+      id: '/recruitment/$cycleId/assignments'
+      path: '/$cycleId/assignments'
+      fullPath: '/recruitment/$cycleId/assignments'
+      preLoaderRoute: typeof RecruitmentCycleIdAssignmentsRouteImport
       parentRoute: typeof RecruitmentRoute
     }
     '/recruitment/$cycleId/disagreements': {
@@ -315,6 +335,7 @@ declare module '@tanstack/react-router' {
 
 interface RecruitmentRouteChildren {
   RecruitmentCycleIdApplicantsRoute: typeof RecruitmentCycleIdApplicantsRoute
+  RecruitmentCycleIdAssignmentsRoute: typeof RecruitmentCycleIdAssignmentsRoute
   RecruitmentCycleIdDisagreementsRoute: typeof RecruitmentCycleIdDisagreementsRoute
   RecruitmentCycleIdExportsRoute: typeof RecruitmentCycleIdExportsRoute
   RecruitmentCycleIdImportRoute: typeof RecruitmentCycleIdImportRoute
@@ -329,6 +350,7 @@ interface RecruitmentRouteChildren {
 
 const RecruitmentRouteChildren: RecruitmentRouteChildren = {
   RecruitmentCycleIdApplicantsRoute: RecruitmentCycleIdApplicantsRoute,
+  RecruitmentCycleIdAssignmentsRoute: RecruitmentCycleIdAssignmentsRoute,
   RecruitmentCycleIdDisagreementsRoute: RecruitmentCycleIdDisagreementsRoute,
   RecruitmentCycleIdExportsRoute: RecruitmentCycleIdExportsRoute,
   RecruitmentCycleIdImportRoute: RecruitmentCycleIdImportRoute,

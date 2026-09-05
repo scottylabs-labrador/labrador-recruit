@@ -1,5 +1,8 @@
 import { cleanup, configure } from "@testing-library/react";
+import { cleanStores } from "nanostores";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
+
+import { authClient } from "@/lib/authClient.ts";
 
 import {
   resetRecordedRequests,
@@ -11,6 +14,7 @@ import {
   setCycles,
   setDecisionExport,
   setDisagreements,
+  setDistributionPlan,
   setImportPreview,
   setImportRows,
   setImports,
@@ -85,6 +89,7 @@ beforeEach(() => {
   setAggregates([]);
   setRanking([]);
   setDisagreements([]);
+  setDistributionPlan(null);
   setPeerReviews([]);
   setWorkloads([]);
   setStanding(null);
@@ -104,6 +109,19 @@ beforeEach(() => {
 afterEach(() => {
   server.resetHandlers();
   cleanup();
+
+  // Better Auth keeps its session in a nanostores atom, and nanostores defers a
+  // store's teardown by a second after its last subscriber goes away
+  // (`STORE_UNMOUNT_DELAY`). Unmounting React therefore only *schedules* the
+  // teardown: a file that finishes inside that second leaves a timer behind,
+  // which fires after the DOM environment is gone and dies on `window` in Better
+  // Auth's `removeEventListener` cleanup. That surfaced as an unhandled
+  // `ReferenceError: window is not defined` failing the run about one time in
+  // six, blamed on whichever file happened to finish last.
+  //
+  // `cleanStores` runs the same teardown synchronously, while the window still
+  // exists, and empties the queue so the deferred timer has nothing left to do.
+  cleanStores(authClient.$store.atoms.session);
 });
 
 afterAll(() => {

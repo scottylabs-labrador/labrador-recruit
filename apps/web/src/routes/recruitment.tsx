@@ -1,4 +1,9 @@
-import { canConfigureCycle, canCreateCycle, canImportApplications } from "@labrador/access-control";
+import {
+  canAssignReviewers,
+  canConfigureCycle,
+  canCreateCycle,
+  canImportApplications,
+} from "@labrador/access-control";
 import { createFileRoute, Link, Outlet, useNavigate, useParams } from "@tanstack/react-router";
 
 import { NewCycleForm } from "@/components/recruitment/NewCycleForm.tsx";
@@ -29,6 +34,7 @@ type NavPath =
   | "/recruitment/$cycleId"
   | "/recruitment/$cycleId/queue"
   | "/recruitment/$cycleId/applicants"
+  | "/recruitment/$cycleId/assignments"
   | "/recruitment/$cycleId/ranking"
   | "/recruitment/$cycleId/disagreements"
   | "/recruitment/$cycleId/import"
@@ -51,6 +57,12 @@ const NAV_ITEMS: readonly NavItem[] = [
   { to: "/recruitment/$cycleId", label: "Overview", exact: true, visible: always },
   { to: "/recruitment/$cycleId/queue", label: "My Queue", exact: false, visible: always },
   { to: "/recruitment/$cycleId/applicants", label: "Applicants", exact: false, visible: always },
+  {
+    to: "/recruitment/$cycleId/assignments",
+    label: "Assignments",
+    exact: false,
+    visible: (standing) => canAssignReviewers({ user: standing.user }),
+  },
   { to: "/recruitment/$cycleId/ranking", label: "Ranking", exact: false, visible: always },
   {
     to: "/recruitment/$cycleId/disagreements",

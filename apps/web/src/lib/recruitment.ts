@@ -34,6 +34,11 @@ export type RubricVersionSummary = components["schemas"]["RubricVersionSummary"]
 export type CriterionInput = components["schemas"]["CriterionInput"];
 export type CriterionSource = "reviewer" | "application_preference";
 
+/* Bulk assignment. */
+export type DistributionPlan = components["schemas"]["DistributionPlan"];
+export type PlannedAssignment = components["schemas"]["PlannedAssignment"];
+export type ReviewerWorkload = components["schemas"]["ReviewerWorkload"];
+
 /* Exports. */
 export type RankingExportRow = components["schemas"]["RankingExportRow"];
 export type DecisionExportRow = components["schemas"]["DecisionExportRow"];

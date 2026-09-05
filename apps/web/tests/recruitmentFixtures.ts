@@ -523,3 +523,39 @@ export function reviewerLoadExportRow(
     ...overrides,
   };
 }
+
+/* Bulk assignment. */
+
+export type DistributionPlan = components["schemas"]["DistributionPlan"];
+export type ReviewerWorkload = components["schemas"]["ReviewerWorkload"];
+
+export function distributionPlan(overrides: Partial<DistributionPlan> = {}): DistributionPlan {
+  return {
+    candidacyCount: 2,
+    reviewerCount: 2,
+    planned: [
+      {
+        candidacyId: "c1",
+        applicantName: "First",
+        reviewerUserId: "alice",
+        reviewerName: "Alice",
+      },
+      { candidacyId: "c2", applicantName: "Second", reviewerUserId: "bob", reviewerName: "Bob" },
+    ],
+    shortfalls: [],
+    ...overrides,
+  };
+}
+
+export function reviewerWorkload(overrides: Partial<ReviewerWorkload> = {}): ReviewerWorkload {
+  return {
+    userId: "alice",
+    name: "Alice",
+    email: "alice@andrew.cmu.edu",
+    assigned: 4,
+    submitted: 3,
+    conflicted: 0,
+    outstanding: 1,
+    ...overrides,
+  };
+}

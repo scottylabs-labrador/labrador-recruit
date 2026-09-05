@@ -25,6 +25,15 @@ export interface AssignReviewerRequest {
   reviewerUserId: string;
 }
 
+export interface DistributeAssignmentsRequest {
+  /** How many reviewers each candidacy should end up with. 1-10. */
+  reviewersPerCandidacy: number;
+  /** Restrict to these reviewers. Omitted means everyone eligible. */
+  reviewerUserIds?: string[];
+  /** Return the plan without writing it. */
+  dryRun?: boolean;
+}
+
 @Route("recruitment")
 export class AssignmentsController extends Controller {
   /** Reviewer workloads across a cycle, so coverage can be rebalanced. */
@@ -35,6 +44,27 @@ export class AssignmentsController extends Controller {
   async listWorkloads(@Request() req: ExpressRequest, @Path() cycleId: string) {
     const user = await getRecruitmentUser(req, cycleId);
     return assignmentService.listWorkloads(user, cycleId);
+  }
+
+  /**
+   * Tops every candidacy in a committee up to a target number of reviewers.
+   *
+   * `dryRun` returns the plan without writing it, which is what the screen
+   * shows before anyone commits. Assigning reviewers is explicitly permitted by
+   * product rule 1: it decides who reads what, never what they conclude.
+   */
+  @Post("cycles/{cycleId}/committees/{committeeId}/assignments/distribute")
+  @Security(OIDC_AUTH)
+  @Security(BEARER_AUTH)
+  @SuccessResponse(200)
+  async distribute(
+    @Request() req: ExpressRequest,
+    @Path() cycleId: string,
+    @Path() committeeId: string,
+    @Body() body: DistributeAssignmentsRequest,
+  ) {
+    const user = await getRecruitmentUser(req, cycleId);
+    return assignmentService.distributeCommittee(user, cycleId, committeeId, body);
   }
 
   @Get("candidacies/{candidacyId}/assignments")
