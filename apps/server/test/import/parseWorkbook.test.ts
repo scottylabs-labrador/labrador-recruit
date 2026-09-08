@@ -6,7 +6,7 @@ import { Workbook } from "exceljs";
 import { describe, expect, it } from "vitest";
 
 import { FALL_2026_MAPPING } from "../../src/lib/import/headerMap.ts";
-import { parseCsv, parseXlsx } from "../../src/lib/import/parseWorkbook.ts";
+import { decodeCsv, parseCsv, parseXlsx } from "../../src/lib/import/parseWorkbook.ts";
 
 const FIXTURE_PATH = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -196,5 +196,61 @@ describe("parseXlsx", () => {
   it("reports a missing worksheet rather than importing the wrong one", async () => {
     const buffer = await readFile(FIXTURE_PATH);
     await expect(parseXlsx(buffer, "Sheet 9")).rejects.toThrow(/Sheet 9/u);
+  });
+});
+
+/**
+ * A `.csv` is bytes plus a convention, and an admin's spreadsheet program picks
+ * the convention for them. Reading everything as UTF-8 corrupted applicant
+ * names silently, which is the one thing this system must not do.
+ */
+describe("decodeCsv", () => {
+  const NAME = "Jos\u00e9 M\u00fcller";
+  const BODY = `Email Address,Full Name\r\na@andrew.cmu.edu,${NAME}`;
+
+  function nameFrom(bytes: Buffer): string | undefined {
+    const sheet = parseCsv(decodeCsv(bytes));
+    expect(sheet.headers).toEqual(["Email Address", "Full Name"]);
+    const value = sheet.rows[0]?.["Full Name"];
+    return typeof value === "string" ? value : undefined;
+  }
+
+  /** What Google Sheets exports, and what Excel's "CSV UTF-8" writes. */
+  it("reads UTF-8, with or without a byte-order mark", () => {
+    const utf8 = Buffer.from(BODY, "utf8");
+    expect(nameFrom(utf8)).toBe(NAME);
+    expect(nameFrom(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), utf8]))).toBe(NAME);
+  });
+
+  /**
+   * Excel's plain "Save As -> CSV" on a Windows machine. Decoded as UTF-8 this
+   * imported perfectly with every accented character replaced by U+FFFD, so an
+   * applicant's name was quietly wrong in the database and nothing on screen
+   * said so.
+   */
+  it("reads Windows-1252 rather than replacing what it cannot decode", () => {
+    const bytes = Buffer.from(BODY, "latin1");
+    expect(nameFrom(bytes)).toBe(NAME);
+    expect(nameFrom(bytes)).not.toContain("\uFFFD");
+  });
+
+  /**
+   * Excel's "Unicode Text". Decoded as UTF-8 the header row itself became
+   * mojibake, so every column read as unrecognised and the preview blamed the
+   * form for having been renamed.
+   */
+  it("reads UTF-16 in either byte order", () => {
+    const le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(BODY, "utf16le")]);
+    expect(nameFrom(le)).toBe(NAME);
+
+    const beBody = Buffer.from(BODY, "utf16le");
+    beBody.swap16();
+    expect(nameFrom(Buffer.concat([Buffer.from([0xfe, 0xff]), beBody]))).toBe(NAME);
+  });
+
+  /** Plain ASCII is valid UTF-8, so the common case takes the first branch. */
+  it("reads plain ASCII unchanged", () => {
+    const sheet = parseCsv(decodeCsv(Buffer.from("Email Address\r\na@andrew.cmu.edu", "ascii")));
+    expect(sheet.rows[0]?.["Email Address"]).toBe("a@andrew.cmu.edu");
   });
 });

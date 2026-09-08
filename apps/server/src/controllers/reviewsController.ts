@@ -32,7 +32,6 @@ export interface SaveReviewRequest {
   rationale?: string;
   privateNotes?: string;
   discussionFlag?: boolean;
-  underratedFlag?: boolean;
 }
 
 @Route("recruitment")

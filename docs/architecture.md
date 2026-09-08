@@ -90,13 +90,14 @@ packages/common/src/recruitment/
 
 apps/server/src/services/
   recruitmentCycleService.ts  importService.ts        applicantService.ts
-  candidacyService.ts         assignmentService.ts    reviewService.ts
-  aggregateService.ts         decisionService.ts
+  assignmentService.ts        reviewService.ts        rubricService.ts
+  aggregateService.ts         decisionService.ts      exportService.ts
+  membershipService.ts        githubService.ts        auditService.ts
 
 apps/server/src/controllers/
   one controller per service, named <Domain>Controller
 
-apps/web/src/routes/recruitment/
+apps/web/src/routes/recruitment.$cycleId.*.tsx    flat files, not a directory
 apps/web/src/components/recruitment/
 ```
 

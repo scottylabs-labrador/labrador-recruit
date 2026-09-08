@@ -27,7 +27,6 @@ export interface ReviewDraftInput {
   rationale?: string;
   privateNotes?: string;
   discussionFlag?: boolean;
-  underratedFlag?: boolean;
 }
 
 export interface ReviewDetail {
@@ -138,12 +137,25 @@ export const reviewService = {
     );
 
     const now = new Date();
+    // `review.assignment_id` is unique, and the read above is not in the same
+    // statement as this write, so two requests for the same assignment both see
+    // no draft and both insert. That is not hypothetical: opening a review
+    // fires the route loader's prefetch and the component's own query, and the
+    // loser of the race got a 500 on the first click of every review.
+    //
+    // Conflicting is the ordinary outcome rather than an error, so the insert
+    // yields to whichever request got there first and the draft is re-read.
     const [created] = await db
       .insert(review)
       .values({ assignmentId, rubricId: rubric.id, createdAt: now, updatedAt: now })
+      .onConflictDoNothing({ target: review.assignmentId })
       .returning();
 
     if (!created) {
+      const raced = await reviewService.findReview(assignmentId);
+      if (raced) {
+        return raced;
+      }
       throw new HttpError(500, "Failed to create the review draft");
     }
 
@@ -191,7 +203,6 @@ export const reviewService = {
         rationale: input.rationale ?? null,
         privateNotes: input.privateNotes ?? null,
         discussionFlag: input.discussionFlag ?? false,
-        underratedFlag: input.underratedFlag ?? false,
         updatedAt: now,
       })
       .where(eq(review.id, draft.id));

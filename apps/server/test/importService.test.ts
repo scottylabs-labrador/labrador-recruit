@@ -437,3 +437,36 @@ describe("re-importing the same rows", () => {
     }
   });
 });
+
+/**
+ * The row count comes from an uploaded file, not from anything the code
+ * controls, so the statement that stores those rows has to hold at any size.
+ */
+describe("large imports", () => {
+  it("stages more rows than one INSERT can bind parameters for", async () => {
+    const { cycle } = await setupCycle();
+
+    // PostgreSQL binds at most 65535 parameters per statement and this insert
+    // uses eight per row, so one statement runs out around 8,190. The count has
+    // to clear that, not merely the chunk size, or the test passes just as
+    // happily against the single unchunked statement it exists to rule out.
+    const ROWS = 9000;
+    const header = ["Email Address", "Full Name"].join(",");
+    const body = Array.from(
+      { length: ROWS },
+      (_unused, index) => `applicant${String(index)}@andrew.cmu.edu,Person ${String(index)}`,
+    );
+    const csv = [header, ...body].join("\r\n");
+
+    const { preview } = await importService.createImport(
+      adminFor(cycle.id),
+      cycle.id,
+      "large.csv",
+      Buffer.from(csv, "utf8").toString("base64"),
+    );
+
+    expect(preview.rowCount).toBe(ROWS);
+    expect(preview.okCount).toBe(ROWS);
+    expect(preview.duplicateEmails).toEqual([]);
+  });
+});

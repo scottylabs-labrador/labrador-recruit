@@ -1,3 +1,4 @@
+import { NotPermittedError } from "@labrador/access-control";
 import * as Sentry from "@sentry/bun";
 import type { NextFunction, Request, Response } from "express";
 import { ValidateError } from "tsoa";
@@ -66,12 +67,47 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     return res.status(err.status).json({ name: err.name, message: err.message });
   }
 
+  // A caller with no rule at all for a subject is refused, not broken. Without
+  // this the refusal fell through to the branch below and was reported as a
+  // 500 carrying the access-control layer's own wording, which told the reader
+  // the server had failed when in fact it had declined.
+  if (err instanceof NotPermittedError) {
+    return res.status(403).json({
+      name: "Forbidden",
+      message: "You do not have permission to view this.",
+    });
+  }
+
+  // Body-parser reports an oversized request as an ordinary Error carrying a
+  // status, so it fell through to the branch below and was answered with a 500
+  // reading "Internal Server Error: request entity too large" - a server fault,
+  // for a file the person could simply have split.
+  if (isPayloadTooLarge(err)) {
+    return res.status(413).json({
+      name: "PayloadTooLarge",
+      message:
+        "That file is too large to upload in one request. Split the export into " +
+        "two files and import them one after the other; an import is idempotent, " +
+        "so importing the halves separately produces exactly the same result.",
+    });
+  }
+
   if (err instanceof Error) {
     captureUnexpectedError(`Unexpected error in ${req.path}: ${err}`);
     return res.status(500).json({ message: `Internal Server Error: ${err.message}` });
   }
 
   return next();
+}
+
+/**
+ * Whether an error is body-parser's "request entity too large".
+ *
+ * Matched on the `type` it sets rather than the class, which body-parser does
+ * not export, or the message, which is not part of its contract.
+ */
+function isPayloadTooLarge(err: unknown): boolean {
+  return err instanceof Error && (err as { type?: unknown }).type === "entity.too.large";
 }
 
 /**

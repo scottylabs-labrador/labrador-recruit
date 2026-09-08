@@ -1,8 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/recruitment/StateViews.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
+import { Button } from "@/components/ui/button.tsx";
 import { Label, Select } from "@/components/ui/field.tsx";
 import {
   Table,
@@ -82,6 +83,31 @@ function MyQueuePage() {
   if (statusFilter !== "") query.status = statusFilter;
   if (committeeFilter !== "") query.committeeId = committeeFilter;
 
+  const navigate = useNavigate();
+  const [exhausted, setExhausted] = useState(false);
+
+  /**
+   * Takes the next applicant rather than waiting to be given one.
+   *
+   * Work is claimed, not allotted, so a reviewer who gets through applications
+   * faster simply takes more of them. A 204 means the cycle has nothing left
+   * for this reviewer - everything in their committees either has enough
+   * reviews already or is one they hold - which is an ordinary end state and
+   * is reported as such rather than as a failure.
+   */
+  const claimNext = $api.useMutation("post", "/recruitment/cycles/{cycleId}/next-review", {
+    onSuccess: (data) => {
+      if (!data) {
+        setExhausted(true);
+        return;
+      }
+      void navigate({
+        to: "/recruitment/$cycleId/review/$assignmentId",
+        params: { cycleId, assignmentId: data.assignmentId },
+      });
+    },
+  });
+
   const queue = $api.useQuery("get", "/recruitment/cycles/{cycleId}/my-queue", {
     params: { path: { cycleId }, query },
   });
@@ -134,8 +160,27 @@ function MyQueuePage() {
               ))}
             </Select>
           </div>
+          <Button
+            disabled={claimNext.isPending}
+            onClick={() => {
+              setExhausted(false);
+              claimNext.mutate({ params: { path: { cycleId } } });
+            }}
+          >
+            {claimNext.isPending ? "Finding one…" : "Review next applicant"}
+          </Button>
         </div>
       </div>
+
+      {exhausted ? (
+        <p className="text-sm leading-6 text-muted-foreground">
+          Nothing left to claim. Every applicant in your committees either has the reviews it needs
+          or is already in your queue.
+        </p>
+      ) : null}
+      {claimNext.isError ? (
+        <ErrorState title="Could not claim a review" error={claimNext.error} />
+      ) : null}
 
       {queue.isError ? (
         <ErrorState title="Could not load your review queue" error={queue.error} />
@@ -146,7 +191,7 @@ function MyQueuePage() {
           title="Nothing in your queue"
           description={
             committeeFilter === "" && statusFilter === ""
-              ? "You have no review assignments in this cycle. A committee lead or recruitment admin assigns reviewers."
+              ? "You have no review assignments yet. Press “Review next applicant” to take one."
               : "No assignments match these filters. Clear a filter to see the rest of your queue."
           }
         />

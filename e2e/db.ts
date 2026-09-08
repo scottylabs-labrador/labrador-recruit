@@ -28,6 +28,7 @@ export async function resetDb() {
   await db.execute(sql`
     TRUNCATE TABLE
       "audit_event",
+      "applicant_github_profile",
       "import_row",
       "import_batch",
       "final_placement",

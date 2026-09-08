@@ -1,4 +1,5 @@
 export { getRecruitmentAbility } from "./abac.ts";
+export { NotPermittedError } from "./drizzle.ts";
 export type { RecruitmentAbility, RecruitmentPermission } from "./abac.ts";
 export * from "./permissions.ts";
 export type {

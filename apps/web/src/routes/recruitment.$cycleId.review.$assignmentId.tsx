@@ -50,7 +50,6 @@ interface FormState {
   rationale: string;
   privateNotes: string;
   discussionFlag: boolean;
-  underratedFlag: boolean;
 }
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -528,15 +527,6 @@ function ReviewPage() {
                       />
                       <span>Bring this applicant to discussion</span>
                     </label>
-                    <label htmlFor="underrated-flag" className="flex items-start gap-2 text-sm">
-                      <Checkbox
-                        id="underrated-flag"
-                        checked={form.underratedFlag}
-                        onChange={(event) => updateForm({ underratedFlag: event.target.checked })}
-                        className="mt-0.5"
-                      />
-                      <span>I think we&rsquo;re underrating this applicant</span>
-                    </label>
                   </div>
 
                   {confirmingSubmit ? (
@@ -716,7 +706,6 @@ function LockedReview({ review }: { review: ReviewDetail }) {
       )}
       <div className="flex flex-wrap gap-2">
         {review.discussionFlag ? <Badge variant="outline">Flagged for discussion</Badge> : null}
-        {review.underratedFlag ? <Badge variant="outline">Marked as underrated</Badge> : null}
       </div>
     </div>
   );
@@ -746,7 +735,6 @@ function toFormState(review: ReviewDetail): FormState {
     rationale: review.rationale ?? "",
     privateNotes: review.privateNotes ?? "",
     discussionFlag: review.discussionFlag,
-    underratedFlag: review.underratedFlag,
   };
 }
 
@@ -756,7 +744,6 @@ function toSaveRequest(form: FormState): SaveReviewRequest {
     rationale: form.rationale,
     privateNotes: form.privateNotes,
     discussionFlag: form.discussionFlag,
-    underratedFlag: form.underratedFlag,
   };
   if (form.recommendation !== "") body.recommendation = form.recommendation;
   if (form.confidence !== "") body.confidence = form.confidence;

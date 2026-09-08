@@ -27,6 +27,10 @@ const STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 export interface GithubProfileView {
   username: string;
   repos: GithubRepo[];
+  /** Repository counts per language, as GitHub labels them. */
+  languages: Record<string, number>;
+  /** Commits in GitHub's retained public events, or null without a token. */
+  recentCommits: number | null;
   error: string | null;
   fetchedAt: Date | null;
 }
@@ -89,6 +93,8 @@ export const githubService = {
     return {
       username: row.username,
       repos: (row.repos ?? []) as GithubRepo[],
+      languages: (row.languageCounts ?? {}) as Record<string, number>,
+      recentCommits: row.recentCommits,
       error: row.error,
       fetchedAt: row.fetchedAt,
     };
@@ -150,8 +156,20 @@ export const githubService = {
     now: Date = new Date(),
   ): Promise<void> => {
     const values = result.ok
-      ? { repos: result.repos, error: null, httpStatus: null }
-      : { repos: null, error: result.error, httpStatus: result.httpStatus };
+      ? {
+          repos: result.repos,
+          languageCounts: result.languages,
+          recentCommits: result.recentCommits,
+          error: null,
+          httpStatus: null,
+        }
+      : {
+          repos: null,
+          languageCounts: null,
+          recentCommits: null,
+          error: result.error,
+          httpStatus: result.httpStatus,
+        };
 
     await db
       .insert(applicantGithubProfile)
@@ -235,7 +253,11 @@ export const githubService = {
       return null;
     }
 
-    await githubService.record(applicationId, username, await fetchRepos(username));
+    await githubService.record(
+      applicationId,
+      username,
+      await fetchRepos(username, env.GITHUB_TOKEN),
+    );
     return githubService.getProfile(acUser, applicationId);
   },
 };

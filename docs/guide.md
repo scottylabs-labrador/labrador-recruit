@@ -219,6 +219,10 @@ previews, and the GitHub refresher tops up cached facts within an hourly budget.
 Neither can change applicant data on its own — the sync stops at a preview, and
 GitHub data never feeds a score.
 
+Both are `setInterval` timers started in `server.ts`, so they run only where the
+API is a long-running process. The Vercel deployment invokes a handler per
+request and never starts either one.
+
 ## Reference
 
 ### Screens

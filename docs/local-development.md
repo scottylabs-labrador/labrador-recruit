@@ -47,11 +47,30 @@ docker compose -f .devcontainer/docker-compose.yml up -d postgres
 That serves PostgreSQL on `localhost:5432` with user `postgres`, password
 `donotuseinprod`, database `labrador-recruit`.
 
+The `packages/db` scripts resolve their `DATABASE_URL` through secretspec, so they need
+ScottyLabs OpenBao access:
+
 ```bash
 cd packages/db
 bun run db:migrate    # apply migrations
 bun run db:seed       # synthetic development data
 bun run db:studio     # browse the database
+```
+
+Without that access, use the `:local` equivalents from the repository root, which read
+`.env.local` instead. These are the ones to reach for on a fresh checkout:
+
+```bash
+bun run db:migrate:local
+bun run db:seed:local
+```
+
+`db:seed:local` creates the `fall-2026` cycle outright rather than reconciling one, so a
+second run stops on the slug's unique constraint. Re-seeding means starting from an empty
+database:
+
+```bash
+docker exec labrador-recruit-postgres psql -U postgres -c 'DROP DATABASE "labrador-recruit" WITH (FORCE)' -c 'CREATE DATABASE "labrador-recruit"'
 ```
 
 ## Secrets
@@ -108,9 +127,15 @@ deliberate — see [`architecture.md`](architecture.md).
 
 **The "Sign in with your Andrew ID" button is a different thing** and does not work
 locally. It goes to Keycloak, and `.env.local.example` ships a placeholder
-`AUTH_ISSUER` (`auth.example.com`) that does not resolve. The interface detects
-that no OIDC client is registered and withholds that button rather than sending you
-to a provider that will reject you.
+`AUTH_ISSUER` (`auth.example.com`) that does not resolve.
+
+What decides this is `AUTH_CLIENT_ID`, not the issuer. It ships as the sentinel
+`not-yet-registered`, which `isClientIdRegistered` reads as "no identity provider
+here": the interface withholds the Keycloak button rather than sending you to a
+provider that will reject you, and `PASSWORD_SIGN_IN=auto` turns the password form
+on in its place. Setting `AUTH_CLIENT_ID` to any other value flips **both** — the
+button appears and the password form disappears — so a plausible-looking
+placeholder there leaves no way to sign in at all.
 
 There is also `dev:login`, which mints a session directly without a password:
 

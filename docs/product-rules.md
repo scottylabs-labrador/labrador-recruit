@@ -45,6 +45,22 @@ display only facts as GitHub states them:
 - star count
 - last-push date
 - the repository URL
+- how many public repositories use each language, counted across all of them
+- commits in the public events GitHub still retains, roughly the last ninety days
+
+The last two were added on 8 September 2026, on the request that a reviewer be
+able to see at a glance what somebody works in and whether they are active. Both
+are counts of what GitHub itself states. The language tally is arithmetic over
+the primary-language field already listed above; the commit figure is labelled
+as recent activity wherever it appears, because a number that looks like a
+lifetime total and is not would mislead a reviewer more than showing nothing.
+
+Detecting which tools an applicant used to write their code - AI assistants
+among them - was considered and refused. There is no such field for GitHub to
+state: it could only be inferred from commit trailers and code shape, which is
+inference about a person from artifacts and is what section 1 forbids. It is
+also a poor signal, largely measuring whether somebody squashes commits, and
+using it would penalise applicants for ordinary modern tooling.
 
 Everything else in section 1 stands unchanged, and applies to this data specifically:
 
