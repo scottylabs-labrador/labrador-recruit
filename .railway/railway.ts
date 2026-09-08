@@ -77,7 +77,18 @@ export default defineRailway(() => {
   });
 
   const Postgres = postgres("Postgres");
-  Postgres.networking = { privateNetworkEndpoint: "postgres" };
+  // Private network only. A TCP proxy was opened once to load the Fall 2026
+  // cycle and closed again in the same session; if another bulk load is ever
+  // needed, add `tcpProxies: { "5432": {} }` here, apply, and remove it after.
+  // The database is reachable only on the private network. A public TCP proxy
+  // was opened once to load the Fall 2026 cycle from the machine that held it,
+  // and is closed here.
+  //
+  // The port is mapped to `null`, which is the only spelling that removes it.
+  // Omitting the key reads as "not managed here" and an empty map is ignored
+  // with a warning - both leave the database open to the internet while the
+  // plan reports no drift, which is the worst of the three outcomes.
+  Postgres.networking = { privateNetworkEndpoint: "postgres", tcpProxies: { "5432": null } };
   // Pinned to what Railway provisioned. Left unspecified, every subsequent
   // `config plan` proposes nulling the region and size back out, which reads as
   // a destructive change against the database's own storage.
