@@ -174,6 +174,17 @@ itself would rewrite applicant records with nobody watching. Committing stays a
 named act on the Import screen. To switch it on: create a Google service
 account, share the sheet with its `client_email` as a viewer, put the key JSON
 in `GOOGLE_SERVICE_ACCOUNT_KEY`, and set `SHEET_SYNC_INTERVAL_MINUTES`.
+`bun run apps/server/scripts/checkSheet.ts "<url>"` verifies the whole path
+before you wire it into a cycle. Full walkthrough in
+[`running-a-cycle.md`](running-a-cycle.md).
+
+Note that `SHEET_SYNC_INTERVAL_MINUTES` does nothing on the Vercel deployment:
+both schedules are `setInterval` timers started in `server.ts`, and Vercel
+invokes `api/index.ts` per request with no long-running process to hold them.
+The manual Sync now button is unaffected. Moving either schedule to Vercel Cron
+means adding an endpoint for it to call, and that endpoint needs its own
+authentication — an unauthenticated trigger is a way to make the deployment
+fetch a URL on demand.
 
 **GitHub enrichment** is off unless `GITHUB_ENRICHMENT=on`, because fetching an
 applicant-provided link at all is a carve-out from product rule 1. It is

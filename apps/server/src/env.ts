@@ -45,6 +45,16 @@ const envSchema = z.object({
    */
   SHEET_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().optional(),
   /**
+   * A GitHub token, which only raises the request budget.
+   *
+   * Unauthenticated the whole deployment gets 60 requests an hour, which one
+   * sitting of a dozen applicants exhausts. A token raises that to 5,000 and is
+   * what makes per-applicant activity affordable at all. It needs no scopes:
+   * everything read here is public, and a scopeless token is the least
+   * dangerous thing to hold.
+   */
+  GITHUB_TOKEN: z.string().optional(),
+  /**
    * Whether to fetch verbatim GitHub facts for applicants who supplied a link.
    *
    * Off unless explicitly "on". Fetching an applicant-provided link at all is a

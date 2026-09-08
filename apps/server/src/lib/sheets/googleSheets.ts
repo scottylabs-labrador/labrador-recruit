@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 
+import { isKnownHeader } from "../import/headerMap.ts";
 import type { ParsedSheet, RawRow } from "../import/types.ts";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -180,8 +181,9 @@ export function toParsedSheet(values: string[][], sheetName: string): ParsedShee
 /**
  * Reads a spreadsheet as if it had been uploaded.
  *
- * `range` may be null, which reads the first worksheet whole - what a form's
- * response sheet wants, and what an admin who pasted a link expects.
+ * `range` may be null, which reads whichever worksheet the form mapping
+ * recognises best - what a form's response sheet wants, and what an admin who
+ * pasted a link expects.
  */
 export async function fetchSheet(
   key: ServiceAccountKey,
@@ -191,7 +193,7 @@ export async function fetchSheet(
 ): Promise<ParsedSheet> {
   const token = await accessToken(key, now);
 
-  const resolvedRange = range ?? (await firstSheetName(token, spreadsheetId));
+  const resolvedRange = range ?? (await pickSheetName(token, spreadsheetId));
   const url = `${SHEETS_URL}/${spreadsheetId}/values/${encodeURIComponent(resolvedRange)}`;
 
   const response = await fetch(url, {
@@ -216,8 +218,43 @@ export async function fetchSheet(
   return toParsedSheet(body.values ?? [], resolvedRange);
 }
 
-/** The first worksheet's name, used when no explicit range is configured. */
-async function firstSheetName(token: string, spreadsheetId: string): Promise<string> {
+/**
+ * A header cell as the mapping will see it.
+ *
+ * CRLF is folded and the edges trimmed, but never the interior: several Fall
+ * 2026 Foundry columns genuinely contain a newline, and stripping it would stop
+ * the header matching. Identical to `parseWorkbook`'s own normalisation, which
+ * is what lets an upload and a sync agree on which worksheet is the right one.
+ */
+function normalizeHeaderText(raw: string): string {
+  return raw.replaceAll("\r\n", "\n").trim();
+}
+
+/**
+ * What a spreadsheet looks like from here, without reading any of its rows.
+ *
+ * Exists for the `checkSheet` operator script. Configuring this has four
+ * separate ways to fail - a malformed key, a key Google rejects, a sheet that
+ * was never shared, and the right sheet with the wrong tab chosen - and the
+ * sync endpoint can only ever report the first one it hits. Returning the
+ * worksheet list alongside the choice is what turns "the sync found nothing"
+ * into "it read Instructions, set a range".
+ *
+ * Deliberately returns titles rather than exposing the internals: the token
+ * exchange and the scoring stay private to this module.
+ */
+export async function inspectSpreadsheet(
+  key: ServiceAccountKey,
+  spreadsheetId: string,
+  now: number = Date.now(),
+): Promise<{ titles: string[]; chosen: string }> {
+  const token = await accessToken(key, now);
+  const titles = await sheetTitles(token, spreadsheetId);
+  return { titles, chosen: await pickSheetName(token, spreadsheetId) };
+}
+
+/** Every worksheet title, in the order the spreadsheet holds them. */
+async function sheetTitles(token: string, spreadsheetId: string): Promise<string[]> {
   const response = await fetch(`${SHEETS_URL}/${spreadsheetId}?fields=sheets.properties.title`, {
     headers: { Authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -233,9 +270,81 @@ async function firstSheetName(token: string, spreadsheetId: string): Promise<str
   const body = (await response.json()) as {
     sheets?: Array<{ properties?: { title?: string } }>;
   };
-  const title = body.sheets?.[0]?.properties?.title;
-  if (typeof title !== "string") {
+  const titles = (body.sheets ?? []).flatMap((sheet) => {
+    const title = sheet.properties?.title;
+    return typeof title === "string" ? [title] : [];
+  });
+
+  if (titles.length === 0) {
     throw new SheetError("The spreadsheet has no worksheets");
   }
-  return title;
+  return titles;
+}
+
+/**
+ * A worksheet title as an A1 range covering its header row.
+ *
+ * A title containing an apostrophe - "Reviewers' notes" - has to double it, or
+ * the quote closes the range early and Google rejects the whole batch.
+ */
+function headerRange(title: string): string {
+  return `'${title.replaceAll("'", "''")}'!1:1`;
+}
+
+/**
+ * Picks the worksheet whose headers the form mapping recognises best.
+ *
+ * The same choice `parseXlsx` makes, and for the same reason. Google Sheets
+ * keeps `Form Responses 1` alongside whatever tabs the committee added, and the
+ * Fall 2026 file leads with a hand-written `Instructions` sheet. Taking the
+ * first worksheet read that one: a staged preview of zero applicants, no error,
+ * no unmapped column, nothing on screen to say the wrong tab had been read.
+ *
+ * Costs one extra request, and only when there is more than one worksheet to
+ * choose between. Ties and a total absence of recognisable headers both fall
+ * back to the first worksheet, so the behaviour on an ordinary single-tab sheet
+ * is exactly what it was.
+ */
+async function pickSheetName(token: string, spreadsheetId: string): Promise<string> {
+  const titles = await sheetTitles(token, spreadsheetId);
+  const first = titles[0] as string;
+  if (titles.length === 1) {
+    return first;
+  }
+
+  const query = titles.map((title) => `ranges=${encodeURIComponent(headerRange(title))}`).join("&");
+  const response = await fetch(`${SHEETS_URL}/${spreadsheetId}/values:batchGet?${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+
+  // Choosing between worksheets is an optimisation over "take the first", so a
+  // failure here degrades to that rather than failing the sync outright.
+  if (!response.ok) {
+    return first;
+  }
+
+  const body = (await response.json()) as {
+    valueRanges?: Array<{ values?: string[][] }>;
+  };
+
+  let best = first;
+  let bestScore = 0;
+  // batchGet answers in the order the ranges were asked for, so the index is
+  // the worksheet. A strict improvement is required to displace the incumbent,
+  // which is what makes the earliest of equally good tabs win.
+  titles.forEach((title, index) => {
+    const header = body.valueRanges?.[index]?.values?.[0] ?? [];
+    const score = header.filter((cell) => {
+      const text = typeof cell === "string" ? normalizeHeaderText(cell) : "";
+      return text !== "" && isKnownHeader(text);
+    }).length;
+
+    if (score > bestScore) {
+      best = title;
+      bestScore = score;
+    }
+  });
+
+  return best;
 }

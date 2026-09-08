@@ -23,9 +23,93 @@ export interface GithubRepo {
   url: string;
 }
 
+/**
+ * How many public repositories use each language, counted across every
+ * repository GitHub returned rather than the five that are displayed.
+ *
+ * A count of a field GitHub itself states, and nothing more. It is not a
+ * ranking, is not compared between applicants, and feeds no aggregate: it
+ * saves a reviewer opening five tabs to see the same thing.
+ */
+export type LanguageCounts = Record<string, number>;
+
 export type GithubFetchResult =
-  | { ok: true; repos: GithubRepo[] }
+  | { ok: true; repos: GithubRepo[]; languages: LanguageCounts; recentCommits: number | null }
   | { ok: false; error: string; httpStatus: number | null; rateLimited: boolean };
+
+/**
+ * Request headers, authenticated only when a token is supplied.
+ *
+ * The token is passed in rather than read from `env` here, so this module stays
+ * free of configuration and the fast unit tests can exercise it without booting
+ * the environment - the same reason `authConfig.ts` takes its client id.
+ */
+function githubHeaders(token: string | undefined): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+  if (token !== undefined && token !== "") {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+/**
+ * Tallies the primary language of every repository.
+ *
+ * Costs nothing: the language is already in the response the repository list
+ * returned, so this is arithmetic over data in hand rather than a second call.
+ */
+export function countLanguages(repos: GithubRepo[]): LanguageCounts {
+  const counts: LanguageCounts = {};
+  for (const repo of repos) {
+    if (repo.language === null || repo.language === "") {
+      continue;
+    }
+    counts[repo.language] = (counts[repo.language] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * Commits pushed in the events GitHub still retains, or null.
+ *
+ * GitHub keeps roughly ninety days of public events, so this is "recent
+ * activity", never a career total - and it is labelled that way on screen,
+ * because a number that looks like a lifetime count and is not would mislead a
+ * reviewer more than showing nothing.
+ *
+ * Costs one request per applicant, so it is skipped entirely without a token:
+ * on the 60-an-hour unauthenticated budget it would halve how many applicants
+ * could be enriched at all.
+ */
+export async function fetchRecentCommits(
+  username: string,
+  token: string | undefined,
+): Promise<number | null> {
+  if (token === undefined || token === "") {
+    return null;
+  }
+  try {
+    const response = await fetch(
+      `${API}/users/${encodeURIComponent(username)}/events/public?per_page=100`,
+      { headers: githubHeaders(token), signal: AbortSignal.timeout(TIMEOUT_MS) },
+    );
+    if (!response.ok) {
+      return null;
+    }
+    const events = (await response.json()) as Array<{ type?: string; payload?: { size?: number } }>;
+    if (!Array.isArray(events)) {
+      return null;
+    }
+    return events
+      .filter((e) => e.type === "PushEvent")
+      .reduce((total, e) => total + (typeof e.payload?.size === "number" ? e.payload.size : 0), 0);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The GitHub account named by a link the applicant supplied, or null.
@@ -139,14 +223,11 @@ export function toRepos(payload: unknown): GithubRepo[] {
  * deleted account, a private one and an exhausted budget are all things that
  * simply happen, and none of them is an error state on the review page.
  */
-export async function fetchRepos(username: string): Promise<GithubFetchResult> {
+export async function fetchRepos(username: string, token?: string): Promise<GithubFetchResult> {
   let response: Response;
   try {
     response = await fetch(`${API}/users/${encodeURIComponent(username)}/repos?per_page=100`, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
+      headers: githubHeaders(token),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch {
@@ -190,7 +271,14 @@ export async function fetchRepos(username: string): Promise<GithubFetchResult> {
   }
 
   try {
-    return { ok: true, repos: topRepos(toRepos(await response.json())) };
+    const all = toRepos(await response.json());
+    return {
+      ok: true,
+      repos: topRepos(all),
+      // Counted over every repository, not just the five that are shown.
+      languages: countLanguages(all),
+      recentCommits: await fetchRecentCommits(username, token),
+    };
   } catch {
     return {
       ok: false,

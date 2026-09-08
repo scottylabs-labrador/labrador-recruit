@@ -1,9 +1,15 @@
-import { application as applicationTable } from "@labrador/db/schema";
+import type { RecruitmentUser } from "@labrador/access-control";
+import {
+  application as applicationTable,
+  review as reviewTable,
+  reviewAssignment as reviewAssignmentTable,
+} from "@labrador/db/schema";
 import { eq } from "drizzle-orm";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { app } from "../src/app.ts";
+import { reviewService } from "../src/services/reviewService.ts";
 import {
   adminAuth,
   adminUser,
@@ -15,7 +21,7 @@ import {
   seedAlice,
   seedBob,
 } from "./fixtures.ts";
-import { testDb } from "./harness.ts";
+import { authHeader, seedUser, testDb } from "./harness.ts";
 import {
   linkCommitteeToCycle,
   seedApplicant,
@@ -544,6 +550,208 @@ describe("aggregates and ranking", () => {
     // Alice reviews for Tech only, so Design yields nothing rather than an error.
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(0);
+  });
+
+  // A global ScottyLabs admin who has not yet granted themselves a recruitment
+  // membership is the first thing anyone sees on a fresh deployment, and this
+  // is the request the cycle overview makes for every committee. It was
+  // answered with a 500 quoting the access-control layer at the reader, which
+  // reads as a broken server rather than a cycle they are not enrolled in.
+  it("refuses a caller with no membership rather than failing", async () => {
+    const { cycle, tech } = await setupScenario();
+    await seedUser({
+      id: "outsider",
+      name: "Outsider",
+      email: "outsider@cmu.edu",
+      accountId: "outsider-sub",
+    });
+
+    const res = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/committees/${tech.id}/aggregates`)
+      .set(authHeader({ sub: "outsider-sub", groups: ["test-admins"] }));
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).not.toMatch(/Cannot execute/);
+  });
+});
+
+/**
+ * Opening a review fires two requests for the same draft - the route loader
+ * prefetches and the component queries - so the read-then-insert that created
+ * it raced with itself and the loser hit `review_assignment_key`. It surfaced
+ * as a 500 on the first click of every review.
+ *
+ * The race is forced rather than run, because the test database is PGlite and
+ * serialises the two statements: issuing the requests concurrently passes just
+ * as happily against the unguarded insert, which would make this look like a
+ * regression test while guarding nothing. Stubbing the read to miss once is
+ * what actually puts the insert in front of a row that already exists.
+ */
+describe("opening a review draft", () => {
+  it("yields to the draft another request already created", async () => {
+    const { cycle, tech, aliceAssignment } = await setupScenario();
+    const acUser: RecruitmentUser = {
+      id: alice.id,
+      role: "user",
+      recruitment: { cycleId: cycle.id, memberships: [{ role: "reviewer", committeeId: tech.id }] },
+    };
+
+    const first = await reviewService.getOrCreateDraft(acUser, aliceAssignment.id);
+
+    // The read that loses the race: it ran before the winner's insert
+    // committed, so it correctly saw no draft. The insert that follows is the
+    // one that has to cope.
+    const findReview = vi.spyOn(reviewService, "findReview");
+    findReview.mockResolvedValueOnce(null);
+
+    const second = await reviewService.getOrCreateDraft(acUser, aliceAssignment.id);
+    findReview.mockRestore();
+
+    expect(second.id).toBe(first.id);
+
+    const rows = await testDb
+      .select()
+      .from(reviewTable)
+      .where(eq(reviewTable.assignmentId, aliceAssignment.id));
+    expect(rows).toHaveLength(1);
+  });
+});
+
+/**
+ * Work reaches reviewers by being claimed, not allotted. Nobody has a share,
+ * so a reviewer who works faster simply takes more and the cycle finishes
+ * sooner - which is the point, and is why none of these assert an even split.
+ */
+describe("claiming the next review", () => {
+  it("hands out work and never the same applicant twice to one person", async () => {
+    const { cycle } = await setupScenario();
+
+    // Alice already holds an assignment on the only Tech candidacy from the
+    // scenario, so her first claim must find nothing rather than re-issue it.
+    const first = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/next-review`)
+      .set(aliceAuth());
+
+    expect(first.status).toBe(204);
+  });
+
+  it("lets one reviewer take more than another rather than splitting evenly", async () => {
+    const { cycle, tech, application } = await setupScenario();
+
+    // Three more candidacies in Alice's committee, none assigned to anybody.
+    for (let i = 0; i < 3; i += 1) {
+      const person = await seedApplicant({
+        email: `extra${String(i)}@andrew.cmu.edu`,
+        fullName: `Extra ${String(i)}`,
+      });
+      const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
+      await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
+    }
+    expect(application).toBeDefined();
+
+    // Alice claims all three; Bob claims none. No quota stops her.
+    const claimed: string[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const res = await request(app)
+        .post(`/recruitment/cycles/${cycle.id}/next-review`)
+        .set(aliceAuth());
+      expect(res.status).toBe(200);
+      claimed.push(res.body.candidacyId);
+    }
+
+    // Three distinct applicants, and the well is now dry for her.
+    expect(new Set(claimed).size).toBe(3);
+    const exhausted = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/next-review`)
+      .set(aliceAuth());
+    expect(exhausted.status).toBe(204);
+  });
+
+  /**
+   * The database index is what guarantees this, so the test drives the service
+   * rather than trusting the query's NOT EXISTS clause to stay correct.
+   */
+  it("refuses to give a reviewer a candidacy they already hold", async () => {
+    const { cycle, tech } = await setupScenario();
+    const person = await seedApplicant({ email: "solo@andrew.cmu.edu", fullName: "Solo" });
+    const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
+    const candidacy = await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
+
+    const one = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/next-review`)
+      .set(aliceAuth());
+    expect(one.status).toBe(200);
+    expect(one.body.candidacyId).toBe(candidacy.id);
+
+    const two = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/next-review`)
+      .set(aliceAuth());
+    expect(two.status).toBe(204);
+  });
+
+  it("gives nothing to somebody with no recruitment role in the cycle", async () => {
+    const { cycle } = await setupScenario();
+    await seedUser({
+      id: "bystander",
+      name: "Bystander",
+      email: "bystander@cmu.edu",
+      accountId: "bystander-sub",
+    });
+
+    const res = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/next-review`)
+      .set(authHeader({ sub: "bystander-sub" }));
+
+    expect(res.status).toBe(403);
+  });
+
+  /**
+   * Two reviewers claiming at once must not collide - but "collide" does not
+   * mean "get the same applicant". Several people reviewing one applicant is
+   * the entire point of `minimumReviews`, so the invariant is that each claim
+   * yields its own assignment and no reviewer ends up holding a candidacy
+   * twice. An earlier version of this test asserted they got *different*
+   * applicants and failed against correct behaviour.
+   */
+  it("gives concurrent claimers their own assignments", async () => {
+    const { cycle, tech } = await setupScenario();
+    const person = await seedApplicant({ email: "race@andrew.cmu.edu", fullName: "Race" });
+    const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
+    await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
+
+    const [a, b] = await Promise.all([
+      request(app).post(`/recruitment/cycles/${cycle.id}/next-review`).set(aliceAuth()),
+      request(app).post(`/recruitment/cycles/${cycle.id}/next-review`).set(bobAuth()),
+    ]);
+
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    expect(a.body.assignmentId).not.toBe(b.body.assignmentId);
+
+    const rows = await testDb
+      .select()
+      .from(reviewAssignmentTable)
+      .where(eq(reviewAssignmentTable.candidacyId, a.body.candidacyId));
+    const reviewers = rows.map((r) => r.reviewerUserId);
+    expect(new Set(reviewers).size).toBe(reviewers.length);
+  });
+
+  /** Coverage is a ceiling: nobody is handed work that is already covered. */
+  it("stops handing out a candidacy once it has enough reviewers", async () => {
+    const { cycle, tech } = await setupScenario();
+    const person = await seedApplicant({ email: "covered@andrew.cmu.edu", fullName: "Covered" });
+    const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
+    const candidacy = await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
+
+    // The cycle's minimum is 2 in the fixture; two claims fill it.
+    await request(app).post(`/recruitment/cycles/${cycle.id}/next-review`).set(aliceAuth());
+    await request(app).post(`/recruitment/cycles/${cycle.id}/next-review`).set(bobAuth());
+
+    const rows = await testDb
+      .select()
+      .from(reviewAssignmentTable)
+      .where(eq(reviewAssignmentTable.candidacyId, candidacy.id));
+    expect(rows.length).toBeLessThanOrEqual(2);
   });
 });
 

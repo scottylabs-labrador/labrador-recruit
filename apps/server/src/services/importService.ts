@@ -25,7 +25,7 @@ type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Executor = typeof db | Transaction;
 import { detectMapping } from "../lib/import/headerMap.ts";
 import { normalizeRow } from "../lib/import/normalizeRow.ts";
-import { parseCsv, parseXlsx } from "../lib/import/parseWorkbook.ts";
+import { decodeCsv, parseCsv, parseXlsx } from "../lib/import/parseWorkbook.ts";
 import type {
   HeaderMapping,
   NormalizedApplication,
@@ -95,6 +95,21 @@ export interface ImportCommitReport {
 }
 
 /**
+ * How many raw rows to write per `INSERT`.
+ *
+ * PostgreSQL accepts at most 65535 bind parameters in one statement, and this
+ * insert binds eight per row, so a single statement runs out at about 8,190.
+ * No recruitment cycle is that large, but the row count comes from an uploaded
+ * file rather than from anything this code controls, and the failure is an
+ * opaque "Failed query" naming every column - so the bound belongs here rather
+ * than in an assumption about how many people apply.
+ *
+ * A thousand leaves room for the row to gain columns without this needing to be
+ * revisited.
+ */
+const RAW_ROW_INSERT_CHUNK = 1000;
+
+/**
  * Uploads arrive base64-encoded in the JSON body rather than as multipart, so
  * the server needs no file-upload middleware for a form export that is well
  * under the body limit.
@@ -107,7 +122,7 @@ async function parseUpload(filename: string, contentBase64: string): Promise<Par
     return parseXlsx(buffer);
   }
   if (lower.endsWith(".csv")) {
-    return parseCsv(buffer.toString("utf8"));
+    return parseCsv(decodeCsv(buffer));
   }
   throw new HttpError(422, "Only .xlsx and .csv files are supported");
 }
@@ -246,26 +261,25 @@ async function stageSheet(
 
   // Persist raw rows verbatim so a commit never depends on the file being
   // re-uploaded, and so an import can be debugged after the fact.
-  if (sheet.rows.length > 0) {
-    await db.insert(importRow).values(
-      sheet.rows.map((row, index) => {
-        const result = results[index];
-        return {
-          importId: batch.id,
-          sourceRowNumber: row.sourceRowNumber,
-          rawJson: row as unknown as Record<string, unknown>,
-          rowHash:
-            result && !result.ok ? result.rowHash : result?.ok ? result.application.rowHash : "",
-          status: result?.ok ? ("pending" as const) : ("error" as const),
-          errorMessage:
-            result && !result.ok
-              ? result.errors.map((e) => `${e.column}: ${e.message}`).join("; ")
-              : null,
-          createdAt: now,
-          updatedAt: now,
-        };
-      }),
-    );
+  const rawRows = sheet.rows.map((row, index) => {
+    const result = results[index];
+    return {
+      importId: batch.id,
+      sourceRowNumber: row.sourceRowNumber,
+      rawJson: row as unknown as Record<string, unknown>,
+      rowHash: result && !result.ok ? result.rowHash : result?.ok ? result.application.rowHash : "",
+      status: result?.ok ? ("pending" as const) : ("error" as const),
+      errorMessage:
+        result && !result.ok
+          ? result.errors.map((e) => `${e.column}: ${e.message}`).join("; ")
+          : null,
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
+
+  for (let offset = 0; offset < rawRows.length; offset += RAW_ROW_INSERT_CHUNK) {
+    await db.insert(importRow).values(rawRows.slice(offset, offset + RAW_ROW_INSERT_CHUNK));
   }
 
   await recordAuditEvent({

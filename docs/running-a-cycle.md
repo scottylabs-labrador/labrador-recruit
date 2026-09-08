@@ -82,6 +82,79 @@ all seven committees is stored regardless of which candidacies exist.
 Outreach has a top-level ranking column but no question block. That needs no
 special handling — a committee with no questions simply contributes a ranking.
 
+### Saving the export as CSV
+
+Either `.xlsx` or `.csv` works, and both produce the same preview and the same
+commit. If you export CSV out of Excel rather than Google Sheets, any of its
+three CSV options is fine — _CSV UTF-8_, plain _CSV_, and _Unicode Text_ are all
+read correctly, including accented names.
+
+That was not always true. Everything was read as UTF-8, so Excel's plain _CSV_
+(which writes the machine's legacy code page) imported perfectly with every
+accented character replaced by `?`, and _Unicode Text_ mangled its own header
+row so all 66 columns reported as unrecognised.
+
+The whole file travels inside one request, base64-encoded, which costs a third
+again on top of its own size. The limit is 16 MB, so roughly 3,000 applicants at
+the Fall 2026 form's 66 columns — the live 118-applicant export is 382 KB. Past
+that the upload is refused with an explanation rather than an error, and
+splitting the export in two and importing each half works: identity is _cycle
+plus normalised email_, so the halves cannot collide.
+
+### Connecting a Google Sheet
+
+Reading the responses sheet directly saves re-exporting it every time somebody
+applies. It needs a Google service account, because a sheet cannot be shared
+with a deployment the way it is shared with a person.
+
+Once, per deployment:
+
+1. In the [Google Cloud console](https://console.cloud.google.com), create a
+   project (or pick an existing one) and enable the **Google Sheets API** under
+   _APIs & Services → Library_.
+2. _APIs & Services → Credentials → Create credentials → Service account_. Give
+   it a name; it needs **no** project roles — its only access is what a sheet is
+   explicitly shared with.
+3. Open the account, _Keys → Add key → Create new key → JSON_, and download it.
+4. Put the **entire** file on one line as `GOOGLE_SERVICE_ACCOUNT_KEY`. The
+   escaped `
+` inside `private_key` are expected and are repaired on read.
+5. Open the responses sheet, **Share**, and add the account's `client_email`
+   (it ends `.iam.gserviceaccount.com`) as a **Viewer**.
+
+Then, per cycle: paste the sheet's link under **Settings → Application source**
+and press **Sync now**. Leave _Range_ blank unless the automatic choice is
+wrong — see below.
+
+Before wiring it into a cycle, confirm the whole path from a terminal:
+
+```bash
+bun run apps/server/scripts/checkSheet.ts "<the sheet's URL>"
+```
+
+It walks the four things that can be wrong — the link, the key, the sharing,
+and the worksheet — and names the one that is. It prints counts, column names
+and worksheet names only, never a cell of applicant data, so its output is safe
+to paste into an issue.
+
+**Which worksheet gets read.** With _Range_ blank, the sync reads whichever
+worksheet's headers best match the declared form, exactly as an upload does.
+This matters because a form's spreadsheet rarely has only one tab: the Fall 2026
+file leads with a hand-written `Instructions` sheet, and reading that produced a
+clean preview of zero applicants — no error, no unmapped column, nothing on
+screen to say the wrong tab had been read. If the choice is ever wrong, name the
+tab in _Range_ (`Form Responses 1`, or `Form Responses 1!A:BN`); an explicit
+range always wins.
+
+**The schedule** is `SHEET_SYNC_INTERVAL_MINUTES`, in minutes, unset by default.
+It is an in-process timer, so it runs only where the API is a long-running
+process — `bun run dev:local`, a container, Railway. **On Vercel there is no
+such process and the timer never runs**; the Sync now button still works.
+
+A scheduled pull only ever stages a preview. Nothing about applicant data
+changes until a named person presses commit on the Import screen, which is why a
+schedule is safe to leave running.
+
 ## 4. Assign reviewers
 
 Default is three reviewers per candidacy. `GET /recruitment/cycles/{id}/workloads`

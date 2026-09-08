@@ -50,6 +50,13 @@
       "when": 1788540043548,
       "tag": "0006_strong_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788885021090,
+      "tag": "0007_github_language_and_commits",
+      "breakpoints": true
     }
   ]
 }

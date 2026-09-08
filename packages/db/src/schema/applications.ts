@@ -334,6 +334,25 @@ export const applicantGithubProfile = pgTable(
     repos: jsonb("repos"),
 
     /**
+     * How many public repositories use each language, as GitHub labels them.
+     *
+     * Counted over every repository rather than the five that are displayed,
+     * and stored because it is derived from the same response - recomputing it
+     * would mean asking GitHub again. A count of a stated fact, never a
+     * ranking: nothing here reaches an aggregate or a score.
+     */
+    languageCounts: jsonb("language_counts"),
+
+    /**
+     * Commits in the public events GitHub still retains - roughly ninety days.
+     *
+     * Null when no GitHub token is configured, because the unauthenticated
+     * budget cannot afford the extra request per applicant. Never a career
+     * total, and labelled as recent activity wherever it is shown.
+     */
+    recentCommits: integer("recent_commits"),
+
+    /**
      * Why the last attempt produced nothing, in words a reviewer can read.
      *
      * A private account, a deleted one, or a rate limit are all ordinary

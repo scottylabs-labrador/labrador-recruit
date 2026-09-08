@@ -2,7 +2,7 @@ import { AbilityBuilder, createMongoAbility, type MongoAbility } from "@casl/abi
 import { boolean, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
-import { drizzleWhere } from "../src/drizzle.ts";
+import { drizzleWhere, NotPermittedError } from "../src/drizzle.ts";
 import type { User } from "../src/types.ts";
 
 type DocumentSubject = { userId: string; private: boolean };
@@ -49,5 +49,20 @@ describe("drizzleWhere", () => {
 
   it("throws when the action is forbidden", () => {
     expect(() => drizzleWhere(getDocumentAbility(guest), "delete", "Document", document)).toThrow();
+  });
+
+  // The class is what the server keys its 403 off. Re-throwing CASL's own
+  // error left the refusal indistinguishable from a crash, so it was reported
+  // as a 500 with CASL's internal wording in the body.
+  it("throws NotPermittedError, naming the action and subject", () => {
+    let thrown: unknown;
+    try {
+      drizzleWhere(getDocumentAbility(guest), "delete", "Document", document);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(NotPermittedError);
+    expect(thrown).toMatchObject({ action: "delete", subject: "Document" });
   });
 });

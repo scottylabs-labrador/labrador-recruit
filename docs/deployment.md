@@ -1,92 +1,121 @@
 # Deployment
 
-One Vercel project serves both the interface and the API, with Postgres on Neon.
+Railway, in the ScottyLabs project **Labrador Recruiting**, at
+<https://labrador-recruit-production.up.railway.app>.
 
-Serving both from one deployment makes them same-origin. That is not only
-tidiness: a split deployment needs a `SameSite=None` session cookie and a CORS
-allowlist, and both were a source of quiet, confusing failures where sign-in
-appeared to succeed and the application behaved as though nobody had signed in.
+Three resources, defined in code in [`.railway/railway.ts`](../.railway/railway.ts):
+
+| Resource                  | What it is                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------- |
+| `labrador-recruit`        | The interface, on Caddy. The only public address.                               |
+| `labrador-recruit-server` | The API. Private network only, port 8080.                                       |
+| `Postgres`                | Railway Postgres, with `postgres-volume` mounted at `/var/lib/postgresql/data`. |
+
+## One origin, not two
+
+The API has no public address. `apps/web/Caddyfile` reverse-proxies the API's
+own paths through the interface's origin, so the browser only ever talks to one
+host.
+
+This is a departure from ScottyStack, which publishes the interface and the API
+on sibling hosts. That works there because both sit under `scottylabs.org`, so
+a cookie set by one is same-site for the other. `up.railway.app` is on the
+Public Suffix List, which makes two Railway subdomains different _sites_ — and a
+session cookie between them is a third-party cookie, which Safari blocks
+outright. Sign-in would return 200 and the application would behave as though
+nobody had signed in.
+
+One origin also means `SameSite=Lax` and no CORS at all. Moving to a real domain
+such as `recruit.scottylabs.org` would make the two-service layout viable again,
+but would not make it preferable.
+
+## Migrations
+
+`apps/server/docker-entrypoint.sh` applies them when the container starts, then
+execs the server. `set -e` means a failed migration kills the container and
+Railway keeps the previous deployment serving, so traffic never reaches a
+half-migrated database.
+
+Deliberately _not_ Railway's `preDeployCommand`, which the ScottyStack template
+uses: the two together ran the same migration twice per deploy and gave it two
+different places to fail.
+
+## Changing the infrastructure
+
+Edit `.railway/railway.ts`, then:
+
+```bash
+railway config plan     # read-only; shows exactly what would change
+railway config apply    # asks before applying
+```
+
+`plan` should report "already up to date" against a clean checkout. If it wants
+to change something you did not change, Railway drifted — reconcile before
+applying anything else.
+
+On Windows the IaC engine shells out to `$_` for its CLI version check, which
+Git Bash sets to something else and PowerShell leaves unset. If `plan` claims
+the CLI is too old, run it as:
+
+```bash
+RW="$APPDATA/npm/node_modules/@railway/cli/bin/railway.exe"
+env _="$RW" "$RW" config plan
+```
+
+## The previous deployment
+
+Vercel and Neon. `vercel.json`, `api/index.ts` and `apps/server/src/vercelEntry.ts`
+still work and are still in the repository. Nothing reads them on Railway, which
+builds from `apps/*/Dockerfile`. Delete them once Railway has carried a cycle.
+
+One behavioural difference worth knowing: the in-process timers in `server.ts`
+(sheet sync, GitHub refresh) never ran on Vercel, which has no long-running
+process. On Railway they do, so `SHEET_SYNC_INTERVAL_MINUTES` now has an effect.
 
 ## Before you start
 
-- A Vercel account, and `vercel login`.
-- A Neon account, and `neonctl auth`.
+- Railway access to the ScottyLabs workspace, and `railway login`.
+- Railway CLI **5.42.1 or newer** — `railway config` does not exist before that,
+  and the IaC engine now ships in the CLI rather than the npm SDK.
 - **Never paste a secret into a chat, an issue, or a commit.** Put it straight
-  into Vercel's environment editor. A secret that appears in a transcript has to
-  be rotated — or, if the thing it protects is disposable, replaced outright.
-
-## Database
-
-```bash
-neonctl projects create --name labrador-recruit --org-id <your-org>
-neonctl connection-string --project-id <project-id> --pooled
-```
-
-Use the **pooled** connection string. Serverless functions open a connection per
-invocation and a direct endpoint runs out of them under any real load.
-
-Run the migrations before the first deploy:
-
-```bash
-cd packages/db && DATABASE_URL="<pooled-url>" bunx drizzle-kit migrate
-```
-
-## Vercel project
-
-Create the project without letting the CLI autodetect a framework — it
-recognises the Express dependency and writes a `services` block that does not
-apply here:
-
-```bash
-vercel project add labrador-recruit-app
-vercel link --yes --project labrador-recruit-app
-vercel deploy --prod
-```
-
-`vercel.json` at the repository root does the rest. Two parts of it are
-load-bearing and easy to break:
-
-**The API is bundled to a single file.** `apps/server/src/vercelEntry.ts` is
-bundled by `bun run build:vercel`, and `api/index.ts` re-exports the bundle.
-This is not an optimisation. The source is written for Bun — `.ts` import
-specifiers — and tsoa generates its route table with extensionless imports.
-Node's ESM resolver accepts neither, so without bundling the function fails at
-runtime on whichever import it reaches first. `api/package.json` declares
-`"type": "module"` because the workspaces are ESM but the repository root is
-not, and the nearest `package.json` is what Node consults.
-
-**The rewrites name the API's own resources rather than a prefix.** The API and
-the interface both own paths under `/recruitment`: the API serves
-`/recruitment/cycles`, the interface serves `/recruitment/<cycleId>/queue`. A
-catch-all sends every deep link into the interface to the API, which answers
-404 — and the application then works only if nobody ever navigates directly to a
-page. If you add a controller with a new top-level route, add it to the
-rewrites.
+  into Railway's variable editor. A secret that appears in a transcript has to be
+  rotated.
 
 ## Environment
 
-Set these on the Vercel project, for Production:
+Everything below is set by `.railway/railway.ts` except the three noted, which
+Railway holds and the file only preserves.
 
-| Variable                | Value                                                   |
-| ----------------------- | ------------------------------------------------------- |
-| `DATABASE_URL`          | the Neon **pooled** connection string                   |
-| `SERVER_URL`            | the deployment's own URL                                |
-| `BETTER_AUTH_URL`       | the same URL — the interface and API share an origin    |
-| `VITE_SERVER_URL`       | the same URL again; read at build time by the interface |
-| `BETTER_AUTH_SECRET`    | `openssl rand -base64 32`, generated fresh              |
-| `ALLOWED_ORIGINS_REGEX` | `^https://<domain>$`                                    |
-| `ADMIN_GROUP`           | the group name that grants the global admin role        |
-| `AUTH_ISSUER`           | `https://idp.scottylabs.org/realms/labrador`            |
-| `AUTH_JWKS_URI`         | the realm's JWKS endpoint                               |
-| `AUTH_CLIENT_ID`        | `not-yet-registered` until an OIDC client exists        |
-| `AUTH_CLIENT_SECRET`    | `not-yet-registered` until an OIDC client exists        |
-| `SENTRY_DSN`            | optional                                                |
+| Variable                | Value                                                     |
+| ----------------------- | --------------------------------------------------------- |
+| `DATABASE_URL`          | `${{Postgres.DATABASE_URL}}` — the Railway Postgres       |
+| `SERVER_URL`            | the public origin; Better Auth builds callbacks from it   |
+| `BETTER_AUTH_URL`       | the same origin                                           |
+| `VITE_SERVER_URL`       | the same origin again, on the **web** service             |
+| `API_ORIGIN`            | `http://labradorrecruitserver.railway.internal:8080`      |
+| `SERVER_PORT`           | `8080`, pinned so `API_ORIGIN` can name it                |
+| `ALLOWED_ORIGINS_REGEX` | anchored to the public origin                             |
+| `ADMIN_GROUP`           | `labrador-recruit-admins`                                 |
+| `AUTH_ALLOWED_GROUPS`   | `labrador-recruit`                                        |
+| `AUTH_ISSUER`           | `https://idp.scottylabs.org/realms/labrador`              |
+| `AUTH_JWKS_URI`         | the realm's JWKS endpoint                                 |
+| `AUTH_CLIENT_ID`        | `not-yet-registered` until an OIDC client exists          |
+| `AUTH_CLIENT_SECRET`    | `not-yet-registered` until an OIDC client exists          |
+| `PASSWORD_SIGN_IN`      | `auto`                                                    |
+| `GITHUB_ENRICHMENT`     | `off`                                                     |
+| `BETTER_AUTH_SECRET`    | **held by Railway**, generated once; `preserve()` in code |
+| `SENTRY_DSN`            | **held by Railway**, optional                             |
+| `VITE_PUBLIC_POSTHOG_*` | **held by Railway**, optional                             |
 
-`AUTH_ISSUER` and `AUTH_JWKS_URI` must be valid URLs even when no client is
-registered, because the environment is validated at boot. `AUTH_CLIENT_ID` set
-to `not-yet-registered` is what `GET /auth/config` reports on, so the interface
-withholds the single sign-on button and explains why instead of sending someone
-to an identity provider that will reject them.
+Two of these are load-bearing in ways that are easy to get wrong.
+
+**Both `AUTH_CLIENT_*` must be strings, always.** `env.ts` requires them, so
+`preserve()` on a variable that has never been set leaves it `undefined` and the
+server dies on its own environment validation _after_ migrating the database —
+which looks like a database problem and is not one.
+
+**`VITE_SERVER_URL` is read at build time**, not run time. Vite bakes it into the
+bundle, so changing it needs a rebuild of the web service, not a restart.
 
 ## Accounts
 
@@ -98,10 +127,14 @@ The first account has to come from outside the application, because the admin
 endpoint needs an administrator to call it:
 
 ```bash
-vercel env pull .env.production --environment=production
-set -a && . .env.production && set +a
-bun run apps/server/scripts/createAccount.ts <andrewId> "Full Name" --admin
+railway service labrador-recruit-server
+railway run bun run apps/server/scripts/createAccount.ts <andrewId> "Full Name" --admin
 ```
+
+`railway run` injects the service's production variables into a local process,
+so `DATABASE_URL` points at the Railway Postgres. Run it in a terminal you are
+willing to have the temporary password printed into — not one whose output is
+being recorded.
 
 It prints a temporary password once; it is not recoverable. After that, an
 administrator can create accounts over the API:
@@ -186,11 +219,18 @@ the slug and the last as the environment.
 
 ## Deploys
 
-The repository is private and owned by an organisation, which Vercel's Hobby
-plan will not connect to Git. Deploys are therefore manual:
+Both services build from `main` on push, each with its own `watchPatterns`, so a
+change under `apps/web` does not rebuild the API and vice versa. Both watch
+`packages/**`, because either can be affected by a change there.
+
+Infrastructure changes are separate and manual — `.railway/railway.ts` is applied
+with `railway config apply`, not by pushing. To pin that to CI instead, produce
+the plan on the pull request and apply the reviewed file on merge:
 
 ```bash
-vercel deploy --prod
+railway config plan --out railway-plan.json
+railway config apply --plan railway-plan.json --yes --confirm-destructive
 ```
 
-CI still runs on every push; it just does not deploy.
+CI (`.github/workflows/check.yml`) runs the full gate on every push and does not
+deploy.

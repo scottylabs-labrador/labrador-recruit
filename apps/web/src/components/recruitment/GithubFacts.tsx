@@ -45,6 +45,13 @@ export function GithubFacts({ applicationId }: { applicationId: string }) {
 
   const repos = data.repos;
 
+  // Counts of what GitHub itself states, ordered by frequency. Not a ranking of
+  // the applicant and not an input to any score - it saves opening five tabs to
+  // read the same labels.
+  const languages = Object.entries(data.languages ?? {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6);
+
   return (
     <Card>
       <CardHeader>
@@ -59,6 +66,21 @@ export function GithubFacts({ applicationId }: { applicationId: string }) {
           {data.fetchedAt === null ? " (never)" : ` on ${formatDateTime(data.fetchedAt)}`}, not
           submitted by the applicant. Shown exactly as GitHub states it.
         </p>
+
+        {languages.length > 0 || data.recentCommits !== null ? (
+          <div className="flex flex-wrap items-center gap-2 pb-1">
+            {languages.map(([language, count]) => (
+              <Badge key={language} variant="outline">
+                {`${language} · ${String(count)}`}
+              </Badge>
+            ))}
+            {data.recentCommits === null ? null : (
+              <span className="text-sm text-muted-foreground">
+                {`${String(data.recentCommits)} commits in GitHub's last ~90 days of public activity`}
+              </span>
+            )}
+          </div>
+        ) : null}
 
         {data.error !== null ? (
           <p className="text-sm leading-6">{`No GitHub data: ${data.error.toLowerCase()}.`}</p>

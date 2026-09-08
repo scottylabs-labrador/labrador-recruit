@@ -9,12 +9,14 @@ import {
   committee,
   committeeCandidacy,
   committeePreference,
+  cycleCommittee,
   questionDefinition,
+  recruitmentCycle,
   recruitmentMembership,
   review,
   reviewAssignment,
 } from "@labrador/db/schema";
-import { and, asc, count, eq, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";
 import { HttpError } from "../middlewares/errorHandler.ts";
@@ -346,6 +348,145 @@ export const assignmentService = {
       entityType: "review_assignment",
       entityId: assignmentId,
       metadata: { candidacyId: row.candidacyId },
+    });
+  },
+
+  /**
+   * How long a claimed but unsubmitted review is held before anyone else may
+   * take it.
+   *
+   * Without an expiry a reviewer who claims ten applicants and goes quiet
+   * stalls all ten indefinitely: they are neither reviewed nor claimable, and
+   * the cycle cannot reach its minimum. Two days is long enough to claim
+   * something on a Friday and write it on a Sunday, and short enough that a
+   * dropped claim does not outlive the cycle.
+   *
+   * The claim is not deleted when it lapses. It stops counting toward coverage,
+   * so the candidacy becomes claimable again - and if the original reviewer
+   * comes back and submits, their work still counts.
+   */
+  CLAIM_EXPIRY_HOURS: 48,
+
+  /**
+   * Hands the caller the next applicant they should review, and claims it.
+   *
+   * This is the whole of work distribution: nobody is allotted a share, so a
+   * reviewer who works faster simply claims more and the cycle finishes sooner.
+   * "Done" is every candidacy reaching the cycle's minimum, which is what the
+   * ordering below drives toward.
+   *
+   * Selection, among candidacies in committees the caller is enrolled in:
+   *
+   *   1. never one they already hold an assignment for - enforced by
+   *      `review_assignment_candidacy_reviewer_key`, so a second review by the
+   *      same person is impossible at the database rather than merely unlikely
+   *   2. never one whose submitted plus live claims already meet the minimum,
+   *      so the last needed slot is not handed to two people at once
+   *   3. fewest reviews first, then the applicant's own ranking, then oldest -
+   *      which spends effort where coverage is thinnest
+   *
+   * `FOR UPDATE SKIP LOCKED` is what makes it safe under concurrency: two
+   * reviewers pressing the button in the same instant take different rows
+   * rather than fighting over one. The unique index is the backstop - losing
+   * that race yields "no work available" rather than a 500.
+   */
+  claimNextReview: async (
+    acUser: RecruitmentUser,
+    cycleId: string,
+  ): Promise<{ assignmentId: string; candidacyId: string } | null> => {
+    if (acUser.recruitment.memberships.length === 0) {
+      throw new HttpError(403, "You have no recruitment role in this cycle");
+    }
+
+    const committeeIds = acUser.recruitment.memberships
+      .map((m) => m.committeeId)
+      .filter((id): id is string => id !== null);
+    const cycleWide = acUser.recruitment.memberships.some((m) => m.committeeId === null);
+
+    if (!cycleWide && committeeIds.length === 0) {
+      return null;
+    }
+
+    const staleBefore = new Date(Date.now() - assignmentService.CLAIM_EXPIRY_HOURS * 3_600_000);
+
+    // A cycle-wide reviewer needs no restriction at all; a committee-scoped one
+    // gets an explicit id list. Composing this here rather than binding a
+    // boolean and an array keeps every parameter a type Postgres can infer.
+    const committeeFilter = cycleWide
+      ? sql``
+      : sql`AND c.committee_id IN (${sql.join(
+          committeeIds.map((id) => sql`${id}::uuid`),
+          sql`, `,
+        )})`;
+
+    return db.transaction(async (tx) => {
+      const pickedRows = await tx.execute<{ id: string }>(sql`
+        SELECT c.id
+        FROM ${committeeCandidacy} c
+        JOIN ${application} a ON a.id = c.application_id
+        JOIN ${recruitmentCycle} cy ON cy.id = a.cycle_id
+        LEFT JOIN ${cycleCommittee} cc
+          ON cc.cycle_id = cy.id AND cc.committee_id = c.committee_id
+        WHERE a.cycle_id = ${cycleId}
+          AND c.active = true
+          ${committeeFilter}
+          -- Never the same person twice.
+          AND NOT EXISTS (
+            SELECT 1 FROM ${reviewAssignment} mine
+            WHERE mine.candidacy_id = c.id
+              AND mine.reviewer_user_id = ${acUser.id}
+          )
+          -- Coverage: submitted reviews plus claims that have not lapsed.
+          AND (
+            SELECT count(*) FROM ${reviewAssignment} ra
+            WHERE ra.candidacy_id = c.id
+              AND ra.status <> 'conflicted'
+              AND ra.status <> 'cancelled'
+              AND (ra.status = 'submitted' OR ra.updated_at > ${staleBefore})
+          ) < COALESCE(cc.minimum_reviews, cy.minimum_reviews)
+        ORDER BY
+          (SELECT count(*) FROM ${reviewAssignment} ra2
+            WHERE ra2.candidacy_id = c.id AND ra2.status = 'submitted') ASC,
+          (SELECT cp.rank FROM ${committeePreference} cp
+            WHERE cp.application_id = c.application_id
+              AND cp.committee_id = c.committee_id) ASC NULLS LAST,
+          c.created_at ASC
+        LIMIT 1
+        FOR UPDATE OF c SKIP LOCKED
+      `);
+
+      // node-postgres returns a QueryResult; PGlite returns the same shape.
+      const picked = pickedRows.rows[0];
+      if (!picked) {
+        return null;
+      }
+
+      const now = new Date();
+      const [created] = await tx
+        .insert(reviewAssignment)
+        .values({
+          candidacyId: picked.id,
+          reviewerUserId: acUser.id,
+          status: "assigned",
+          assignedAt: now,
+          // The reviewer claimed it themselves; there is no assigning admin.
+          createdBy: acUser.id,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({
+          target: [reviewAssignment.candidacyId, reviewAssignment.reviewerUserId],
+        })
+        .returning({ id: reviewAssignment.id });
+
+      // Lost the race to another request between the select and the insert.
+      // Reporting "nothing available" is honest: pressing the button again
+      // picks up the next one.
+      if (!created) {
+        return null;
+      }
+
+      return { assignmentId: created.id, candidacyId: picked.id };
     });
   },
 

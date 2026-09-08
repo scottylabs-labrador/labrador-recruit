@@ -1,4 +1,4 @@
-import { ForbiddenError, type MongoAbility } from "@casl/ability";
+import type { MongoAbility } from "@casl/ability";
 import { rulesToAST } from "@casl/ability/extra";
 import { CompoundCondition, type Condition, FieldCondition } from "@ucast/core";
 import {
@@ -21,6 +21,32 @@ import {
 } from "drizzle-orm";
 import type { PgTableWithColumns, TableConfig } from "drizzle-orm/pg-core";
 
+/**
+ * Thrown when the caller holds no rule at all for an action on a subject.
+ *
+ * There is nothing to compile into a `WHERE` clause in that case - the answer
+ * is not "no rows", it is "you may not ask". Owning the error rather than
+ * re-throwing CASL's own is what lets the server map it to a 403: CASL's
+ * `ForbiddenError` is an ordinary `Error` whose class is not reliably
+ * identifiable across bundles, so it reached the handler as an unexpected
+ * failure and every such refusal was reported as a 500 - with CASL's internal
+ * wording ("Cannot execute \"read\" on \"Candidacy\"") in the response body.
+ *
+ * This package still knows nothing about HTTP. It names the condition; the
+ * server decides what status that condition deserves.
+ */
+export class NotPermittedError extends Error {
+  readonly action: string;
+  readonly subject: string;
+
+  constructor(action: string, subject: string) {
+    super(`Not permitted to ${action} ${subject}`);
+    this.name = "NotPermittedError";
+    this.action = action;
+    this.subject = subject;
+  }
+}
+
 export function drizzleWhere<T extends TableConfig>(
   ability: MongoAbility,
   action: string,
@@ -33,8 +59,7 @@ export function drizzleWhere<T extends TableConfig>(
     if (ability.can(action, subject)) {
       return undefined;
     }
-    ForbiddenError.from(ability).throwUnlessCan(action, subject);
-    throw new Error("CASL did not throw for a forbidden query");
+    throw new NotPermittedError(action, subject);
   }
 
   return getConditionSql(condition, table);

@@ -197,6 +197,47 @@ export async function parseXlsx(
 }
 
 /**
+ * Decodes an uploaded CSV's bytes into text.
+ *
+ * A `.csv` is bytes plus a convention, and the conventions in play here differ.
+ * Google Sheets exports UTF-8. Excel's "Save As -> CSV UTF-8" agrees, but its
+ * plain "Save As -> CSV" writes the machine's legacy code page - Windows-1252
+ * on the laptops this runs on - and "Unicode Text" writes UTF-16.
+ *
+ * Reading all of them as UTF-8 was wrong in both directions and wrong quietly.
+ * A Windows-1252 file imported perfectly with every non-ASCII character
+ * replaced by U+FFFD, so an applicant called José became "Jos�" in a
+ * system whose entire job is to hold their name correctly. A UTF-16 file turned
+ * its own header row into mojibake, so all 66 columns read as unrecognised and
+ * the preview blamed the form for having been renamed.
+ *
+ * The ladder is byte-order mark first, because that is a statement rather than
+ * a guess; then strict UTF-8, which rejects the byte sequences a legacy code
+ * page produces; then Windows-1252, which cannot fail and is what Excel meant.
+ * Nothing here can produce a replacement character from a well-formed file.
+ */
+export function decodeCsv(bytes: Buffer): string {
+  if (bytes.length >= 2) {
+    if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+      return new TextDecoder("utf-16le").decode(bytes.subarray(2));
+    }
+    if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+      return new TextDecoder("utf-16be").decode(bytes.subarray(2));
+    }
+  }
+
+  // A UTF-8 BOM is left in place; `splitCsvRecords` strips it, and so would
+  // every other caller that already expects to see one.
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    // Not UTF-8, so it is a single-byte code page. Windows-1252 is the one
+    // Excel writes and decodes every byte, so this cannot fail in turn.
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
+
+/**
  * Splits CSV text into records per RFC 4180. Hand-written rather than taken
  * from a dependency because the only hard requirements are quoted fields,
  * embedded commas, embedded newlines and doubled `""` escapes -- all of which

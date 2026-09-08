@@ -27,6 +27,28 @@ export interface AssignReviewerRequest {
 
 @Route("recruitment")
 export class AssignmentsController extends Controller {
+  /**
+   * Claims the next applicant for the caller to review.
+   *
+   * A POST because it is not a question - it takes the work, so asking twice
+   * takes two. Returns 204 when the cycle has nothing left for this reviewer,
+   * which is the ordinary end state rather than an error: everything in their
+   * committees either has enough reviews or is already theirs.
+   */
+  @Post("cycles/{cycleId}/next-review")
+  @Security(OIDC_AUTH)
+  @Security(BEARER_AUTH)
+  @SuccessResponse(200)
+  async claimNextReview(@Request() req: ExpressRequest, @Path() cycleId: string) {
+    const user = await getRecruitmentUser(req, cycleId);
+    const claimed = await assignmentService.claimNextReview(user, cycleId);
+    if (claimed === null) {
+      this.setStatus(204);
+      return;
+    }
+    return claimed;
+  }
+
   /** Reviewer workloads across a cycle, so coverage can be rebalanced. */
   @Get("cycles/{cycleId}/workloads")
   @Security(OIDC_AUTH)

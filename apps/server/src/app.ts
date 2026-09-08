@@ -25,6 +25,23 @@ app.use(cors(corsOptions));
 // Setup Authentication: https://www.better-auth.com/docs/integrations/express
 app.all("/api/auth/*splat", toNodeHandler(auth) as unknown as RequestHandler);
 
+/**
+ * An application export is the one request that is legitimately large.
+ *
+ * The whole file arrives base64-encoded in the JSON body, which costs a third
+ * again on top of its own size: the Fall 2026 form is 66 columns of essays, so
+ * 118 applicants is already half a megabyte and a cycle twice that would not
+ * have fitted under the general limit. It was refused with "request entity too
+ * large", which reads as a broken server rather than a file to split.
+ *
+ * Scoped to the import route rather than raised across the board. Body-parser
+ * skips a request whose body is already parsed, so mounting this first wins for
+ * this path and leaves every other route - including the unauthenticated ones -
+ * at the smaller limit. Committing an import is a recruitment-admin action, so
+ * the larger allowance is not reachable by an anonymous caller.
+ */
+app.use("/recruitment/cycles/:cycleId/imports", express.json({ limit: "16mb" }));
+
 // Mount after Better Auth so it can read the raw request body.
 app.use(express.json({ limit: "1mb" }));
 
