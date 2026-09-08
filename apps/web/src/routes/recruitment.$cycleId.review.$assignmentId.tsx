@@ -348,7 +348,7 @@ function ReviewPage() {
 
         <section
           aria-labelledby="rubric-heading"
-          className="flex flex-col gap-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto"
+          className="flex flex-col gap-4 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pb-2"
         >
           <Card>
             <CardHeader>
@@ -356,6 +356,30 @@ function ReviewPage() {
                 <CardTitle id="rubric-heading">Your review</CardTitle>
                 {locked ? null : <SaveIndicator status={saveStatus} />}
               </div>
+              {locked || conflicted || criteria.length === 0 ? null : (
+                <div className="flex items-center gap-3">
+                  <div
+                    className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={criteria.length}
+                    aria-valuenow={criteria.length - missingCriteria.length}
+                    aria-label="Criteria scored"
+                  >
+                    <div
+                      className="h-full rounded-full bg-primary transition-[width] duration-200"
+                      style={{
+                        width: `${String(
+                          ((criteria.length - missingCriteria.length) / criteria.length) * 100,
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {`${String(criteria.length - missingCriteria.length)}/${String(criteria.length)} scored`}
+                  </span>
+                </div>
+              )}
               {locked ? (
                 <p className="text-sm text-muted-foreground">
                   Submitted{" "}

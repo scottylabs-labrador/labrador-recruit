@@ -34,7 +34,15 @@ function RootComponent() {
     <div className="flex min-h-screen flex-col">
       <PostHogIdentify />
       <NavBar />
-      <main className="flex min-h-0 flex-1 flex-col overflow-auto">
+      {/*
+        The document scrolls, not this element.
+        `overflow-auto` here made `main` the nearest scrolling ancestor, which
+        is what `position: sticky` measures against - so the review page's
+        rubric panel, which asks to stick 1rem below the top of the viewport,
+        was pinning itself to a box that never moved. It simply sat there while
+        the application text scrolled past it.
+      */}
+      <main className="flex flex-1 flex-col">
         {mustChangePassword ? <ChangePasswordGate /> : <Outlet />}
       </main>
       <MyToastContainer />

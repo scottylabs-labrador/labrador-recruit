@@ -158,7 +158,7 @@ function Section({
       <CardHeader>
         <CardTitle>{heading}</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-5">
+      <CardContent className="flex flex-col gap-0">
         {section === undefined || section.answers.length === 0 ? (
           <p className="text-[0.95rem] leading-7 text-muted-foreground">
             {emptyMessage ?? "No response submitted."}
@@ -166,8 +166,13 @@ function Section({
         ) : (
           [...section.answers]
             .sort((a, b) => a.displayOrder - b.displayOrder)
-            .map((answer) => (
-              <TextBlock key={answer.key} label={answer.questionText} value={answer.answerText} />
+            .map((answer, index) => (
+              <div
+                key={answer.key}
+                className={index === 0 ? "py-1" : "mt-5 border-t border-border/70 pt-5"}
+              >
+                <TextBlock label={answer.questionText} value={answer.answerText} />
+              </div>
             ))
         )}
       </CardContent>
@@ -177,8 +182,10 @@ function Section({
 
 function TextBlock({ label, value, hint }: { label: string; value: string | null; hint?: string }) {
   return (
-    <div className="flex flex-col gap-1">
-      <h4 className="text-sm font-semibold text-foreground">{label}</h4>
+    <div className="flex flex-col gap-2">
+      <h4 className="text-[0.8125rem] font-semibold tracking-wide text-muted-foreground uppercase">
+        {label}
+      </h4>
       {hint === undefined ? null : <p className="text-sm text-muted-foreground">{hint}</p>}
       <AnswerBody value={value} />
     </div>
@@ -218,5 +225,9 @@ function AnswerBody({ value }: { value: string | null }) {
     );
   }
 
-  return <p className="max-w-[70ch] text-[0.95rem] leading-7 whitespace-pre-wrap">{trimmed}</p>;
+  return (
+    <p className="max-w-[68ch] text-[1rem] leading-[1.75] whitespace-pre-wrap text-foreground">
+      {trimmed}
+    </p>
+  );
 }
