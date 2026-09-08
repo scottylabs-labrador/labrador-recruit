@@ -19,7 +19,7 @@
     "swagger-ui-express": "^5.0.1",
     "tsoa": "^7.0.0-alpha.0",
     "yaml": "^2.9.0",
-    "zod": "^4.3.6"
+    "zod": "^4.5.2"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.5",
