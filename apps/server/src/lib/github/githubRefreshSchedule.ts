@@ -18,6 +18,9 @@ const PER_RUN = 40;
 
 const HOUR_MS = 60 * 60 * 1000;
 
+/** How long after boot the first pass runs. */
+const FIRST_RUN_DELAY_MS = 60_000;
+
 /**
  * Keeps cached GitHub facts fresh without ever fetching during a page render.
  *
@@ -75,6 +78,26 @@ export function startGithubRefreshSchedule(): { stop: () => void } | null {
   const timer = setInterval(() => void run(), HOUR_MS);
   timer.unref?.();
 
-  console.log("[github] refreshing up to 40 applicants an hour");
-  return { stop: () => clearInterval(timer) };
+  /**
+   * A first pass shortly after boot, rather than an hour later.
+   *
+   * `setInterval` alone does not fire until one full period has elapsed, and
+   * the clock restarts on every deploy - so a service that ships a few times a
+   * day could go a long time without ever refreshing anybody, and enrichment
+   * would look switched off while being switched on.
+   *
+   * A minute of delay keeps it clear of the boot path: migrations run first,
+   * and the port should be open and serving before the process spends any of
+   * its request budget on background work.
+   */
+  const first = setTimeout(() => void run(), FIRST_RUN_DELAY_MS);
+  first.unref?.();
+
+  console.log("[github] refreshing up to 40 applicants an hour, starting in a minute");
+  return {
+    stop: () => {
+      clearInterval(timer);
+      clearTimeout(first);
+    },
+  };
 }
