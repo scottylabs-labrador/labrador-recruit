@@ -191,10 +191,20 @@ export default defineRailway(() => {
       BETTER_AUTH_URL: `https://${WEB_HOST}`,
       DATABASE_URL: "${{Postgres.DATABASE_URL}}",
       /**
-       * Off. Fetching an applicant-supplied link at all is a carve-out from
-       * `docs/product-rules.md` §1, so a deployment opts in explicitly.
+       * On. Fetching an applicant-supplied link at all is a carve-out from
+       * `docs/product-rules.md` §1, so this is a deliberate opt-in rather than
+       * a default, and only the verbatim facts that section enumerates are
+       * shown.
+       *
+       * No `GITHUB_TOKEN` is set, which has a visible consequence: the budget
+       * is 60 requests an hour for the whole deployment, the background pass
+       * refreshes at most 40 an hour, and there are 118 applicants - so
+       * coverage arrives over a few hours rather than at once, and commit
+       * counts stay null because they would cost a second request each.
+       * Language counts are unaffected; they come from the response already
+       * being fetched.
        */
-      GITHUB_ENRICHMENT: "off",
+      GITHUB_ENRICHMENT: "on",
       PASSWORD_SIGN_IN: "auto",
       SENTRY_DSN: preserve(),
       SERVER_PORT: "8080",
