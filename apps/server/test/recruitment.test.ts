@@ -1,6 +1,7 @@
 import type { RecruitmentUser } from "@labrador/access-control";
 import {
   application as applicationTable,
+  recruitmentCycle as recruitmentCycleTable,
   review as reviewTable,
   reviewAssignment as reviewAssignmentTable,
 } from "@labrador/db/schema";
@@ -906,6 +907,112 @@ describe("team review progress", () => {
       .set(authHeader({ sub: "outsider2-sub" }));
 
     expect(res.status).toBe(403);
+  });
+});
+
+/**
+ * A cycle run for one team hands out that team's work and nothing else.
+ *
+ * Scope used to come only from the caller's memberships, so a recruitment
+ * admin - who holds a cycle-wide role - was handed candidacies from every
+ * committee even when the cycle was pinned to one. Because an applicant holds
+ * a separate candidacy under each committee they ranked, the same person came
+ * back straight after being reviewed, under a committee nobody was reviewing.
+ */
+describe("a cycle pinned to one committee", () => {
+  it("hands out only that committee's work, even to a cycle-wide admin", async () => {
+    const { cycle, tech, design } = await setupScenario();
+
+    // A Design candidacy that must never be offered while the cycle is pinned.
+    const person = await seedApplicant({ email: "d@andrew.cmu.edu", fullName: "Dee" });
+    const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
+    await seedPreference({ applicationId: app2.id, committeeId: design.id, rank: 1 });
+    const designCandidacy = await seedCandidacy({ applicationId: app2.id, committeeId: design.id });
+
+    // And a Tech one, which is what the pin allows.
+    const p2 = await seedApplicant({ email: "t@andrew.cmu.edu", fullName: "Tee" });
+    const app3 = await seedApplication({ cycleId: cycle.id, applicantId: p2.id });
+    await seedPreference({ applicationId: app3.id, committeeId: tech.id, rank: 1 });
+    await seedCandidacy({ applicationId: app3.id, committeeId: tech.id });
+
+    await testDb
+      .update(recruitmentCycleTable)
+      .set({ reviewCommitteeId: tech.id })
+      .where(eq(recruitmentCycleTable.id, cycle.id));
+
+    // The admin holds a cycle-wide membership, so nothing about their own
+    // standing narrows this - only the pin does.
+    const claimed: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const res = await request(app)
+        .post(`/recruitment/cycles/${cycle.id}/next-review`)
+        .set(adminAuth());
+      if (res.status !== 200) break;
+      claimed.push(res.body.candidacyId);
+    }
+
+    expect(claimed).not.toContain(designCandidacy.id);
+    const rows = await testDb
+      .select()
+      .from(reviewAssignmentTable)
+      .where(eq(reviewAssignmentTable.reviewerUserId, adminUser.id));
+    expect(rows.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * The pin narrows and must never widen: a reviewer enrolled elsewhere is not
+   * handed the pinned committee's applicants just because the cycle points there.
+   */
+  it("does not widen access for a reviewer enrolled in another committee", async () => {
+    const { cycle, tech, design } = await setupScenario();
+    await seedMembership({
+      cycleId: cycle.id,
+      userId: bob.id,
+      role: "reviewer",
+      committeeId: design.id,
+    });
+    await testDb
+      .update(recruitmentCycleTable)
+      .set({ reviewCommitteeId: tech.id })
+      .where(eq(recruitmentCycleTable.id, cycle.id));
+
+    // Bob reviews for Design only. Tech is pinned, so there is nothing for him.
+    const res = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/next-review`)
+      .set(bobAuth());
+    expect(res.status).toBe(204);
+  });
+
+  /** Having reviewed somebody is final: they never come back round. */
+  it("never offers an applicant the reviewer has already submitted on", async () => {
+    const { cycle, tech, aliceAssignment } = await setupScenario();
+    await testDb
+      .update(recruitmentCycleTable)
+      .set({ reviewCommitteeId: tech.id })
+      .where(eq(recruitmentCycleTable.id, cycle.id));
+
+    await request(app)
+      .post(`/recruitment/assignments/${aliceAssignment.id}/review/submit`)
+      .set(aliceAuth())
+      .send({
+        scores: { interest: 4, initiative: 4, ideas: 4, experience: 4, growth: 4 },
+        recommendation: "yes",
+        confidence: "high",
+        rationale: "Read and scored.",
+      });
+
+    const [reviewed] = await testDb
+      .select({ candidacyId: reviewAssignmentTable.candidacyId })
+      .from(reviewAssignmentTable)
+      .where(eq(reviewAssignmentTable.id, aliceAssignment.id));
+
+    for (let i = 0; i < 5; i += 1) {
+      const res = await request(app)
+        .post(`/recruitment/cycles/${cycle.id}/next-review`)
+        .set(aliceAuth());
+      if (res.status !== 200) break;
+      expect(res.body.candidacyId).not.toBe(reviewed?.candidacyId);
+    }
   });
 });
 

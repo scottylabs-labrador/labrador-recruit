@@ -106,9 +106,23 @@ function MyQueuePage() {
    * actually wants to know before deciding to read one more is how many
    * applicants still have nobody on them.
    */
-  const teamProgress = $api.useQuery("get", "/recruitment/cycles/{cycleId}/review-progress", {
-    params: { path: { cycleId } },
-  });
+  const teamProgress = $api.useQuery(
+    "get",
+    "/recruitment/cycles/{cycleId}/review-progress",
+    { params: { path: { cycleId } } },
+    {
+      /**
+       * Several people review at once, so the number on screen is somebody
+       * else's work as much as your own. Refetching on an interval and
+       * whenever the tab regains focus keeps it honest without anybody
+       * reloading: coming back from submitting a review shows the count that
+       * review moved.
+       */
+      refetchInterval: 30_000,
+      refetchOnWindowFocus: true,
+      refetchOnMount: "always",
+    },
+  );
 
   const claimNext = $api.useMutation("post", "/recruitment/cycles/{cycleId}/next-review", {
     onSuccess: (data) => {

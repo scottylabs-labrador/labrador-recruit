@@ -409,15 +409,43 @@ export const assignmentService = {
 
     const staleBefore = new Date(Date.now() - assignmentService.CLAIM_EXPIRY_HOURS * 3_600_000);
 
-    // A cycle-wide reviewer needs no restriction at all; a committee-scoped one
-    // gets an explicit id list. Composing this here rather than binding a
-    // boolean and an array keeps every parameter a type Postgres can infer.
-    const committeeFilter = cycleWide
-      ? sql``
-      : sql`AND c.committee_id IN (${sql.join(
-          committeeIds.map((id) => sql`${id}::uuid`),
-          sql`, `,
-        )})`;
+    /**
+     * The committee the cycle is pinned to, when it is pinned to one.
+     *
+     * A cycle running for a single team narrows every screen to that committee,
+     * and handing work out has to narrow with it. It did not: scope came only
+     * from the caller's memberships, so somebody holding a cycle-wide role -
+     * every recruitment admin - was handed candidacies from all seven
+     * committees. The visible symptom was an applicant reappearing straight
+     * after being reviewed, because the same person holds a candidacy under
+     * each committee they ranked, and reviewing one says nothing about the
+     * others.
+     */
+    const [cycleRow] = await db
+      .select({ reviewCommitteeId: recruitmentCycle.reviewCommitteeId })
+      .from(recruitmentCycle)
+      .where(eq(recruitmentCycle.id, cycleId));
+    const pinned = cycleRow?.reviewCommitteeId ?? null;
+
+    // The pin narrows; it never widens. A reviewer enrolled only in Design is
+    // still not shown Labrador work just because the cycle is pinned there.
+    if (pinned !== null && !cycleWide && !committeeIds.includes(pinned)) {
+      return null;
+    }
+
+    const allowed = pinned !== null ? [pinned] : committeeIds;
+
+    // A cycle-wide caller on an unpinned cycle needs no restriction at all;
+    // everyone else gets an explicit id list. Composing this here rather than
+    // binding a boolean and an array keeps every parameter a type Postgres can
+    // infer.
+    const committeeFilter =
+      allowed.length === 0
+        ? sql``
+        : sql`AND c.committee_id IN (${sql.join(
+            allowed.map((id) => sql`${id}::uuid`),
+            sql`, `,
+          )})`;
 
     /**
      * The applicant's own rank for this committee, or null.
