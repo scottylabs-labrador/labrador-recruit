@@ -1,7 +1,7 @@
 import type { RecruitmentUser } from "@labrador/access-control";
 import { canAssignReviewers } from "@labrador/access-control";
 import { assignmentVisibilityWhere } from "@labrador/access-control/visibility";
-import { orderQueue, queuePriorityTier } from "@labrador/common/recruitment";
+import { orderQueue, queuePriorityTier, REVIEWABLE_RANKS } from "@labrador/common/recruitment";
 import {
   applicant,
   application,
@@ -492,6 +492,10 @@ export const assignmentService = {
               AND mine.reviewer_user_id = ${acUser.id}
           )
           -- Coverage: submitted reviews plus claims that have not lapsed.
+          -- Only a top-three choice is read this cycle. An applicant who
+          -- ranked us fourth or lower, or holds a candidacy only because they
+          -- answered our questions, is out of scope rather than merely last.
+          AND ${applicantRank} BETWEEN 1 AND ${REVIEWABLE_RANKS}
           AND (
             SELECT count(*) FROM ${reviewAssignment} ra
             WHERE ra.candidacy_id = c.id
@@ -500,26 +504,31 @@ export const assignmentService = {
               AND (ra.status = 'submitted' OR ra.updated_at > ${staleBefore})
           ) < COALESCE(cc.minimum_reviews, cy.minimum_reviews)
         ORDER BY
-          -- queuePriorityTier, expressed in SQL. Reviewing is finite, so the
-          -- order is a policy decision rather than a convenience: someone who
-          -- ranked this committee first *and* wrote for it has asked twice,
-          -- and is read before someone who ranked it third and wrote nothing.
+          -- queuePriorityTier, expressed in SQL:
+          --   1  ranked first, and wrote for us
+          --   2  ranked second, and wrote for us
+          --   3  ranked first, wrote nothing
+          --   4  ranked second, wrote nothing
+          --   5  ranked third, either way
+          --
+          -- Wanting us first outranks writing an essay for us. A third choice
+          -- who wrote a page used to be read before a first choice who wrote
+          -- nothing; leadership's call is that the ranking leads.
           --
           -- Tier comes before coverage deliberately. Ordering by fewest
-          -- reviews first would round-robin across every tier and hand the
-          -- bottom of the list the same attention as the top, which is the
-          -- outcome the policy exists to prevent. Coverage is already handled
-          -- by the WHERE clause above, which drops anything that has met the
-          -- minimum - so this decides who reaches it first, not who reaches it.
+          -- reviews first would round-robin across every tier and give the
+          -- bottom of the list the same attention as the top, which is what
+          -- the policy exists to prevent. Coverage is handled by the WHERE
+          -- clause above, which drops anything that has met its minimum - so
+          -- this decides who gets there first, not who gets there.
           CASE
-            WHEN ${hasCommitteeAnswer} AND ${applicantRank} BETWEEN 1 AND 3
-              THEN ${applicantRank}
-            ELSE 4
+            WHEN ${applicantRank} = 3 THEN 5
+            WHEN ${hasCommitteeAnswer} THEN ${applicantRank}
+            ELSE ${applicantRank} + 2
           END ASC,
-          -- Inside the remainder tier an answer still counts for more than a
-          -- rank, matching compareQueueItems.
+          -- Within a tier, which in practice means two third choices, having
+          -- written something still counts for more than not.
           (${hasCommitteeAnswer}) DESC,
-          ${applicantRank} ASC NULLS LAST,
           c.id ASC
         LIMIT 1
         FOR UPDATE OF c SKIP LOCKED
@@ -626,6 +635,15 @@ export const assignmentService = {
         LEFT JOIN ${cycleCommittee} cc
           ON cc.cycle_id = cy.id AND cc.committee_id = c.committee_id
         WHERE a.cycle_id = ${cycleId} AND c.active = true ${committeeFilter}
+          -- The same scope the claim query hands work out in. Counting
+          -- applicants nobody will ever be given puts a floor under
+          -- "remaining" that the team cannot work off, and a progress bar
+          -- that cannot reach the end is worse than no progress bar.
+          AND (
+            SELECT cp.rank FROM ${committeePreference} cp
+            WHERE cp.application_id = c.application_id
+              AND cp.committee_id = c.committee_id
+          ) BETWEEN 1 AND ${REVIEWABLE_RANKS}
       )
       SELECT
         count(*)::int AS candidacies,

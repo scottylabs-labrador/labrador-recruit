@@ -5,6 +5,7 @@ import {
   assignmentsForCandidacy,
   firstAssignmentFor,
   resetDb,
+  assignmentState,
   seededStaff,
   seedRecruitmentCycle,
 } from "./db.ts";
@@ -42,7 +43,11 @@ test("a reviewer completes a review end to end and it locks", async ({ page, con
   await signIn(context, seededStaff.reviewer.sessionToken);
 
   await page.goto(`/recruitment/${cycleId}/queue`);
-  await expect(page.getByRole("table")).toBeVisible();
+  // What a reviewer is given: somewhere to start, and no table of choices.
+  await expect(
+    page.getByRole("button", { name: /Review next applicant|Start reviewing/ }),
+  ).toBeVisible();
+  await expect(page.getByRole("table")).toHaveCount(0);
 
   const assignment = await firstAssignmentFor(seededStaff.reviewer.id);
   expect(assignment).not.toBeNull();
@@ -165,9 +170,16 @@ test("declaring a conflict discards the draft and never asks why", async ({ page
   await page.getByRole("button", { name: "Yes, declare conflict" }).click();
   await conflicted;
 
-  await page.goto(`/recruitment/${cycleId}/queue`);
-  // Scoped to the table: an unscoped match also hits the hidden filter option.
-  await expect(page.getByRole("table").getByText("Conflicted").first()).toBeVisible();
+  // The reviewer is put back where there is work, not left on an applicant
+  // they just recused themselves from.
+  await expect(page).toHaveURL(new RegExp(`/recruitment/${cycleId}/queue$`));
+
+  // The discard is checked in the database rather than on a screen: a reviewer
+  // is shown no queue table, so there is nowhere for them to see it. The
+  // review row is gone and the assignment carries the reason it went.
+  const state = await assignmentState(assignment.assignmentId);
+  expect(state.status).toBe("conflicted");
+  expect(state.reviewCount).toBe(0);
 });
 
 test("a cycle the caller has no standing in is not reachable", async ({ page, context }) => {

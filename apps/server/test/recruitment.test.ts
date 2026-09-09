@@ -647,6 +647,9 @@ describe("claiming the next review", () => {
         fullName: `Extra ${String(i)}`,
       });
       const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
+      // Ranked, because an applicant who did not put this committee in their
+      // top three is out of scope and is never handed to anybody.
+      await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank: 1 });
       await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
     }
     expect(application).toBeDefined();
@@ -677,6 +680,7 @@ describe("claiming the next review", () => {
     const { cycle, tech } = await setupScenario();
     const person = await seedApplicant({ email: "solo@andrew.cmu.edu", fullName: "Solo" });
     const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
+    await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank: 1 });
     const candidacy = await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
 
     const one = await request(app)
@@ -719,6 +723,7 @@ describe("claiming the next review", () => {
     const { cycle, tech } = await setupScenario();
     const person = await seedApplicant({ email: "race@andrew.cmu.edu", fullName: "Race" });
     const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
+    await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank: 1 });
     await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
 
     const [a, b] = await Promise.all([
@@ -743,6 +748,7 @@ describe("claiming the next review", () => {
     const { cycle, tech } = await setupScenario();
     const person = await seedApplicant({ email: "covered@andrew.cmu.edu", fullName: "Covered" });
     const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
+    await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank: 1 });
     const candidacy = await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
 
     // The cycle's minimum is 2 in the fixture; two claims fill it.
@@ -753,7 +759,9 @@ describe("claiming the next review", () => {
       .select()
       .from(reviewAssignmentTable)
       .where(eq(reviewAssignmentTable.candidacyId, candidacy.id));
-    expect(rows.length).toBeLessThanOrEqual(2);
+    // Exactly two, not "at most two": an unranked fixture hands out nothing,
+    // and a ceiling assertion that passes on zero rows tests nothing.
+    expect(rows.length).toBe(2);
   });
 });
 
@@ -823,24 +831,70 @@ describe("the order the next review is handed out in", () => {
     expect(res.body.candidacyId).not.toBe(rank1NoEssay.id);
   });
 
-  it("inside the remainder tier, an essay still counts for more than a rank", async () => {
+  /**
+   * Scope is a gate, not a tiebreak. An applicant who ranked us fourth or
+   * lower is not read this cycle however much they wrote, so an essay cannot
+   * lift them past somebody in the top three - or past nobody at all.
+   */
+  it("never hands out an applicant from outside the top three", async () => {
     const { cycle, tech } = await setupScenario();
     const rank1NoEssay = await candidate(cycle.id, tech.id, "p@andrew.cmu.edu", 1, false);
     const rank7Essay = await candidate(cycle.id, tech.id, "q@andrew.cmu.edu", 7, true);
 
-    const res = await request(app)
+    const first = await request(app)
       .post(`/recruitment/cycles/${cycle.id}/next-review`)
       .set(aliceAuth());
 
-    // Both are tier 4 - rank 7 is outside the top three, and rank 1 wrote
-    // nothing - so the tiebreak is who actually wrote something.
-    expect(res.body.candidacyId).toBe(rank7Essay.id);
-    expect(res.body.candidacyId).not.toBe(rank1NoEssay.id);
+    expect(first.status).toBe(200);
+    expect(first.body.candidacyId).toBe(rank1NoEssay.id);
+
+    // And once the in-scope applicant is taken the well is dry: rank 7 is not
+    // held back for later, it is not work.
+    const second = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/next-review`)
+      .set(aliceAuth());
+
+    expect(second.status).toBe(204);
+    expect(rank7Essay).toBeDefined();
   });
 });
 
 /** What the team screen reports, and who is allowed to see it. */
 describe("team review progress", () => {
+  /**
+   * The denominator has to be the population that is actually handed out.
+   * Counting applicants who ranked the committee fourth or lower puts a floor
+   * under "remaining" that no amount of reviewing can clear, and a bar that
+   * cannot reach the end tells the team their work is not landing.
+   */
+  it("leaves applicants from outside the top three out of the total", async () => {
+    const { cycle, tech } = await setupScenario();
+
+    const before = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/review-progress`)
+      .set(aliceAuth());
+    expect(before.body.candidacyCount).toBe(1);
+
+    // Two more candidacies: one in scope, one ranked seventh.
+    for (const [email, rank] of [
+      ["inscope@andrew.cmu.edu", 2],
+      ["outofscope@andrew.cmu.edu", 7],
+    ] as const) {
+      const person = await seedApplicant({ email, fullName: email });
+      const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
+      await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank });
+      await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
+    }
+
+    const after = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/review-progress`)
+      .set(aliceAuth());
+
+    // Two, not three: the seventh choice is not work.
+    expect(after.body.candidacyCount).toBe(2);
+    expect(after.body.remainingCandidacies).toBe(2);
+  });
+
   it("counts what still needs reading, and what is already covered", async () => {
     const { cycle, tech, aliceAssignment, bobAssignment } = await setupScenario();
 

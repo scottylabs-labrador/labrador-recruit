@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { compareQueueItems, orderQueue, queuePriorityTier } from "../src/recruitment/queueOrder.ts";
+import {
+  compareQueueItems,
+  isReviewable,
+  orderQueue,
+  queuePriorityTier,
+} from "../src/recruitment/queueOrder.ts";
 
 function item(
   candidacyId: string,
@@ -10,55 +15,87 @@ function item(
   return { candidacyId, applicantRank, hasCommitteeResponse };
 }
 
+/**
+ * The order leadership asked for:
+ *
+ *   1  ranked first, and wrote for us
+ *   2  ranked second, and wrote for us
+ *   3  ranked first, wrote nothing
+ *   4  ranked second, wrote nothing
+ *   5  ranked third, either way
+ *
+ * Ranked fourth or lower is not read at all this cycle.
+ */
 describe("queuePriorityTier", () => {
-  it("gives a ranked applicant who answered the committee's questions their own rank", () => {
+  it("puts a first choice who wrote for us at the top", () => {
     expect(queuePriorityTier(item("a", 1, true))).toBe(1);
+  });
+
+  it("puts a second choice who wrote for us next", () => {
     expect(queuePriorityTier(item("a", 2, true))).toBe(2);
-    expect(queuePriorityTier(item("a", 3, true))).toBe(3);
   });
 
-  it("drops a top-ranked applicant who wrote nothing into the remainder", () => {
-    expect(queuePriorityTier(item("a", 1, false))).toBe(4);
+  /**
+   * The change from the previous policy. A first choice who wrote nothing used
+   * to fall behind every essay; the ranking now leads, because somebody who put
+   * us top is who we are trying to recruit.
+   */
+  it("keeps a silent first choice ahead of any third choice", () => {
+    expect(queuePriorityTier(item("a", 1, false))).toBe(3);
+    expect(queuePriorityTier(item("b", 3, true))).toBe(5);
+    expect(queuePriorityTier(item("a", 1, false))).toBeLessThan(
+      queuePriorityTier(item("b", 3, true)),
+    );
   });
 
-  it("drops an applicant who answered but ranked the committee low into the remainder", () => {
-    expect(queuePriorityTier(item("a", 5, true))).toBe(4);
+  it("puts a silent second choice fourth", () => {
+    expect(queuePriorityTier(item("a", 2, false))).toBe(4);
   });
 
-  it("treats an unranked applicant as remainder even with answers", () => {
-    expect(queuePriorityTier(item("a", null, true))).toBe(4);
+  it("puts a third choice last, essay or not", () => {
+    expect(queuePriorityTier(item("a", 3, true))).toBe(5);
+    expect(queuePriorityTier(item("b", 3, false))).toBe(5);
+  });
+
+  it("treats a fourth choice or lower as out of scope", () => {
+    expect(isReviewable(item("a", 4, true))).toBe(false);
+    expect(isReviewable(item("b", 7, true))).toBe(false);
+  });
+
+  /** A candidacy held only because they answered our questions is not read. */
+  it("treats an unranked applicant as out of scope even with answers", () => {
+    expect(isReviewable(item("a", null, true))).toBe(false);
   });
 
   it("ignores a nonsense rank rather than trusting it", () => {
-    expect(queuePriorityTier(item("a", 0, true))).toBe(4);
-    expect(queuePriorityTier(item("a", -1, true))).toBe(4);
+    expect(isReviewable(item("a", 0, true))).toBe(false);
+    expect(isReviewable(item("b", -1, true))).toBe(false);
+  });
+
+  it("counts every top-three choice as reviewable", () => {
+    for (const rank of [1, 2, 3]) {
+      expect(isReviewable(item("a", rank, false))).toBe(true);
+    }
   });
 });
 
 describe("compareQueueItems", () => {
-  it("puts a first choice with answers above a second choice with answers", () => {
+  it("puts a first choice with an essay above a second choice with one", () => {
     expect(compareQueueItems(item("a", 1, true), item("b", 2, true))).toBeLessThan(0);
   });
 
-  it("puts any answered top-three above every unanswered application", () => {
-    expect(compareQueueItems(item("a", 3, true), item("b", 1, false))).toBeLessThan(0);
+  it("puts a silent first choice above a second choice who wrote for us", () => {
+    // Tier 3 against tier 2: the essay still wins here, because rank 2 with an
+    // essay is asked for before rank 1 without one.
+    expect(compareQueueItems(item("a", 1, false), item("b", 2, true))).toBeGreaterThan(0);
   });
 
-  /**
-   * The case the tiers alone do not cover: inside the remainder, an applicant
-   * who wrote a page but ranked the committee fifth is a better use of the next
-   * ten minutes than one who ranked it first and left every question blank.
-   */
-  it("prefers an answer over a rank inside the remainder", () => {
-    expect(compareQueueItems(item("a", 5, true), item("b", 1, false))).toBeLessThan(0);
+  it("puts a silent second choice above any third choice", () => {
+    expect(compareQueueItems(item("a", 2, false), item("b", 3, true))).toBeLessThan(0);
   });
 
-  it("orders unanswered applications by the rank they gave", () => {
-    expect(compareQueueItems(item("a", 1, false), item("b", 4, false))).toBeLessThan(0);
-  });
-
-  it("sorts an unranked applicant last rather than first", () => {
-    expect(compareQueueItems(item("a", 7, false), item("b", null, false))).toBeLessThan(0);
+  it("prefers an essay between two third choices", () => {
+    expect(compareQueueItems(item("a", 3, true), item("b", 3, false))).toBeLessThan(0);
   });
 
   it("breaks a complete tie reproducibly, without locale", () => {
@@ -69,31 +106,30 @@ describe("compareQueueItems", () => {
 });
 
 describe("orderQueue", () => {
-  it("produces the order Labrador asked for", () => {
-    const queue = [
-      item("no-essay-rank-1", 1, false),
-      item("essay-rank-3", 3, true),
-      item("essay-rank-1", 1, true),
-      item("no-essay-unranked", null, false),
-      item("essay-rank-2", 2, true),
-      item("no-essay-rank-2", 2, false),
-      item("essay-rank-5", 5, true),
-    ];
+  it("produces the order leadership asked for", () => {
+    const ordered = orderQueue([
+      item("third-silent", 3, false),
+      item("second-silent", 2, false),
+      item("first-silent", 1, false),
+      item("third-essay", 3, true),
+      item("second-essay", 2, true),
+      item("first-essay", 1, true),
+    ]);
 
-    expect(orderQueue(queue).map((row) => row.candidacyId)).toEqual([
-      "essay-rank-1",
-      "essay-rank-2",
-      "essay-rank-3",
-      "essay-rank-5",
-      "no-essay-rank-1",
-      "no-essay-rank-2",
-      "no-essay-unranked",
+    expect(ordered.map((row) => row.candidacyId)).toEqual([
+      "first-essay",
+      "second-essay",
+      "first-silent",
+      "second-silent",
+      "third-essay",
+      "third-silent",
     ]);
   });
 
   it("does not mutate the array it was given", () => {
-    const queue = [item("b", 2, true), item("a", 1, true)];
-    orderQueue(queue);
-    expect(queue.map((row) => row.candidacyId)).toEqual(["b", "a"]);
+    const input = [item("b", 2, true), item("a", 1, true)];
+    const copy = [...input];
+    orderQueue(input);
+    expect(input).toEqual(copy);
   });
 });

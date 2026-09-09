@@ -1,4 +1,4 @@
-import { account, reviewAssignment, session, user } from "@labrador/db/schema";
+import { account, review, reviewAssignment, session, user } from "@labrador/db/schema";
 import { seedRecruitmentData } from "@labrador/db/seed";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -164,6 +164,22 @@ export async function assignmentsForCandidacy(candidacyId: string) {
     })
     .from(reviewAssignment)
     .where(eq(reviewAssignment.candidacyId, candidacyId));
+}
+
+/**
+ * An assignment's status and whether a review row still hangs off it.
+ *
+ * Declaring a conflict has no screen of its own to assert against - the
+ * reviewer is sent back to the queue, which shows them nothing but a button -
+ * so the discard is checked where it happens.
+ */
+export async function assignmentState(assignmentId: string) {
+  const [row] = await db
+    .select({ status: reviewAssignment.status })
+    .from(reviewAssignment)
+    .where(eq(reviewAssignment.id, assignmentId));
+  const reviews = await db.select().from(review).where(eq(review.assignmentId, assignmentId));
+  return { status: row?.status ?? null, reviewCount: reviews.length };
 }
 
 /** The first assignment belonging to a given reviewer, for deep-linking. */

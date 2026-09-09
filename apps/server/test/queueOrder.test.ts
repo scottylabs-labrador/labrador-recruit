@@ -80,28 +80,30 @@ describe("review queue order", () => {
       "bsecond",
       "cthird",
     ]);
-    expect(res.body.map((row: { priorityTier: number }) => row.priorityTier)).toEqual([1, 2, 3]);
+    // A third choice sits in tier 5 now: rank 1 and 2 occupy tiers 1-4,
+    // split by whether the applicant wrote for us.
+    expect(res.body.map((row: { priorityTier: number }) => row.priorityTier)).toEqual([1, 2, 5]);
   });
 
   /**
-   * The signal that matters is "is there something here to read". A first
-   * choice who left every question blank is further down than a third choice
-   * who wrote something.
+   * The ranking leads. A first choice who wrote nothing is still somebody who
+   * put us top, and is read before a third choice who wrote a page - which
+   * reverses the earlier policy, on leadership's call.
    */
-  it("puts an answered third choice above an unanswered first choice", async () => {
+  it("puts a silent first choice above an answered third choice", async () => {
     const { cycle, candidate } = await setupQueue();
 
-    await candidate("silent", 1, false);
     await candidate("wrote", 3, true);
+    await candidate("silent", 1, false);
 
     const res = await request(app).get(`/recruitment/cycles/${cycle.id}/my-queue`).set(aliceAuth());
 
     expect(res.body.map((row: { applicantName: string }) => row.applicantName)).toEqual([
-      "wrote",
       "silent",
+      "wrote",
     ]);
     expect(res.body[0].priorityTier).toBe(3);
-    expect(res.body[1].priorityTier).toBe(4);
+    expect(res.body[1].priorityTier).toBe(5);
   });
 
   it("orders the unanswered remainder by the rank they gave", async () => {
@@ -161,7 +163,8 @@ describe("review queue order", () => {
     const res = await request(app).get(`/recruitment/cycles/${cycle.id}/my-queue`).set(aliceAuth());
 
     expect(res.body[0].hasCommitteeResponse).toBe(false);
-    expect(res.body[0].priorityTier).toBe(4);
+    // A silent first choice is tier 3: rank leads, the essay splits within it.
+    expect(res.body[0].priorityTier).toBe(3);
   });
 
   /**

@@ -17,11 +17,11 @@
  * of the line from scoring people.
  */
 
-/** Ranks that count as "asked for this committee", when paired with an answer. */
-const TOP_RANKS = 3;
+/** The deepest rank still worth reading. Beyond this nobody is reviewed. */
+export const REVIEWABLE_RANKS = 3;
 
-/** The bucket everything that is neither top-ranked nor answered falls into. */
-const REMAINDER_TIER = TOP_RANKS + 1;
+/** Where an applicant who is out of scope sorts, and is filtered out anyway. */
+const OUT_OF_SCOPE_TIER = 99;
 
 export interface QueueOrderable {
   /** The applicant's own rank for this committee. 1 is their first choice. */
@@ -33,29 +33,43 @@ export interface QueueOrderable {
 }
 
 /**
- * 1, 2 or 3 for an applicant who both ranked the committee that highly and
- * wrote something for it; 4 for everyone else.
+ * The order applications are read in.
  *
- * Surfaced rather than kept private because the queue displays it: an order
- * a reviewer cannot see the reason for looks arbitrary, and a reviewer who
- * thinks the order is arbitrary will ignore it.
+ *   1  ranked first, and wrote for us
+ *   2  ranked second, and wrote for us
+ *   3  ranked first, wrote nothing
+ *   4  ranked second, wrote nothing
+ *   5  ranked third, either way
+ *
+ * Ranked fourth or lower is not read at all, and returns `OUT_OF_SCOPE_TIER`
+ * so a caller that forgets to filter still sorts them last rather than
+ * silently mixing them in.
+ *
+ * Wanting us first and saying why outranks wanting us first and saying
+ * nothing - but both outrank a third choice, which is the change from the
+ * earlier ordering. Previously a third choice who wrote an essay was read
+ * before a first choice who did not, on the reasoning that an essay is the
+ * stronger signal. Leadership's call is that the ranking comes first: somebody
+ * who put us top is who we are trying to recruit, essay or no essay.
  */
 export function queuePriorityTier(item: QueueOrderable): number {
   const rank = item.applicantRank;
-  if (!item.hasCommitteeResponse || rank === null || rank < 1 || rank > TOP_RANKS) {
-    return REMAINDER_TIER;
+  if (rank === null || rank < 1 || rank > REVIEWABLE_RANKS) {
+    return OUT_OF_SCOPE_TIER;
   }
-  return rank;
+  if (rank === REVIEWABLE_RANKS) {
+    return 5;
+  }
+  // Ranks 1 and 2, split by whether they wrote anything: 1, 2 with an essay
+  // and 3, 4 without.
+  return item.hasCommitteeResponse ? rank : rank + 2;
 }
 
-/**
- * Orders two queue entries. Lower sorts first.
- *
- * Inside the remainder tier, an answer still counts for more than a rank: an
- * applicant who ranked the committee fifth but wrote a page about it is a
- * better use of the next ten minutes than one who ranked it first and left
- * every question blank.
- */
+/** Whether this candidacy is read at all this cycle. */
+export function isReviewable(item: QueueOrderable): boolean {
+  return queuePriorityTier(item) !== OUT_OF_SCOPE_TIER;
+}
+
 export function compareQueueItems(a: QueueOrderable, b: QueueOrderable): number {
   const tierDelta = queuePriorityTier(a) - queuePriorityTier(b);
   if (tierDelta !== 0) {
