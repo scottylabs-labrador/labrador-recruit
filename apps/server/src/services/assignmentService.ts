@@ -419,6 +419,33 @@ export const assignmentService = {
           sql`, `,
         )})`;
 
+    /**
+     * The applicant's own rank for this committee, or null.
+     *
+     * Correlated rather than joined: `committee_preference` has at most one row
+     * per application and committee, and a join would have to be left-outer to
+     * keep unranked candidacies in the running.
+     */
+    const applicantRank = sql`(
+      SELECT cp.rank FROM ${committeePreference} cp
+      WHERE cp.application_id = c.application_id AND cp.committee_id = c.committee_id
+    )`;
+
+    /**
+     * Whether they wrote anything for this committee specifically.
+     *
+     * `NOT NULL` and nothing more, which is what `listMyQueue` already treats
+     * as answered - the two must agree, or the order a reviewer is handed work
+     * in would differ from the order the queue shows them.
+     */
+    const hasCommitteeAnswer = sql`EXISTS (
+      SELECT 1 FROM ${applicationAnswer} aa
+      JOIN ${questionDefinition} qd ON qd.id = aa.question_definition_id
+      WHERE aa.application_id = c.application_id
+        AND qd.committee_id = c.committee_id
+        AND aa.answer_text IS NOT NULL
+    )`;
+
     return db.transaction(async (tx) => {
       const pickedRows = await tx.execute<{ id: string }>(sql`
         SELECT c.id
@@ -445,12 +472,27 @@ export const assignmentService = {
               AND (ra.status = 'submitted' OR ra.updated_at > ${staleBefore})
           ) < COALESCE(cc.minimum_reviews, cy.minimum_reviews)
         ORDER BY
-          (SELECT count(*) FROM ${reviewAssignment} ra2
-            WHERE ra2.candidacy_id = c.id AND ra2.status = 'submitted') ASC,
-          (SELECT cp.rank FROM ${committeePreference} cp
-            WHERE cp.application_id = c.application_id
-              AND cp.committee_id = c.committee_id) ASC NULLS LAST,
-          c.created_at ASC
+          -- queuePriorityTier, expressed in SQL. Reviewing is finite, so the
+          -- order is a policy decision rather than a convenience: someone who
+          -- ranked this committee first *and* wrote for it has asked twice,
+          -- and is read before someone who ranked it third and wrote nothing.
+          --
+          -- Tier comes before coverage deliberately. Ordering by fewest
+          -- reviews first would round-robin across every tier and hand the
+          -- bottom of the list the same attention as the top, which is the
+          -- outcome the policy exists to prevent. Coverage is already handled
+          -- by the WHERE clause above, which drops anything that has met the
+          -- minimum - so this decides who reaches it first, not who reaches it.
+          CASE
+            WHEN ${hasCommitteeAnswer} AND ${applicantRank} BETWEEN 1 AND 3
+              THEN ${applicantRank}
+            ELSE 4
+          END ASC,
+          -- Inside the remainder tier an answer still counts for more than a
+          -- rank, matching compareQueueItems.
+          (${hasCommitteeAnswer}) DESC,
+          ${applicantRank} ASC NULLS LAST,
+          c.id ASC
         LIMIT 1
         FOR UPDATE OF c SKIP LOCKED
       `);
@@ -488,6 +530,90 @@ export const assignmentService = {
 
       return { assignmentId: created.id, candidacyId: picked.id };
     });
+  },
+
+  /**
+   * How much of the cycle still needs reading, for everybody together.
+   *
+   * Counts only - no applicant identity, no per-candidacy rows - which is why
+   * it is safe to show cycle-wide to a reviewer whose read access is scoped to
+   * one committee. The alternative the overview screen uses, fetching every
+   * committee's aggregates and reducing them in the browser, moves hundreds of
+   * candidacy records to derive two integers.
+   *
+   * "Complete" means a candidacy has met its minimum, counting submitted
+   * reviews only: a claim someone is still writing is not coverage yet.
+   */
+  reviewProgress: async (
+    acUser: RecruitmentUser,
+    cycleId: string,
+  ): Promise<{
+    candidacyCount: number;
+    completeCount: number;
+    remainingCandidacies: number;
+    reviewsSubmitted: number;
+    reviewsRequired: number;
+  }> => {
+    if (acUser.recruitment.memberships.length === 0) {
+      throw new HttpError(403, "You have no recruitment role in this cycle");
+    }
+
+    // Scoped to the cycle's review committee when one is pinned, so the numbers
+    // on screen describe the work the reviewer can actually see rather than
+    // six committees they will never open.
+    const [cycle] = await db
+      .select({
+        minimumReviews: recruitmentCycle.minimumReviews,
+        reviewCommitteeId: recruitmentCycle.reviewCommitteeId,
+      })
+      .from(recruitmentCycle)
+      .where(eq(recruitmentCycle.id, cycleId));
+
+    if (!cycle) {
+      throw new HttpError(404, "Cycle not found");
+    }
+
+    const pinned = cycle.reviewCommitteeId;
+    const committeeFilter = pinned === null ? sql`` : sql`AND c.committee_id = ${pinned}::uuid`;
+
+    const rows = await db.execute<{
+      candidacies: number;
+      complete: number;
+      submitted: number;
+      required: number;
+    }>(sql`
+      WITH scoped AS (
+        SELECT
+          c.id,
+          COALESCE(cc.minimum_reviews, cy.minimum_reviews) AS minimum,
+          (SELECT count(*) FROM ${reviewAssignment} ra
+            WHERE ra.candidacy_id = c.id AND ra.status = 'submitted') AS submitted
+        FROM ${committeeCandidacy} c
+        JOIN ${application} a ON a.id = c.application_id
+        JOIN ${recruitmentCycle} cy ON cy.id = a.cycle_id
+        LEFT JOIN ${cycleCommittee} cc
+          ON cc.cycle_id = cy.id AND cc.committee_id = c.committee_id
+        WHERE a.cycle_id = ${cycleId} AND c.active = true ${committeeFilter}
+      )
+      SELECT
+        count(*)::int AS candidacies,
+        count(*) FILTER (WHERE submitted >= minimum)::int AS complete,
+        COALESCE(sum(LEAST(submitted, minimum)), 0)::int AS submitted,
+        COALESCE(sum(minimum), 0)::int AS required
+      FROM scoped
+    `);
+
+    const row = rows.rows[0];
+    const candidacyCount = row?.candidacies ?? 0;
+    const completeCount = row?.complete ?? 0;
+
+    return {
+      candidacyCount,
+      completeCount,
+      remainingCandidacies: candidacyCount - completeCount,
+      reviewsSubmitted: row?.submitted ?? 0,
+      reviewsRequired: row?.required ?? 0,
+    };
   },
 
   /** Per-reviewer workload, so an admin can rebalance from real numbers. */

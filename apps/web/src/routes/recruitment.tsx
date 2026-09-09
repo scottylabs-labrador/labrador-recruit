@@ -49,7 +49,12 @@ function always(): boolean {
 
 const NAV_ITEMS: readonly NavItem[] = [
   { to: "/recruitment/$cycleId", label: "Overview", exact: true, visible: always },
-  { to: "/recruitment/$cycleId/queue", label: "My Queue", exact: false, visible: always },
+  {
+    to: "/recruitment/$cycleId/queue",
+    label: "Review Applications",
+    exact: false,
+    visible: always,
+  },
   { to: "/recruitment/$cycleId/applicants", label: "Applicants", exact: false, visible: always },
   { to: "/recruitment/$cycleId/ranking", label: "Ranking", exact: false, visible: always },
   {

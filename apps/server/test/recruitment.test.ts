@@ -28,6 +28,7 @@ import {
   seedApplication,
   seedAssignment,
   seedCandidacy,
+  seedCommitteeAnswer,
   seedCommittees,
   seedCycle,
   seedMembership,
@@ -752,6 +753,159 @@ describe("claiming the next review", () => {
       .from(reviewAssignmentTable)
       .where(eq(reviewAssignmentTable.candidacyId, candidacy.id));
     expect(rows.length).toBeLessThanOrEqual(2);
+  });
+});
+
+/**
+ * Reviewing is finite, so the order work is handed out in is a policy decision.
+ * `queueOrder.ts` states it and the queue screen displays it; the claim
+ * endpoint has to agree, or a reviewer is given applicants in one order while
+ * being shown another.
+ */
+describe("the order the next review is handed out in", () => {
+  /** Builds a Tech candidacy with a chosen rank and optional committee answer. */
+  async function candidate(
+    cycleId: string,
+    techId: string,
+    email: string,
+    rank: number | null,
+    answered: boolean,
+  ) {
+    const person = await seedApplicant({ email, fullName: email.split("@")[0] ?? email });
+    const app2 = await seedApplication({ cycleId, applicantId: person.id });
+    if (rank !== null) {
+      await seedPreference({ applicationId: app2.id, committeeId: techId, rank });
+    }
+    if (answered) {
+      await seedCommitteeAnswer({
+        cycleId,
+        applicationId: app2.id,
+        committeeId: techId,
+        key: `k_${email.split("@")[0] ?? email}`,
+      });
+    }
+    return seedCandidacy({ applicationId: app2.id, committeeId: techId });
+  }
+
+  it("hands out rank 1 with an essay before rank 1 without one", async () => {
+    const { cycle, tech } = await setupScenario();
+
+    // Seeded worst-first, so passing cannot come from insertion order.
+    const rank3NoEssay = await candidate(cycle.id, tech.id, "c@andrew.cmu.edu", 3, false);
+    const rank1NoEssay = await candidate(cycle.id, tech.id, "b@andrew.cmu.edu", 1, false);
+    const rank1Essay = await candidate(cycle.id, tech.id, "a@andrew.cmu.edu", 1, true);
+
+    const first = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/next-review`)
+      .set(aliceAuth());
+
+    expect(first.status).toBe(200);
+    // Tier 1 (ranked first *and* wrote for it) outranks both of the others,
+    // which fall into the remainder tier for having written nothing.
+    expect(first.body.candidacyId).toBe(rank1Essay.id);
+    expect(first.body.candidacyId).not.toBe(rank1NoEssay.id);
+    expect(first.body.candidacyId).not.toBe(rank3NoEssay.id);
+  });
+
+  it("prefers rank 2 with an essay over rank 1 without one", async () => {
+    const { cycle, tech } = await setupScenario();
+    const rank1NoEssay = await candidate(cycle.id, tech.id, "x@andrew.cmu.edu", 1, false);
+    const rank2Essay = await candidate(cycle.id, tech.id, "y@andrew.cmu.edu", 2, true);
+
+    const res = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/next-review`)
+      .set(aliceAuth());
+
+    // Tier 2 beats the remainder tier: writing for the committee is what puts
+    // an applicant in a numbered tier at all.
+    expect(res.body.candidacyId).toBe(rank2Essay.id);
+    expect(res.body.candidacyId).not.toBe(rank1NoEssay.id);
+  });
+
+  it("inside the remainder tier, an essay still counts for more than a rank", async () => {
+    const { cycle, tech } = await setupScenario();
+    const rank1NoEssay = await candidate(cycle.id, tech.id, "p@andrew.cmu.edu", 1, false);
+    const rank7Essay = await candidate(cycle.id, tech.id, "q@andrew.cmu.edu", 7, true);
+
+    const res = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/next-review`)
+      .set(aliceAuth());
+
+    // Both are tier 4 - rank 7 is outside the top three, and rank 1 wrote
+    // nothing - so the tiebreak is who actually wrote something.
+    expect(res.body.candidacyId).toBe(rank7Essay.id);
+    expect(res.body.candidacyId).not.toBe(rank1NoEssay.id);
+  });
+});
+
+/** What the team screen reports, and who is allowed to see it. */
+describe("team review progress", () => {
+  it("counts what still needs reading, and what is already covered", async () => {
+    const { cycle, tech, aliceAssignment, bobAssignment } = await setupScenario();
+
+    const before = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/review-progress`)
+      .set(aliceAuth());
+    expect(before.status).toBe(200);
+    expect(before.body.candidacyCount).toBe(1);
+    expect(before.body.completeCount).toBe(0);
+    expect(before.body.remainingCandidacies).toBe(1);
+    expect(before.body.reviewsSubmitted).toBe(0);
+    // Derived rather than hardcoded: the fixture's minimum is the cycle's, and
+    // an assertion that assumed two silently described a different cycle.
+    const minimum = before.body.reviewsRequired / before.body.candidacyCount;
+    expect(minimum).toBeGreaterThan(0);
+    expect(tech).toBeDefined();
+
+    const complete = {
+      scores: { interest: 4, initiative: 4, ideas: 4, experience: 4, growth: 4 },
+      recommendation: "yes" as const,
+      confidence: "high" as const,
+      rationale: "Reads well.",
+    };
+    await request(app)
+      .post(`/recruitment/assignments/${aliceAssignment.id}/review/submit`)
+      .set(aliceAuth())
+      .send(complete);
+
+    const midway = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/review-progress`)
+      .set(aliceAuth());
+    // One of two submitted: counted as progress, but not yet coverage.
+    expect(midway.body.reviewsSubmitted).toBe(1);
+    expect(midway.body.completeCount).toBe(0);
+    expect(midway.body.remainingCandidacies).toBe(1);
+
+    await request(app)
+      .post(`/recruitment/assignments/${bobAssignment.id}/review/submit`)
+      .set(bobAuth())
+      .send(complete);
+
+    const after = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/review-progress`)
+      .set(aliceAuth());
+    expect(after.body.reviewsSubmitted).toBe(2);
+    // Complete only once the minimum is actually met. With a minimum above two
+    // the candidacy is still outstanding, which is the point of the count.
+    const expectedComplete = minimum <= 2 ? 1 : 0;
+    expect(after.body.completeCount).toBe(expectedComplete);
+    expect(after.body.remainingCandidacies).toBe(1 - expectedComplete);
+  });
+
+  it("refuses somebody with no recruitment role in the cycle", async () => {
+    const { cycle } = await setupScenario();
+    await seedUser({
+      id: "outsider2",
+      name: "Outsider",
+      email: "outsider2@cmu.edu",
+      accountId: "outsider2-sub",
+    });
+
+    const res = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/review-progress`)
+      .set(authHeader({ sub: "outsider2-sub" }));
+
+    expect(res.status).toBe(403);
   });
 });
 

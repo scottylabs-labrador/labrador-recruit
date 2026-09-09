@@ -4,7 +4,9 @@ import { useState } from "react";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/recruitment/StateViews.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Label, Select } from "@/components/ui/field.tsx";
+import { Progress } from "@/components/ui/progress.tsx";
 import {
   Table,
   TableBody,
@@ -95,6 +97,18 @@ function MyQueuePage() {
    * reviews already or is one they hold - which is an ordinary end state and
    * is reported as such rather than as a failure.
    */
+  /**
+   * How much the team has left, not how much this reviewer has.
+   *
+   * Work is claimed rather than allotted, so a personal queue length says
+   * nothing useful about whether the cycle is nearly done. What a reviewer
+   * actually wants to know before deciding to read one more is how many
+   * applicants still have nobody on them.
+   */
+  const teamProgress = $api.useQuery("get", "/recruitment/cycles/{cycleId}/review-progress", {
+    params: { path: { cycleId } },
+  });
+
   const claimNext = $api.useMutation("post", "/recruitment/cycles/{cycleId}/next-review", {
     onSuccess: (data) => {
       if (!data) {
@@ -119,9 +133,10 @@ function MyQueuePage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold">My Review Queue</h2>
+          <h2 className="text-base font-semibold">Review Applications</h2>
           <p className="text-sm text-muted-foreground">
-            Reviews assigned to you in this cycle. Each row is one applicant for one committee.
+            Take the next applicant whenever you are ready. Nobody is allotted a share, so working
+            faster simply gets the cycle finished sooner.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
@@ -172,6 +187,28 @@ function MyQueuePage() {
         </div>
       </div>
 
+      {teamProgress.isSuccess ? (
+        <Card>
+          <CardContent className="flex flex-col gap-2 pt-5">
+            <Progress
+              value={teamProgress.data.completeCount}
+              max={Math.max(teamProgress.data.candidacyCount, 1)}
+              label="Applications fully reviewed"
+            />
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {`${String(teamProgress.data.completeCount)} of ${String(teamProgress.data.candidacyCount)}`}
+              </span>
+              {" applications have all the reviews they need"}
+              {teamProgress.data.remainingCandidacies > 0
+                ? ` · ${String(teamProgress.data.remainingCandidacies)} still to go`
+                : " · nothing left to read"}
+              {` · ${String(teamProgress.data.reviewsSubmitted)} of ${String(teamProgress.data.reviewsRequired)} reviews submitted`}
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {exhausted ? (
         <p className="text-sm leading-6 text-muted-foreground">
           Nothing left to claim. Every applicant in your committees either has the reviews it needs
@@ -191,7 +228,7 @@ function MyQueuePage() {
           title="Nothing in your queue"
           description={
             committeeFilter === "" && statusFilter === ""
-              ? "You have no review assignments yet. Press “Review next applicant” to take one."
+              ? "Nothing here yet. Press “Review next applicant” to take one."
               : "No assignments match these filters. Clear a filter to see the rest of your queue."
           }
         />

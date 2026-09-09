@@ -41,7 +41,7 @@ describe("recruitment layout", () => {
 
     const picker = await screen.findByLabelText("Recruitment cycle");
     expect((picker as HTMLSelectElement).value).toBe("cycle-1");
-    expect(screen.getByRole("link", { name: "My Queue" })).toBeDefined();
+    expect(screen.getByRole("link", { name: "Review Applications" })).toBeDefined();
     expect(screen.getByRole("link", { name: "Ranking" })).toBeDefined();
   });
 
@@ -52,7 +52,7 @@ describe("recruitment layout", () => {
     await renderApp("/recruitment/cycle-someone-elses");
 
     expect(await screen.findByText("You do not have access to this cycle")).toBeDefined();
-    expect(screen.queryByRole("link", { name: "My Queue" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Review Applications" })).toBeNull();
     expect(requestsMatching("GET", "/my-queue")).toHaveLength(0);
   });
 
@@ -64,7 +64,7 @@ describe("recruitment layout", () => {
 
     await renderApp("/recruitment/cycle-1");
 
-    expect(await screen.findByRole("link", { name: "My Queue" })).toBeDefined();
+    expect(await screen.findByRole("link", { name: "Review Applications" })).toBeDefined();
     for (const label of ADMIN_LINKS) {
       expect(screen.queryByRole("link", { name: label })).toBeNull();
     }

@@ -49,6 +49,20 @@ export class AssignmentsController extends Controller {
     return claimed;
   }
 
+  /**
+   * How much of the cycle is still to be read, for the whole team.
+   *
+   * Counts only, so it carries no applicant data and any member may see it.
+   */
+  @Get("cycles/{cycleId}/review-progress")
+  @Security(OIDC_AUTH)
+  @Security(BEARER_AUTH)
+  @SuccessResponse(200)
+  async getReviewProgress(@Request() req: ExpressRequest, @Path() cycleId: string) {
+    const user = await getRecruitmentUser(req, cycleId);
+    return assignmentService.reviewProgress(user, cycleId);
+  }
+
   /** Reviewer workloads across a cycle, so coverage can be rebalanced. */
   @Get("cycles/{cycleId}/workloads")
   @Security(OIDC_AUTH)
