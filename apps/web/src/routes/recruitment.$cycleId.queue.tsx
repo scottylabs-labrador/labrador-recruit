@@ -225,6 +225,31 @@ function MyQueuePage() {
       {teamProgress.isSuccess ? (
         <Card>
           <CardContent className="flex flex-col gap-2 pt-5">
+            {/*
+              The reviewer's own tally comes first. Work is claimed rather than
+              allotted, so the team figure below has no personal answer in it -
+              and the personal answer is the one people act on.
+            */}
+            <Progress
+              value={Math.min(teamProgress.data.yourSubmitted, teamProgress.data.reviewerTarget)}
+              max={Math.max(teamProgress.data.reviewerTarget, 1)}
+              label="Your reviews"
+            />
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {`You have reviewed ${String(teamProgress.data.yourSubmitted)} of ${String(teamProgress.data.reviewerTarget)}`}
+              </span>
+              {teamProgress.data.yourSubmitted >= teamProgress.data.reviewerTarget
+                ? " — target met, and anything further still counts."
+                : ` · ${String(teamProgress.data.reviewerTarget - teamProgress.data.yourSubmitted)} to go`}
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {teamProgress.isSuccess ? (
+        <Card>
+          <CardContent className="flex flex-col gap-2 pt-5">
             <Progress
               value={teamProgress.data.completeCount}
               max={Math.max(teamProgress.data.candidacyCount, 1)}

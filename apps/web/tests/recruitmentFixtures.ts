@@ -45,6 +45,7 @@ export function cycle(overrides: Partial<Cycle> = {}): Cycle {
     name: "Spring 2026",
     status: "reviewing",
     minimumReviews: 2,
+    reviewerTarget: 25,
     blindReviewEnabled: false,
     candidacyTopN: 2,
     candidacyIncludeOptIns: true,

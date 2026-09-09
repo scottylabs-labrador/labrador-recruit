@@ -133,6 +133,7 @@ function CycleSettingsSection({ cycleId, enabled }: { cycleId: string; enabled: 
         name: text(form, "name").trim(),
         status: (text(form, "status") || "draft") as (typeof STATUSES)[number],
         minimumReviews: numberOr(form, "minimumReviews", 0),
+        reviewerTarget: numberOr(form, "reviewerTarget", 0),
         candidacyTopN: numberOr(form, "candidacyTopN", 3),
         candidacyIncludeOptIns: form.get("candidacyIncludeOptIns") !== null,
         disagreementSpreadThreshold: numberOr(form, "disagreementSpreadThreshold", 20),
@@ -177,6 +178,20 @@ function CycleSettingsSection({ cycleId, enabled }: { cycleId: string; enabled: 
               />
               <FieldHint>
                 How many reviews a candidacy needs before it is ready to decide.
+              </FieldHint>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="reviewerTarget">Reviews asked of each person</Label>
+              <Input
+                id="reviewerTarget"
+                name="reviewerTarget"
+                type="number"
+                min={0}
+                defaultValue={data.reviewerTarget}
+              />
+              <FieldHint>
+                A target, not a limit. Nobody is stopped at it and nobody is refused work below it;
+                it is what each reviewer sees their own count measured against.
               </FieldHint>
             </div>
             <div className="flex flex-col gap-1.5">

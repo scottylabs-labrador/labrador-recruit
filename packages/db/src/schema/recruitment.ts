@@ -32,6 +32,17 @@ export const recruitmentCycle = pgTable(
     /** Reviews required per candidacy before it is ready for a decision. */
     minimumReviews: integer("minimum_reviews").notNull().default(3),
 
+    /**
+     * How many reviews each person is asked to contribute.
+     *
+     * A target, not a limit: nothing refuses a reviewer who has met it, and
+     * nobody is stopped short of it. Work is claimed rather than allotted, so
+     * this is the only place a reviewer can see what "their share" was meant
+     * to be - without it, "how much is left" is a team figure with no personal
+     * answer, and it is the personal answer people actually act on.
+     */
+    reviewerTarget: integer("reviewer_target").notNull().default(25),
+
     /** Hides applicant identity from ordinary reviewers when enabled. */
     blindReviewEnabled: boolean("blind_review_enabled").notNull().default(false),
 

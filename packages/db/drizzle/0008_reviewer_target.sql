@@ -1,0 +1,1 @@
+ALTER TABLE "recruitment_cycle" ADD COLUMN "reviewer_target" integer DEFAULT 25 NOT NULL;

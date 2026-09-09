@@ -22,6 +22,7 @@ export interface CycleSummary {
   name: string;
   status: string;
   minimumReviews: number;
+  reviewerTarget: number;
   blindReviewEnabled: boolean;
   candidacyTopN: number;
   /** Whether a committee opt-in creates a candidacy alongside the ranked top-N. */
@@ -105,6 +106,7 @@ export const recruitmentCycleService = {
       name: recruitmentCycle.name,
       status: recruitmentCycle.status,
       minimumReviews: recruitmentCycle.minimumReviews,
+      reviewerTarget: recruitmentCycle.reviewerTarget,
       blindReviewEnabled: recruitmentCycle.blindReviewEnabled,
       candidacyTopN: recruitmentCycle.candidacyTopN,
       candidacyIncludeOptIns: recruitmentCycle.candidacyIncludeOptIns,
@@ -151,6 +153,7 @@ export const recruitmentCycleService = {
       slug: string;
       name: string;
       minimumReviews?: number;
+      reviewerTarget?: number;
       candidacyTopN?: number;
       blindReviewEnabled?: boolean;
       preferenceScoreMap?: Record<string, number>;

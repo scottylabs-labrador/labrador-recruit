@@ -581,6 +581,9 @@ export const assignmentService = {
     remainingCandidacies: number;
     reviewsSubmitted: number;
     reviewsRequired: number;
+    /** How many the caller has submitted, and what they were asked for. */
+    yourSubmitted: number;
+    reviewerTarget: number;
   }> => {
     if (acUser.recruitment.memberships.length === 0) {
       throw new HttpError(403, "You have no recruitment role in this cycle");
@@ -593,6 +596,7 @@ export const assignmentService = {
       .select({
         minimumReviews: recruitmentCycle.minimumReviews,
         reviewCommitteeId: recruitmentCycle.reviewCommitteeId,
+        reviewerTarget: recruitmentCycle.reviewerTarget,
       })
       .from(recruitmentCycle)
       .where(eq(recruitmentCycle.id, cycleId));
@@ -631,11 +635,26 @@ export const assignmentService = {
       FROM scoped
     `);
 
+    // The caller's own tally, scoped the same way the team figure is so the
+    // two numbers describe the same body of work.
+    const mine = await db.execute<{ n: number }>(sql`
+      SELECT count(*)::int AS n
+      FROM ${reviewAssignment} ra
+      JOIN ${committeeCandidacy} c ON c.id = ra.candidacy_id
+      JOIN ${application} a ON a.id = c.application_id
+      WHERE a.cycle_id = ${cycleId}
+        AND ra.reviewer_user_id = ${acUser.id}
+        AND ra.status = 'submitted'
+        ${pinned === null ? sql`` : sql`AND c.committee_id = ${pinned}::uuid`}
+    `);
+
     const row = rows.rows[0];
     const candidacyCount = row?.candidacies ?? 0;
     const completeCount = row?.complete ?? 0;
 
     return {
+      yourSubmitted: mine.rows[0]?.n ?? 0,
+      reviewerTarget: cycle.reviewerTarget,
       candidacyCount,
       completeCount,
       remainingCandidacies: candidacyCount - completeCount,

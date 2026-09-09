@@ -893,6 +893,39 @@ describe("team review progress", () => {
     expect(after.body.remainingCandidacies).toBe(1 - expectedComplete);
   });
 
+  it("counts the caller's own submitted reviews against the target", async () => {
+    const { cycle, aliceAssignment } = await setupScenario();
+
+    const before = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/review-progress`)
+      .set(aliceAuth());
+    expect(before.body.yourSubmitted).toBe(0);
+    // A target, not a limit, and it comes from the cycle rather than a constant.
+    expect(before.body.reviewerTarget).toBeGreaterThan(0);
+
+    await request(app)
+      .post(`/recruitment/assignments/${aliceAssignment.id}/review/submit`)
+      .set(aliceAuth())
+      .send({
+        scores: { interest: 4, initiative: 4, ideas: 4, experience: 4, growth: 4 },
+        recommendation: "yes",
+        confidence: "high",
+        rationale: "Read and scored.",
+      });
+
+    const mine = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/review-progress`)
+      .set(aliceAuth());
+    expect(mine.body.yourSubmitted).toBe(1);
+
+    // Bob's tally is his own; one person's work is not another's progress.
+    const bobs = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/review-progress`)
+      .set(bobAuth());
+    expect(bobs.body.yourSubmitted).toBe(0);
+    expect(bobs.body.reviewsSubmitted).toBe(1);
+  });
+
   it("refuses somebody with no recruitment role in the cycle", async () => {
     const { cycle } = await setupScenario();
     await seedUser({

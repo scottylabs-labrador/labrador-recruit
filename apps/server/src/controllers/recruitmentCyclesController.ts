@@ -29,6 +29,8 @@ export interface UpdateCycleRequest {
   name?: string;
   status?: "draft" | "open" | "reviewing" | "deciding" | "archived";
   minimumReviews?: number;
+  /** How many reviews each person is asked for. A target, not a limit. */
+  reviewerTarget?: number;
   candidacyTopN?: number;
   blindReviewEnabled?: boolean;
   /**
