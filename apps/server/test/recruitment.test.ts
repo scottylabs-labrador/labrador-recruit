@@ -962,6 +962,46 @@ describe("team review progress", () => {
     expect(res.body.candidacyCount).toBe(1);
   });
 
+  /**
+   * The personal counter and the team figure are shown side by side and are
+   * measured against a target derived from the pool, so a review of somebody
+   * no longer in the pool must not count toward either.
+   */
+  it("keeps the caller's own tally scoped the same way the team figure is", async () => {
+    const { cycle, tech, aliceAssignment } = await setupScenario();
+
+    // A second candidacy Alice reviews, whose applicant wrote nothing.
+    const person = await seedApplicant({ email: "quiet@andrew.cmu.edu", fullName: "Quiet" });
+    const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
+    await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank: 1 });
+    const quiet = await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
+    const quietAssignment = await seedAssignment({
+      candidacyId: quiet.id,
+      reviewerUserId: alice.id,
+    });
+
+    const complete = {
+      scores: { interest: 4, initiative: 4, ideas: 4, experience: 4, growth: 4 },
+      recommendation: "yes" as const,
+      confidence: "high" as const,
+      rationale: "Reads well.",
+    };
+    for (const assignmentId of [aliceAssignment.id, quietAssignment.id]) {
+      await request(app)
+        .post(`/recruitment/assignments/${assignmentId}/review/submit`)
+        .set(aliceAuth())
+        .send(complete);
+    }
+
+    const res = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/review-progress`)
+      .set(aliceAuth());
+
+    // Two submitted, one of them on somebody out of the pool.
+    expect(res.body.yourSubmitted).toBe(1);
+    expect(res.body.candidacyCount).toBe(1);
+  });
+
   it("counts what still needs reading, and what is already covered", async () => {
     const { cycle, tech, aliceAssignment, bobAssignment } = await setupScenario();
 

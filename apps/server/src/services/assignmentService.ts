@@ -659,6 +659,23 @@ export const assignmentService = {
         AND ra.reviewer_user_id = ${acUser.id}
         AND ra.status = 'submitted'
         ${pinned === null ? sql`` : sql`AND c.committee_id = ${pinned}::uuid`}
+        -- Scoped exactly as the team figure above is. Both are measured
+        -- against a target derived from the size of the pool, so counting a
+        -- review of somebody no longer in it would credit work the target
+        -- never asked for - and the two numbers would stop describing the
+        -- same thing, which is the one property this pairing has to keep.
+        AND (
+          SELECT cp.rank FROM ${committeePreference} cp
+          WHERE cp.application_id = c.application_id
+            AND cp.committee_id = c.committee_id
+        ) BETWEEN 1 AND ${REVIEWABLE_RANKS}
+        AND EXISTS (
+          SELECT 1 FROM ${applicationAnswer} aa
+          JOIN ${questionDefinition} qd ON qd.id = aa.question_definition_id
+          WHERE aa.application_id = c.application_id
+            AND qd.committee_id = c.committee_id
+            AND aa.answer_text IS NOT NULL
+        )
     `);
 
     const row = rows.rows[0];
