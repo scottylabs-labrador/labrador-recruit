@@ -78,6 +78,33 @@ export function isInAllowedGroup(claim: unknown, allowed: readonly string[]): bo
 }
 
 /**
+ * The address to identify somebody by, given an identity provider's claims.
+ *
+ * CMU lets people set an alias, and Keycloak's `email` claim is that alias
+ * when one exists: Yuxiang Huang arrives as `yh4@cmu.edu`, not
+ * `yh4@andrew.cmu.edu`. Goldador therefore maps a second claim, `full_email`,
+ * straight from LDAP, and that one is always the Andrew address.
+ *
+ * Which matters because the Andrew ID is the primary key. Every membership,
+ * assignment and review is keyed by it, and it is derived from the local part
+ * of whichever address we store. Taking the alias produced two different
+ * failures depending on the person: somebody whose alias local part differs
+ * from their Andrew ID was provisioned under the wrong id and saw an empty
+ * application; somebody whose alias local part matched - `yh4@cmu.edu` against
+ * a row already holding `yh4@andrew.cmu.edu` - collided with the existing
+ * primary key and could not sign in at all.
+ *
+ * Falls back to the alias when the claim is absent, which is what a
+ * deployment without Goldador's mapper gets. That is the old behaviour, so a
+ * missing mapper degrades rather than locks everybody out.
+ */
+export function signInEmail(fullEmailClaim: unknown, fallback: string): string {
+  return typeof fullEmailClaim === "string" && fullEmailClaim.includes("@")
+    ? fullEmailClaim
+    : fallback;
+}
+
+/**
  * Whether password sign-in should be available.
  *
  * Password accounts exist so a cycle can run before an identity provider does.

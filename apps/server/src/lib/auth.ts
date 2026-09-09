@@ -14,6 +14,7 @@ import {
   isInAllowedGroup,
   isPasswordSignInEnabled,
   parseAllowedGroups,
+  signInEmail,
 } from "./authConfig.ts";
 import { getJwtPayloadFromHeaders } from "./authUtils.ts";
 import { db } from "./db.ts";
@@ -157,12 +158,12 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => {
-          // `full_email` is the identity provider's claim; a locally created
-          // account has only `email`. Either way the Andrew ID is the local
-          // part, and it becomes the primary key every membership, assignment
-          // and review is keyed by.
-          const source = (user as unknown as { full_email?: string })["full_email"] ?? user.email;
-          return { data: { ...user, id: source.split("@")[0] } };
+          // `email` is already the Andrew address by this point:
+          // `mapProfileToUser` resolves the alias for identity-provider
+          // sign-ins, and a locally created account only ever had one address.
+          // Its local part is the Andrew ID, which becomes the primary key
+          // every membership, assignment and review is keyed by.
+          return { data: { ...user, id: user.email.split("@")[0] } };
         },
       },
     },
@@ -206,9 +207,17 @@ export const auth = betterAuth({
                   "Ask a ScottyLabs administrator to add your Andrew ID to the team.",
               });
             }
-            // Every field is left to the provider's own claims; this hook is
-            // only here for the check above.
-            return {};
+            /**
+             * The Andrew address, not the CMU alias.
+             *
+             * Better Auth used to copy scope-mapped claims like `full_email`
+             * onto the user object, so leaving this empty was enough. It no
+             * longer does (ScottyStack 79fd3c1), which left us identifying
+             * people by `email` - the alias. Setting it here is what makes the
+             * lookup, the row and the derived id all agree on one address.
+             */
+            const email = signInEmail(profile["full_email"], String(profile["email"] ?? ""));
+            return email === "" ? {} : { email };
           },
         },
       ],
