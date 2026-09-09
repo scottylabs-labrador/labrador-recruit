@@ -42,7 +42,11 @@ describe("recruitment layout", () => {
     const picker = await screen.findByLabelText("Recruitment cycle");
     expect((picker as HTMLSelectElement).value).toBe("cycle-1");
     expect(screen.getByRole("link", { name: "Review Applications" })).toBeDefined();
-    expect(screen.getByRole("link", { name: "Ranking" })).toBeDefined();
+    // Ranking, Applicants, Disagreements and Overview are leadership tooling:
+    // a reviewer is given one thing to do rather than six ways to avoid it.
+    expect(screen.queryByRole("link", { name: "Ranking" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Applicants" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Overview" })).toBeNull();
   });
 
   it("refuses a cycle the caller holds no standing in, without loading its children", async () => {

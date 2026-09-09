@@ -8,6 +8,7 @@ import {
   committee,
   COMMITTEE_DESIGN,
   cycle,
+  adminStanding,
   myStanding,
   queueEntry,
 } from "./recruitmentFixtures.ts";
@@ -20,6 +21,12 @@ function seed() {
     committee(),
     committee({ id: COMMITTEE_DESIGN, slug: "design", name: "Design", displayOrder: 2 }),
   ]);
+  setStanding(adminStanding());
+}
+
+/** A plain reviewer: one button, one progress bar, no queue to shop through. */
+function seedReviewer() {
+  seed();
   setStanding(myStanding());
 }
 
@@ -161,5 +168,32 @@ describe("queue priority", () => {
 
     expect(await screen.findByText("no response")).toBeDefined();
     expect(screen.getByText("wrote")).toBeDefined();
+  });
+});
+
+describe("what a plain reviewer sees", () => {
+  it("offers one action and no queue to choose from", async () => {
+    seedReviewer();
+    setQueue([]);
+    await renderApp(`/recruitment/${cycle().id}/queue`);
+
+    // The whole page for a reviewer: take the next one.
+    expect(await screen.findByRole("button", { name: "Start reviewing" })).toBeDefined();
+
+    // None of the tooling that invites picking an easier application.
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByLabelText("Committee")).toBeNull();
+    expect(screen.queryByLabelText("Status")).toBeNull();
+  });
+
+  it("still offers a way back to a review already started", async () => {
+    seedReviewer();
+    setQueue([queueEntry({ submitted: false, hasDraft: true })]);
+    await renderApp(`/recruitment/${cycle().id}/queue`);
+
+    // An abandoned draft would otherwise be unreachable: the button claims a
+    // different applicant, and the draft holds its slot until the claim lapses.
+    expect(await screen.findByText(/You have one review open/)).toBeDefined();
+    expect(screen.queryByRole("table")).toBeNull();
   });
 });

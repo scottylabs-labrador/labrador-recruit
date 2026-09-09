@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table.tsx";
+import { useRecruitmentUser } from "@/hooks/useRecruitmentUser";
 import { $api } from "@/lib/apiClient";
 import {
   applicantLabel,
@@ -126,7 +127,18 @@ function MyQueuePage() {
     params: { path: { cycleId }, query },
   });
 
+  const standing = useRecruitmentUser(cycleId);
   const committeeList = committees.data ?? [];
+  /**
+   * A reviewer gets one thing to do; leadership gets the instrument panel.
+   *
+   * The filters and the table are for somebody auditing coverage, not for
+   * somebody reading the next application - and offering them to a reviewer
+   * turns "read one" into "choose which one", which is precisely the decision
+   * the claim endpoint exists to take away.
+   */
+  const showQueueTools = standing.isLeadership;
+
   const items = queue.data ?? [];
 
   return (
@@ -140,49 +152,58 @@ function MyQueuePage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="queue-committee-filter">Committee</Label>
-            <Select
-              id="queue-committee-filter"
-              className="w-48"
-              value={committeeFilter}
-              onChange={(event) => setCommitteeFilter(event.target.value)}
-            >
-              <option value="">All committees</option>
-              {committeeList.map((committee) => (
-                <option key={committee.id} value={committee.id}>
-                  {committee.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="queue-status-filter">Status</Label>
-            <Select
-              id="queue-status-filter"
-              className="w-40"
-              value={statusFilter}
-              onChange={(event) => {
-                const next = event.target.value;
-                setStatusFilter(isQueueStatus(next) ? next : "");
-              }}
-            >
-              <option value="">All statuses</option>
-              {QUEUE_STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-          </div>
+          {showQueueTools ? (
+            <>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="queue-committee-filter">Committee</Label>
+                <Select
+                  id="queue-committee-filter"
+                  className="w-48"
+                  value={committeeFilter}
+                  onChange={(event) => setCommitteeFilter(event.target.value)}
+                >
+                  <option value="">All committees</option>
+                  {committeeList.map((committee) => (
+                    <option key={committee.id} value={committee.id}>
+                      {committee.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="queue-status-filter">Status</Label>
+                <Select
+                  id="queue-status-filter"
+                  className="w-40"
+                  value={statusFilter}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setStatusFilter(isQueueStatus(next) ? next : "");
+                  }}
+                >
+                  <option value="">All statuses</option>
+                  {QUEUE_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </>
+          ) : null}
           <Button
+            size={showQueueTools ? "default" : "lg"}
             disabled={claimNext.isPending}
             onClick={() => {
               setExhausted(false);
               claimNext.mutate({ params: { path: { cycleId } } });
             }}
           >
-            {claimNext.isPending ? "Finding one…" : "Review next applicant"}
+            {claimNext.isPending
+              ? "Finding one…"
+              : items.length === 0
+                ? "Start reviewing"
+                : "Review next applicant"}
           </Button>
         </div>
       </div>
@@ -219,7 +240,9 @@ function MyQueuePage() {
         <ErrorState title="Could not claim a review" error={claimNext.error} />
       ) : null}
 
-      {queue.isError ? (
+      {!showQueueTools ? (
+        <UnfinishedReviews cycleId={cycleId} items={items} />
+      ) : queue.isError ? (
         <ErrorState title="Could not load your review queue" error={queue.error} />
       ) : queue.isLoading ? (
         <TableSkeleton columns={COLUMNS} />
@@ -287,4 +310,57 @@ function QueueStatusBadge({ item }: { item: QueueItem }) {
   if (label === "Conflicted") return <Badge variant="warning">{label}</Badge>;
   if (label === "Draft") return <Badge variant="outline">{label}</Badge>;
   return <Badge variant="muted">{label}</Badge>;
+}
+
+/**
+ * The one piece of the old queue a reviewer still needs.
+ *
+ * Somebody who opened an application, started scoring it and closed the tab has
+ * no other route back: pressing the button again claims a *different*
+ * applicant, and the abandoned draft sits holding a slot until its claim
+ * lapses. This is deliberately not a queue - no filters, no ranking, no way to
+ * shop for an easier application - just the work already in hand.
+ */
+function UnfinishedReviews({
+  cycleId,
+  items,
+}: {
+  cycleId: string;
+  items: Array<{ assignmentId: string; submitted: boolean; hasDraft: boolean }>;
+}) {
+  const open = items.filter((item) => !item.submitted);
+  if (open.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-2 pt-5">
+        <h3 className="text-sm font-semibold">
+          {open.length === 1
+            ? "You have one review open"
+            : `You have ${String(open.length)} reviews open`}
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Finish these before taking another, or they will be handed to somebody else in a couple of
+          days.
+        </p>
+        <ul className="flex flex-col gap-1 pt-1">
+          {open.map((item, index) => (
+            <li key={item.assignmentId}>
+              <Link
+                to="/recruitment/$cycleId/review/$assignmentId"
+                params={{ cycleId, assignmentId: item.assignmentId }}
+                className="text-sm text-primary-strong underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                {item.hasDraft
+                  ? `Finish the review you started (${String(index + 1)})`
+                  : `Open the application you claimed (${String(index + 1)})`}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
 }

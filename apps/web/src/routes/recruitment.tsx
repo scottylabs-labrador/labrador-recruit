@@ -24,6 +24,14 @@ export const Route = createFileRoute("/recruitment")({
  * from the navigation for a reviewer rather than present and refused — the
  * server still refuses it, but a reviewer is never shown a door they cannot
  * open.
+ *
+ * A plain reviewer is left with one destination: Review Applications. They can
+ * read every screen this hides - browsing applicants, the ranking, the
+ * disagreement queue are all within a reviewer's permissions - but none of them
+ * is work. Someone whose job is to read the next application does not benefit
+ * from six ways to avoid doing that, and a ranking half-built from three
+ * reviews invites reading the standings instead of the applicant. Leadership
+ * keeps the lot.
  */
 type NavPath =
   | "/recruitment/$cycleId"
@@ -48,20 +56,35 @@ function always(): boolean {
 }
 
 const NAV_ITEMS: readonly NavItem[] = [
-  { to: "/recruitment/$cycleId", label: "Overview", exact: true, visible: always },
+  {
+    to: "/recruitment/$cycleId",
+    label: "Overview",
+    exact: true,
+    visible: (standing) => standing.isLeadership,
+  },
   {
     to: "/recruitment/$cycleId/queue",
     label: "Review Applications",
     exact: false,
     visible: always,
   },
-  { to: "/recruitment/$cycleId/applicants", label: "Applicants", exact: false, visible: always },
-  { to: "/recruitment/$cycleId/ranking", label: "Ranking", exact: false, visible: always },
+  {
+    to: "/recruitment/$cycleId/applicants",
+    label: "Applicants",
+    exact: false,
+    visible: (standing) => standing.isLeadership,
+  },
+  {
+    to: "/recruitment/$cycleId/ranking",
+    label: "Ranking",
+    exact: false,
+    visible: (standing) => standing.isLeadership,
+  },
   {
     to: "/recruitment/$cycleId/disagreements",
     label: "Disagreements",
     exact: false,
-    visible: always,
+    visible: (standing) => standing.isLeadership,
   },
   {
     to: "/recruitment/$cycleId/import",
