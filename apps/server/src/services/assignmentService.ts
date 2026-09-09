@@ -492,10 +492,12 @@ export const assignmentService = {
               AND mine.reviewer_user_id = ${acUser.id}
           )
           -- Coverage: submitted reviews plus claims that have not lapsed.
-          -- Only a top-three choice is read this cycle. An applicant who
-          -- ranked us fourth or lower, or holds a candidacy only because they
-          -- answered our questions, is out of scope rather than merely last.
+          -- Scope, matching queuePriorityTier. Both halves are gates, not
+          -- tiebreaks: a top-three ranking, and something written for this
+          -- committee. An applicant who left every one of our questions blank
+          -- has given us nothing to read, whatever they ranked us.
           AND ${applicantRank} BETWEEN 1 AND ${REVIEWABLE_RANKS}
+          AND ${hasCommitteeAnswer}
           AND (
             SELECT count(*) FROM ${reviewAssignment} ra
             WHERE ra.candidacy_id = c.id
@@ -504,16 +506,9 @@ export const assignmentService = {
               AND (ra.status = 'submitted' OR ra.updated_at > ${staleBefore})
           ) < COALESCE(cc.minimum_reviews, cy.minimum_reviews)
         ORDER BY
-          -- queuePriorityTier, expressed in SQL:
-          --   1  ranked first, and wrote for us
-          --   2  ranked second, and wrote for us
-          --   3  ranked first, wrote nothing
-          --   4  ranked second, wrote nothing
-          --   5  ranked third, either way
-          --
-          -- Wanting us first outranks writing an essay for us. A third choice
-          -- who wrote a page used to be read before a first choice who wrote
-          -- nothing; leadership's call is that the ranking leads.
+          -- queuePriorityTier, expressed in SQL. Everything still in the
+          -- running wrote for this committee, so what remains is their own
+          -- ranking: first choices, then second, then third.
           --
           -- Tier comes before coverage deliberately. Ordering by fewest
           -- reviews first would round-robin across every tier and give the
@@ -521,14 +516,7 @@ export const assignmentService = {
           -- the policy exists to prevent. Coverage is handled by the WHERE
           -- clause above, which drops anything that has met its minimum - so
           -- this decides who gets there first, not who gets there.
-          CASE
-            WHEN ${applicantRank} = 3 THEN 5
-            WHEN ${hasCommitteeAnswer} THEN ${applicantRank}
-            ELSE ${applicantRank} + 2
-          END ASC,
-          -- Within a tier, which in practice means two third choices, having
-          -- written something still counts for more than not.
-          (${hasCommitteeAnswer}) DESC,
+          ${applicantRank} ASC,
           c.id ASC
         LIMIT 1
         FOR UPDATE OF c SKIP LOCKED
@@ -644,6 +632,13 @@ export const assignmentService = {
             WHERE cp.application_id = c.application_id
               AND cp.committee_id = c.committee_id
           ) BETWEEN 1 AND ${REVIEWABLE_RANKS}
+          AND EXISTS (
+            SELECT 1 FROM ${applicationAnswer} aa
+            JOIN ${questionDefinition} qd ON qd.id = aa.question_definition_id
+            WHERE aa.application_id = c.application_id
+              AND qd.committee_id = c.committee_id
+              AND aa.answer_text IS NOT NULL
+          )
       )
       SELECT
         count(*)::int AS candidacies,

@@ -79,6 +79,14 @@ async function setupScenario() {
   });
   const application = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
   await seedPreference({ applicationId: application.id, committeeId: tech.id, rank: 1 });
+  // Ranked *and* wrote for the committee: both halves of the scope gate, or
+  // the candidacy is never handed out and never counted.
+  await seedCommitteeAnswer({
+    cycleId: cycle.id,
+    applicationId: application.id,
+    committeeId: tech.id,
+    key: "tech_scenario",
+  });
 
   const candidacy = await seedCandidacy({
     applicationId: application.id,
@@ -650,6 +658,12 @@ describe("claiming the next review", () => {
       // Ranked, because an applicant who did not put this committee in their
       // top three is out of scope and is never handed to anybody.
       await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank: 1 });
+      await seedCommitteeAnswer({
+        cycleId: cycle.id,
+        applicationId: app2.id,
+        committeeId: tech.id,
+        key: `tech_extra_${String(i)}`,
+      });
       await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
     }
     expect(application).toBeDefined();
@@ -681,6 +695,12 @@ describe("claiming the next review", () => {
     const person = await seedApplicant({ email: "solo@andrew.cmu.edu", fullName: "Solo" });
     const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
     await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank: 1 });
+    await seedCommitteeAnswer({
+      cycleId: cycle.id,
+      applicationId: app2.id,
+      committeeId: tech.id,
+      key: "tech_solo",
+    });
     const candidacy = await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
 
     const one = await request(app)
@@ -724,6 +744,12 @@ describe("claiming the next review", () => {
     const person = await seedApplicant({ email: "race@andrew.cmu.edu", fullName: "Race" });
     const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
     await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank: 1 });
+    await seedCommitteeAnswer({
+      cycleId: cycle.id,
+      applicationId: app2.id,
+      committeeId: tech.id,
+      key: "tech_race",
+    });
     await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
 
     const [a, b] = await Promise.all([
@@ -749,6 +775,12 @@ describe("claiming the next review", () => {
     const person = await seedApplicant({ email: "covered@andrew.cmu.edu", fullName: "Covered" });
     const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
     await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank: 1 });
+    await seedCommitteeAnswer({
+      cycleId: cycle.id,
+      applicationId: app2.id,
+      committeeId: tech.id,
+      key: "tech_covered",
+    });
     const candidacy = await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
 
     // The cycle's minimum is 2 in the fixture; two claims fill it.
@@ -836,26 +868,33 @@ describe("the order the next review is handed out in", () => {
    * lower is not read this cycle however much they wrote, so an essay cannot
    * lift them past somebody in the top three - or past nobody at all.
    */
-  it("never hands out an applicant from outside the top three", async () => {
-    const { cycle, tech } = await setupScenario();
+  /**
+   * Both halves of the gate, each failing on its own. A rank the committee
+   * does not read is out; so is writing nothing, however high the rank. The
+   * scenario's own candidacy is the only one that passes both.
+   */
+  it("hands out only applicants who ranked us top three and wrote for us", async () => {
+    const { cycle, tech, candidacy } = await setupScenario();
     const rank1NoEssay = await candidate(cycle.id, tech.id, "p@andrew.cmu.edu", 1, false);
     const rank7Essay = await candidate(cycle.id, tech.id, "q@andrew.cmu.edu", 7, true);
+    const rank2Essay = await candidate(cycle.id, tech.id, "r@andrew.cmu.edu", 2, true);
 
+    // Alice already holds the scenario's candidacy, so hers is the rank 2.
     const first = await request(app)
       .post(`/recruitment/cycles/${cycle.id}/next-review`)
       .set(aliceAuth());
 
     expect(first.status).toBe(200);
-    expect(first.body.candidacyId).toBe(rank1NoEssay.id);
+    expect(first.body.candidacyId).toBe(rank2Essay.id);
 
-    // And once the in-scope applicant is taken the well is dry: rank 7 is not
-    // held back for later, it is not work.
+    // Nothing else qualifies: neither the silent first choice nor the seventh
+    // choice who wrote a page is held back for later, because neither is work.
     const second = await request(app)
       .post(`/recruitment/cycles/${cycle.id}/next-review`)
       .set(aliceAuth());
 
     expect(second.status).toBe(204);
-    expect(rank7Essay).toBeDefined();
+    expect([rank1NoEssay.id, rank7Essay.id]).not.toContain(candidacy.id);
   });
 });
 
@@ -883,6 +922,12 @@ describe("team review progress", () => {
       const person = await seedApplicant({ email, fullName: email });
       const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
       await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank });
+      await seedCommitteeAnswer({
+        cycleId: cycle.id,
+        applicationId: app2.id,
+        committeeId: tech.id,
+        key: `tech_${email}`,
+      });
       await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
     }
 
@@ -893,6 +938,28 @@ describe("team review progress", () => {
     // Two, not three: the seventh choice is not work.
     expect(after.body.candidacyCount).toBe(2);
     expect(after.body.remainingCandidacies).toBe(2);
+  });
+
+  /**
+   * The other half of the scope gate, in the denominator. 139 of 316 Labrador
+   * candidacies had written nothing; counting them made the bar unreachable
+   * and told the team their work was not landing.
+   */
+  it("leaves applicants who wrote nothing out of the total", async () => {
+    const { cycle, tech } = await setupScenario();
+
+    const person = await seedApplicant({ email: "silent@andrew.cmu.edu", fullName: "Silent" });
+    const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
+    // A first choice, so only the missing answers can put them out of scope.
+    await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank: 1 });
+    await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
+
+    const res = await request(app)
+      .get(`/recruitment/cycles/${cycle.id}/review-progress`)
+      .set(aliceAuth());
+
+    // One, not two: the scenario's candidacy, and not the silent first choice.
+    expect(res.body.candidacyCount).toBe(1);
   });
 
   it("counts what still needs reading, and what is already covered", async () => {
@@ -1014,6 +1081,12 @@ describe("a cycle pinned to one committee", () => {
     const person = await seedApplicant({ email: "d@andrew.cmu.edu", fullName: "Dee" });
     const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
     await seedPreference({ applicationId: app2.id, committeeId: design.id, rank: 1 });
+    await seedCommitteeAnswer({
+      cycleId: cycle.id,
+      applicationId: app2.id,
+      committeeId: design.id,
+      key: "design_dee",
+    });
     const designCandidacy = await seedCandidacy({ applicationId: app2.id, committeeId: design.id });
 
     // And a Tech one, which is what the pin allows.

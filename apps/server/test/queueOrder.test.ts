@@ -63,6 +63,9 @@ async function setupQueue() {
   return { cycle, tech, committees, candidate };
 }
 
+/** Mirrors `OUT_OF_SCOPE_TIER` in queueOrder.ts, which is not exported. */
+const OUT_OF_SCOPE_TIER = 99;
+
 describe("review queue order", () => {
   it("puts answered top choices first, in the applicant's own rank order", async () => {
     const { cycle, candidate } = await setupQueue();
@@ -80,30 +83,29 @@ describe("review queue order", () => {
       "bsecond",
       "cthird",
     ]);
-    // A third choice sits in tier 5 now: rank 1 and 2 occupy tiers 1-4,
-    // split by whether the applicant wrote for us.
-    expect(res.body.map((row: { priorityTier: number }) => row.priorityTier)).toEqual([1, 2, 5]);
+    // Everyone in the pool wrote for us, so the tier is simply their rank.
+    expect(res.body.map((row: { priorityTier: number }) => row.priorityTier)).toEqual([1, 2, 3]);
   });
 
   /**
-   * The ranking leads. A first choice who wrote nothing is still somebody who
-   * put us top, and is read before a third choice who wrote a page - which
-   * reverses the earlier policy, on leadership's call.
+   * Writing nothing is now disqualifying rather than merely costly, so a first
+   * choice who left every committee question blank sorts below a third choice
+   * who answered them - and is filtered out of the pool entirely.
    */
-  it("puts a silent first choice above an answered third choice", async () => {
+  it("sorts a silent first choice below an answered third choice", async () => {
     const { cycle, candidate } = await setupQueue();
 
-    await candidate("wrote", 3, true);
     await candidate("silent", 1, false);
+    await candidate("wrote", 3, true);
 
     const res = await request(app).get(`/recruitment/cycles/${cycle.id}/my-queue`).set(aliceAuth());
 
     expect(res.body.map((row: { applicantName: string }) => row.applicantName)).toEqual([
-      "silent",
       "wrote",
+      "silent",
     ]);
     expect(res.body[0].priorityTier).toBe(3);
-    expect(res.body[1].priorityTier).toBe(5);
+    expect(res.body[1].priorityTier).toBe(OUT_OF_SCOPE_TIER);
   });
 
   it("orders the unanswered remainder by the rank they gave", async () => {
@@ -114,6 +116,8 @@ describe("review queue order", () => {
 
     const res = await request(app).get(`/recruitment/cycles/${cycle.id}/my-queue`).set(aliceAuth());
 
+    // All out of scope, so the tier cannot separate them; the rank still does,
+    // which is what keeps the listing stable rather than arbitrary.
     expect(res.body.map((row: { applicantName: string }) => row.applicantName)).toEqual([
       "first",
       "third",
@@ -163,8 +167,8 @@ describe("review queue order", () => {
     const res = await request(app).get(`/recruitment/cycles/${cycle.id}/my-queue`).set(aliceAuth());
 
     expect(res.body[0].hasCommitteeResponse).toBe(false);
-    // A silent first choice is tier 3: rank leads, the essay splits within it.
-    expect(res.body[0].priorityTier).toBe(3);
+    // And so out of the pool: a row with no text is not something to read.
+    expect(res.body[0].priorityTier).toBe(OUT_OF_SCOPE_TIER);
   });
 
   /**

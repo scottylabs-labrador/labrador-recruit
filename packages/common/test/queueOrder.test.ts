@@ -16,15 +16,12 @@ function item(
 }
 
 /**
- * The order leadership asked for:
+ * The order leadership asked for: the applicant's own rank, 1 to 3.
  *
- *   1  ranked first, and wrote for us
- *   2  ranked second, and wrote for us
- *   3  ranked first, wrote nothing
- *   4  ranked second, wrote nothing
- *   5  ranked third, either way
- *
- * Ranked fourth or lower is not read at all this cycle.
+ * Scope is the interesting part. Ranking us fourth or lower puts somebody out,
+ * and so does writing nothing for us - a committee's questions are the only
+ * place an applicant says anything about *this* committee, so leaving them all
+ * blank leaves nothing to review.
  */
 describe("queuePriorityTier", () => {
   it("puts a first choice who wrote for us at the top", () => {
@@ -35,26 +32,20 @@ describe("queuePriorityTier", () => {
     expect(queuePriorityTier(item("a", 2, true))).toBe(2);
   });
 
+  it("puts a third choice who wrote for us last of those read", () => {
+    expect(queuePriorityTier(item("a", 3, true))).toBe(3);
+  });
+
   /**
-   * The change from the previous policy. A first choice who wrote nothing used
-   * to fall behind every essay; the ranking now leads, because somebody who put
-   * us top is who we are trying to recruit.
+   * The change from the previous policy. Writing nothing used to cost an
+   * applicant a few places; it now takes them out of the pool. Rank no longer
+   * rescues them - a first choice who left every Labrador question blank has
+   * given the committee nothing to read.
    */
-  it("keeps a silent first choice ahead of any third choice", () => {
-    expect(queuePriorityTier(item("a", 1, false))).toBe(3);
-    expect(queuePriorityTier(item("b", 3, true))).toBe(5);
-    expect(queuePriorityTier(item("a", 1, false))).toBeLessThan(
-      queuePriorityTier(item("b", 3, true)),
-    );
-  });
-
-  it("puts a silent second choice fourth", () => {
-    expect(queuePriorityTier(item("a", 2, false))).toBe(4);
-  });
-
-  it("puts a third choice last, essay or not", () => {
-    expect(queuePriorityTier(item("a", 3, true))).toBe(5);
-    expect(queuePriorityTier(item("b", 3, false))).toBe(5);
+  it("takes a silent applicant out of the pool at every rank", () => {
+    for (const rank of [1, 2, 3]) {
+      expect(isReviewable(item("a", rank, false))).toBe(false);
+    }
   });
 
   it("treats a fourth choice or lower as out of scope", () => {
@@ -72,9 +63,9 @@ describe("queuePriorityTier", () => {
     expect(isReviewable(item("b", -1, true))).toBe(false);
   });
 
-  it("counts every top-three choice as reviewable", () => {
+  it("counts every top-three choice who wrote for us as reviewable", () => {
     for (const rank of [1, 2, 3]) {
-      expect(isReviewable(item("a", rank, false))).toBe(true);
+      expect(isReviewable(item("a", rank, true))).toBe(true);
     }
   });
 });
@@ -84,18 +75,14 @@ describe("compareQueueItems", () => {
     expect(compareQueueItems(item("a", 1, true), item("b", 2, true))).toBeLessThan(0);
   });
 
-  it("puts a silent first choice above a second choice who wrote for us", () => {
-    // Tier 3 against tier 2: the essay still wins here, because rank 2 with an
-    // essay is asked for before rank 1 without one.
-    expect(compareQueueItems(item("a", 1, false), item("b", 2, true))).toBeGreaterThan(0);
-  });
-
-  it("puts a silent second choice above any third choice", () => {
-    expect(compareQueueItems(item("a", 2, false), item("b", 3, true))).toBeLessThan(0);
-  });
-
-  it("prefers an essay between two third choices", () => {
-    expect(compareQueueItems(item("a", 3, true), item("b", 3, false))).toBeLessThan(0);
+  /**
+   * Sorted last rather than dropped. `compareQueueItems` orders whatever it is
+   * handed; filtering is `isReviewable`'s job, and a caller that forgets it
+   * should get these at the bottom, not silently interleaved.
+   */
+  it("sorts a silent applicant below every applicant who wrote", () => {
+    expect(compareQueueItems(item("a", 1, false), item("b", 3, true))).toBeGreaterThan(0);
+    expect(compareQueueItems(item("a", 3, true), item("b", 1, false))).toBeLessThan(0);
   });
 
   it("breaks a complete tie reproducibly, without locale", () => {
@@ -116,13 +103,20 @@ describe("orderQueue", () => {
       item("first-essay", 1, true),
     ]);
 
+    // The three who wrote, in rank order, then the three who did not - who are
+    // out of scope and never handed out at all.
     expect(ordered.map((row) => row.candidacyId)).toEqual([
       "first-essay",
       "second-essay",
+      "third-essay",
       "first-silent",
       "second-silent",
-      "third-essay",
       "third-silent",
+    ]);
+    expect(ordered.filter(isReviewable).map((row) => row.candidacyId)).toEqual([
+      "first-essay",
+      "second-essay",
+      "third-essay",
     ]);
   });
 
