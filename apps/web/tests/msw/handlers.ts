@@ -56,6 +56,7 @@ export function setAdminUsers(next: typeof adminUsers) {
 export let cycles: Cycle[] = [];
 export let committees: Committee[] = [];
 export let queue: QueueEntry[] = [];
+let nextReview: { assignmentId: string; candidacyId: string } | null = null;
 export let applications: Application[] = [];
 export let rubric: Rubric | null = null;
 export let review: Review | null = null;
@@ -85,6 +86,16 @@ export function setCommittees(next: Committee[]) {
 }
 export function setQueue(next: QueueEntry[]) {
   queue = next;
+}
+/**
+ * What the next claim hands back, or `null` for "nothing left".
+ *
+ * Claiming is a POST that mutates real state, so it cannot be derived from
+ * `queue` the way the list handlers are - a test has to say what the server
+ * would pick.
+ */
+export function setNextReview(next: { assignmentId: string; candidacyId: string } | null) {
+  nextReview = next;
 }
 export function setApplications(next: Application[]) {
   applications = next;
@@ -446,6 +457,12 @@ export const handlers = [
         (committeeId === null || item.committeeId === committeeId),
     );
     return HttpResponse.json(filtered);
+  }),
+
+  http.post(`${RECRUITMENT}/cycles/:cycleId/next-review`, async ({ request }) => {
+    await record("POST", request);
+    if (nextReview === null) return new HttpResponse(null, { status: 204 });
+    return HttpResponse.json(nextReview);
   }),
 
   http.get(`${RECRUITMENT}/cycles/:cycleId/applications`, async ({ request }) => {

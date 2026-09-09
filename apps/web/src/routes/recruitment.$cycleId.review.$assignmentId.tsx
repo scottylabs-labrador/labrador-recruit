@@ -92,7 +92,7 @@ function ReviewPage() {
   // `/me` carries the caller's memberships, blind-review setting, and the
   // candidacies they have already submitted on, so both predicates below are the
   // server's own, evaluated over the server's own inputs.
-  const { user, isLoaded: standingLoaded } = useRecruitmentUser(cycleId);
+  const { user, isLoaded: standingLoaded, isLeadership } = useRecruitmentUser(cycleId);
   // Only claim identity is being withheld once the standing is actually known,
   // so the notice never flashes on a cycle that is not running blind review.
   const identityHidden = standingLoaded && !canReadApplicantIdentity({ user, cycleId });
@@ -153,6 +153,31 @@ function ReviewPage() {
       },
     },
   );
+
+  /**
+   * Takes the next applicant without going back to the queue first.
+   *
+   * Reviewing is a loop, and the loop used to be broken at exactly the point
+   * it mattered: submitting left the reviewer on a locked review whose only
+   * way onward was `Next`, which walks their own queue - a list that includes
+   * everything they have already submitted. So finishing a review handed them
+   * back their own finished work. This claims a genuinely new candidacy, which
+   * the server picks in priority order and never re-issues to somebody who
+   * already holds it.
+   */
+  const [exhausted, setExhausted] = useState(false);
+  const claimNext = $api.useMutation("post", "/recruitment/cycles/{cycleId}/next-review", {
+    onSuccess: (data) => {
+      if (!data) {
+        setExhausted(true);
+        return;
+      }
+      void navigate({
+        to: "/recruitment/$cycleId/review/$assignmentId",
+        params: { cycleId, assignmentId: data.assignmentId },
+      });
+    },
+  });
 
   const reopenReview = $api.useMutation(
     "post",
@@ -295,41 +320,43 @@ function ReviewPage() {
           ) : null}
         </div>
 
-        <nav aria-label="Queue navigation" className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={previous === undefined}
-            onClick={() => {
-              if (previous === undefined) return;
-              void navigate({
-                to: "/recruitment/$cycleId/review/$assignmentId",
-                params: { cycleId, assignmentId: previous.assignmentId },
-              });
-            }}
-          >
-            <ChevronLeft aria-hidden data-icon="inline-start" />
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground tabular-nums">
-            {currentIndex + 1} of {queueItems.length}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={next === undefined}
-            onClick={() => {
-              if (next === undefined) return;
-              void navigate({
-                to: "/recruitment/$cycleId/review/$assignmentId",
-                params: { cycleId, assignmentId: next.assignmentId },
-              });
-            }}
-          >
-            Next
-            <ChevronRight aria-hidden data-icon="inline-end" />
-          </Button>
-        </nav>
+        {isLeadership ? (
+          <nav aria-label="Queue navigation" className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={previous === undefined}
+              onClick={() => {
+                if (previous === undefined) return;
+                void navigate({
+                  to: "/recruitment/$cycleId/review/$assignmentId",
+                  params: { cycleId, assignmentId: previous.assignmentId },
+                });
+              }}
+            >
+              <ChevronLeft aria-hidden data-icon="inline-start" />
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground tabular-nums">
+              {currentIndex + 1} of {queueItems.length}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={next === undefined}
+              onClick={() => {
+                if (next === undefined) return;
+                void navigate({
+                  to: "/recruitment/$cycleId/review/$assignmentId",
+                  params: { cycleId, assignmentId: next.assignmentId },
+                });
+              }}
+            >
+              Next
+              <ChevronRight aria-hidden data-icon="inline-end" />
+            </Button>
+          </nav>
+        ) : null}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)] lg:items-start">
@@ -381,13 +408,36 @@ function ReviewPage() {
                 </div>
               )}
               {locked ? (
-                <p className="text-sm text-muted-foreground">
-                  Submitted{" "}
-                  {reviewData?.submittedAt == null
-                    ? ""
-                    : new Date(reviewData.submittedAt).toLocaleString()}
-                  . This review is locked.
-                </p>
+                <div className="flex flex-col gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    Submitted{" "}
+                    {reviewData?.submittedAt == null
+                      ? ""
+                      : new Date(reviewData.submittedAt).toLocaleString()}
+                    . This review is locked.
+                  </p>
+                  {exhausted ? (
+                    <p className="text-sm leading-6 text-muted-foreground">
+                      Nothing left to claim. Every applicant in scope either has the reviews it
+                      needs or is one you have already read.
+                    </p>
+                  ) : (
+                    <Button
+                      size="lg"
+                      className="w-full"
+                      disabled={claimNext.isPending}
+                      onClick={() => {
+                        setExhausted(false);
+                        claimNext.mutate({ params: { path: { cycleId } } });
+                      }}
+                    >
+                      {claimNext.isPending ? "Finding one…" : "Review next applicant"}
+                    </Button>
+                  )}
+                  {claimNext.isError ? (
+                    <ErrorState title="Could not claim a review" error={claimNext.error} />
+                  ) : null}
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Your draft saves automatically. Submitting is a separate, deliberate step.

@@ -9,6 +9,7 @@ import {
   setCommittees,
   setCycles,
   setPeerReviews,
+  setNextReview,
   setQueue,
   setReview,
   setRubric,
@@ -42,6 +43,7 @@ function seed() {
   setReview(review());
   setPeerReviews([peerReview()]);
   setStanding(myStanding());
+  setNextReview(null);
 }
 
 async function fillValidReview(user: ReturnType<typeof userEvent.setup>) {
@@ -176,6 +178,68 @@ describe("review page", () => {
     expect(await screen.findByText("Solid project experience and clear writing.")).toBeDefined();
   });
 
+  /**
+   * Reviewing is a loop, and it used to break where it mattered most.
+   * Submitting left the reviewer on a locked review whose only way onward was
+   * `Next`, which walks their own queue - and that list holds everything they
+   * have already submitted. Finishing a review handed them back their own
+   * finished work.
+   */
+  it("offers the next applicant from a locked review, and claims a new one", async () => {
+    const user = userEvent.setup();
+    seed();
+    setReview(review({ submittedAt: "2026-02-01T00:00:00.000Z", computedScore: 4 }));
+    setQueue([queueEntry({ status: "submitted", submitted: true })]);
+    setNextReview({ assignmentId: "assignment-2", candidacyId: "candidacy-2" });
+
+    await renderApp(REVIEW_PATH);
+    expect(await screen.findByText(/This review is locked/)).toBeDefined();
+
+    await user.click(await screen.findByRole("button", { name: "Review next applicant" }));
+
+    // Claimed from the server rather than walked to from the list on screen:
+    // only the claim endpoint knows the priority order, and only it refuses to
+    // re-issue a candidacy this reviewer already holds.
+    await waitFor(() => {
+      expect(requestsMatching("POST", "/next-review")).toHaveLength(1);
+    });
+  });
+
+  it("does not offer a reviewer a pager through work they have already submitted", async () => {
+    seed();
+    setReview(review({ submittedAt: "2026-02-01T00:00:00.000Z", computedScore: 4 }));
+    setQueue([queueEntry({ status: "submitted", submitted: true })]);
+
+    const reviewerView = await renderApp(REVIEW_PATH);
+    expect(await screen.findByText(/This review is locked/)).toBeDefined();
+    // Browsing the queue is how submitted work gets served back, so a reviewer
+    // is given the claim instead.
+    expect(screen.queryByRole("navigation", { name: "Queue navigation" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Next/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Review next applicant" })).toBeDefined();
+    reviewerView.unmount();
+
+    // Leadership audits coverage, so they keep it.
+    setStanding(adminStanding());
+    await renderApp(REVIEW_PATH);
+    expect(await screen.findByRole("navigation", { name: "Queue navigation" })).toBeDefined();
+  });
+
+  it("says so plainly when there is nothing left to claim", async () => {
+    const user = userEvent.setup();
+    seed();
+    setReview(review({ submittedAt: "2026-02-01T00:00:00.000Z", computedScore: 4 }));
+    setQueue([queueEntry({ status: "submitted", submitted: true })]);
+    // A 204: the ordinary end of the cycle, not a failure.
+    setNextReview(null);
+
+    await renderApp(REVIEW_PATH);
+    await user.click(await screen.findByRole("button", { name: "Review next applicant" }));
+
+    expect(await screen.findByText(/Nothing left to claim/)).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Review next applicant" })).toBeNull();
+  });
+
   it("offers Reopen to a recruitment admin on a locked review, but not to a reviewer", async () => {
     seed();
     setReview(review({ submittedAt: "2026-02-01T00:00:00.000Z", computedScore: 4 }));
@@ -222,9 +286,11 @@ describe("review page", () => {
     expect(requestsMatching("POST", "/conflict")).toHaveLength(0);
   });
 
-  it("navigates through the queue with previous and next", async () => {
+  /** Leadership's, because a reviewer is given the claim instead. */
+  it("lets leadership navigate through the queue with previous and next", async () => {
     const user = userEvent.setup();
     seed();
+    setStanding(adminStanding());
     setQueue([
       queueEntry(),
       queueEntry({
