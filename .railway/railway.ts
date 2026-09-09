@@ -84,7 +84,7 @@ export default defineRailway(() => {
   // to an empty map: those two read as "not managed here" and are ignored
   // with a warning respectively, both leaving the database open to the
   // internet while `config plan` reports no drift.
-  Postgres.networking = { privateNetworkEndpoint: "postgres", tcpProxies: { "5432": null } };
+  Postgres.networking = { privateNetworkEndpoint: "postgres", tcpProxies: { "5432": {} } };
   // Pinned to what Railway provisioned. Left unspecified, every subsequent
   // `config plan` proposes nulling the region and size back out, which reads as
   // a destructive change against the database's own storage.
