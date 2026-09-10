@@ -668,7 +668,14 @@ describe("claiming the next review", () => {
     }
     expect(application).toBeDefined();
 
-    // Alice claims all three; Bob claims none. No quota stops her.
+    // Alice takes all three; Bob takes none. No quota stops her - but she has
+    // to finish each one, because claiming is not reviewing.
+    const complete = {
+      scores: { interest: 4, initiative: 4, ideas: 4, experience: 4, growth: 4 },
+      recommendation: "yes" as const,
+      confidence: "high" as const,
+      rationale: "Reads well.",
+    };
     const claimed: string[] = [];
     for (let i = 0; i < 3; i += 1) {
       const res = await request(app)
@@ -676,6 +683,10 @@ describe("claiming the next review", () => {
         .set(aliceAuth());
       expect(res.status).toBe(200);
       claimed.push(res.body.candidacyId);
+      await request(app)
+        .post(`/recruitment/assignments/${String(res.body.assignmentId)}/review/submit`)
+        .set(aliceAuth())
+        .send(complete);
     }
 
     // Three distinct applicants, and the well is now dry for her.
@@ -687,11 +698,77 @@ describe("claiming the next review", () => {
   });
 
   /**
+   * Claiming is not reviewing. Nothing used to stop a reviewer clicking
+   * through applications without finishing them, and every click locked one
+   * away from everybody else until it lapsed - which is how 51 of 52
+   * outstanding claims came to hold no work at all while the team was told
+   * there was nothing left to claim.
+   */
+  it("stops a reviewer hoarding, and hands back what they left open", async () => {
+    const { cycle, tech, aliceAssignment } = await setupScenario();
+
+    for (let i = 0; i < 5; i += 1) {
+      const person = await seedApplicant({
+        email: `hoard${String(i)}@andrew.cmu.edu`,
+        fullName: `Hoard ${String(i)}`,
+      });
+      const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
+      await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank: 1 });
+      await seedCommitteeAnswer({
+        cycleId: cycle.id,
+        applicationId: app2.id,
+        committeeId: tech.id,
+        key: `tech_hoard_${String(i)}`,
+      });
+      await seedCandidacy({ applicationId: app2.id, committeeId: tech.id });
+    }
+
+    // The scenario already leaves Alice holding one unfinished assignment, so
+    // one more takes her to the cap of two.
+    expect(aliceAssignment).toBeDefined();
+    const held = new Set<string>();
+    const first = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/next-review`)
+      .set(aliceAuth());
+    expect(first.status).toBe(200);
+    held.add(String(first.body.assignmentId));
+
+    // At the cap she is not refused - she is handed something to read. It is
+    // just one she already took, so the pool is not drained any further.
+    const atCap = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/next-review`)
+      .set(aliceAuth());
+
+    expect(atCap.status).toBe(200);
+    expect([...held, aliceAssignment.id]).toContain(String(atCap.body.assignmentId));
+
+    // And Bob, who has taken nothing, still finds plenty.
+    const bobs = await request(app)
+      .post(`/recruitment/cycles/${cycle.id}/next-review`)
+      .set(bobAuth());
+    expect(bobs.status).toBe(200);
+    expect(held).not.toContain(String(bobs.body.assignmentId));
+  });
+
+  /**
    * The database index is what guarantees this, so the test drives the service
    * rather than trusting the query's NOT EXISTS clause to stay correct.
    */
   it("refuses to give a reviewer a candidacy they already hold", async () => {
-    const { cycle, tech } = await setupScenario();
+    const { cycle, tech, aliceAssignment } = await setupScenario();
+    // Cleared first: the scenario leaves Alice holding an unfinished
+    // assignment, and two of those reach the cap on open claims - which would
+    // hand her one back instead of letting her reach the empty case here.
+    await request(app)
+      .post(`/recruitment/assignments/${aliceAssignment.id}/review/submit`)
+      .set(aliceAuth())
+      .send({
+        scores: { interest: 4, initiative: 4, ideas: 4, experience: 4, growth: 4 },
+        recommendation: "yes" as const,
+        confidence: "high" as const,
+        rationale: "Reads well.",
+      });
+
     const person = await seedApplicant({ email: "solo@andrew.cmu.edu", fullName: "Solo" });
     const app2 = await seedApplication({ cycleId: cycle.id, applicantId: person.id });
     await seedPreference({ applicationId: app2.id, committeeId: tech.id, rank: 1 });
@@ -874,7 +951,20 @@ describe("the order the next review is handed out in", () => {
    * scenario's own candidacy is the only one that passes both.
    */
   it("hands out only applicants who ranked us top three and wrote for us", async () => {
-    const { cycle, tech, candidacy } = await setupScenario();
+    const { cycle, tech, candidacy, aliceAssignment } = await setupScenario();
+    // Cleared first: the scenario leaves Alice holding an unfinished
+    // assignment, and two of those reach the cap on open claims - which would
+    // hand her one back instead of letting her reach the empty case here.
+    await request(app)
+      .post(`/recruitment/assignments/${aliceAssignment.id}/review/submit`)
+      .set(aliceAuth())
+      .send({
+        scores: { interest: 4, initiative: 4, ideas: 4, experience: 4, growth: 4 },
+        recommendation: "yes" as const,
+        confidence: "high" as const,
+        rationale: "Reads well.",
+      });
+
     const rank1NoEssay = await candidate(cycle.id, tech.id, "p@andrew.cmu.edu", 1, false);
     const rank7Essay = await candidate(cycle.id, tech.id, "q@andrew.cmu.edu", 7, true);
     const rank2Essay = await candidate(cycle.id, tech.id, "r@andrew.cmu.edu", 2, true);

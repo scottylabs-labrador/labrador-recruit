@@ -16,7 +16,7 @@ import {
   review,
   reviewAssignment,
 } from "@labrador/db/schema";
-import { and, asc, count, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNotNull, ne, sql } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";
 import { HttpError } from "../middlewares/errorHandler.ts";
@@ -357,15 +357,40 @@ export const assignmentService = {
    *
    * Without an expiry a reviewer who claims ten applicants and goes quiet
    * stalls all ten indefinitely: they are neither reviewed nor claimable, and
-   * the cycle cannot reach its minimum. Two days is long enough to claim
-   * something on a Friday and write it on a Sunday, and short enough that a
-   * dropped claim does not outlive the cycle.
+   * the cycle cannot reach its minimum.
+   *
+   * Two days was far too generous. A claim counts toward coverage, so an
+   * applicant held by two people is handed to nobody else - and clicking
+   * through applications without finishing them is free. One reviewer opened
+   * 25 and wrote in none of them, which with five others doing the same
+   * parked every remaining applicant for two days while the team was told
+   * there was nothing left to claim. Hours, not days: long enough to read an
+   * application and write it up, short enough that an abandoned one comes
+   * back the same evening.
    *
    * The claim is not deleted when it lapses. It stops counting toward coverage,
    * so the candidacy becomes claimable again - and if the original reviewer
    * comes back and submits, their work still counts.
    */
-  CLAIM_EXPIRY_HOURS: 48,
+  CLAIM_EXPIRY_HOURS: 4,
+
+  /**
+   * How many unfinished claims one reviewer may hold at once.
+   *
+   * Work is claimed rather than allotted, which is what lets a fast reviewer
+   * take more - but claiming is not reviewing. Without a cap one person can
+   * empty the pool into their own queue and finish none of it, which is
+   * exactly what happened: 51 of 52 outstanding claims held no scores, no
+   * recommendation and no rationale.
+   *
+   * At the cap the next claim returns the oldest thing they already hold
+   * rather than refusing. The button still hands them an application to read;
+   * it is simply one they already took.
+   *
+   * Two, on leadership's call: enough to set one aside and come back to it,
+   * few enough that the pool cannot be drained into one person's queue.
+   */
+  MAX_OPEN_CLAIMS: 2,
 
   /**
    * Hands the caller the next applicant they should review, and claims it.
@@ -434,6 +459,35 @@ export const assignmentService = {
     }
 
     const allowed = pinned !== null ? [pinned] : committeeIds;
+
+    /**
+     * What the caller already holds and has not finished.
+     *
+     * Checked before handing out anything new, because a claim the reviewer
+     * never comes back to is worse than no claim: it counts toward coverage,
+     * so it keeps the applicant away from everybody else until it lapses.
+     */
+    const open = await db
+      .select({ assignmentId: reviewAssignment.id, candidacyId: reviewAssignment.candidacyId })
+      .from(reviewAssignment)
+      .innerJoin(committeeCandidacy, eq(reviewAssignment.candidacyId, committeeCandidacy.id))
+      .innerJoin(application, eq(committeeCandidacy.applicationId, application.id))
+      .where(
+        and(
+          eq(application.cycleId, cycleId),
+          eq(reviewAssignment.reviewerUserId, acUser.id),
+          inArray(reviewAssignment.status, ["assigned", "in_progress"]),
+          inArray(committeeCandidacy.committeeId, allowed),
+          gt(reviewAssignment.updatedAt, staleBefore),
+        ),
+      )
+      .orderBy(asc(reviewAssignment.updatedAt));
+
+    if (open.length >= assignmentService.MAX_OPEN_CLAIMS) {
+      // The oldest, so a reviewer at the cap is walked back through what they
+      // left behind rather than handed the same one every time.
+      return open[0] ?? null;
+    }
 
     // A cycle-wide caller on an unpinned cycle needs no restriction at all;
     // everyone else gets an explicit id list. Composing this here rather than
