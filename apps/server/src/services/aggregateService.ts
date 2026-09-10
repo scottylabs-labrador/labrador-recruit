@@ -351,6 +351,48 @@ export const aggregateService = {
   },
 
   /**
+   * One candidacy's aggregate, for a reader who arrived at the applicant
+   * rather than at the committee.
+   *
+   * Derived by running the committee's own aggregation and picking this row
+   * out, rather than by a second, narrower calculation. The verdict shown on
+   * an application has to be the verdict the disagreement queue shows, and two
+   * implementations of "is this flagged" would eventually disagree with each
+   * other - which is the one bug this screen cannot afford, since it exists to
+   * settle disagreements.
+   *
+   * Visibility comes with it: `listCommitteeAggregates` refuses a caller who
+   * cannot see the committee, so this needs no gate of its own.
+   */
+  getCandidacyAggregate: async (
+    acUser: RecruitmentUser,
+    candidacyId: string,
+  ): Promise<CandidacyAggregate> => {
+    const [row] = await db
+      .select({ cycleId: application.cycleId, committeeId: committeeCandidacy.committeeId })
+      .from(committeeCandidacy)
+      .innerJoin(application, eq(committeeCandidacy.applicationId, application.id))
+      .where(eq(committeeCandidacy.id, candidacyId));
+
+    if (!row) {
+      throw new HttpError(404, "Candidacy not found");
+    }
+
+    const aggregates = await aggregateService.listCommitteeAggregates(
+      acUser,
+      row.cycleId,
+      row.committeeId,
+    );
+    const found = aggregates.find((entry) => entry.candidacyId === candidacyId);
+
+    if (!found) {
+      throw new HttpError(404, "Candidacy not found");
+    }
+
+    return found;
+  },
+
+  /**
    * The reviews behind one candidacy's aggregate, so leadership can inspect the
    * derivation. Visibility still applies: a reviewer who has not submitted sees
    * only their own.

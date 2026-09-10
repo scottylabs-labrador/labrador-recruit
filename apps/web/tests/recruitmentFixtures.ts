@@ -162,8 +162,9 @@ export function applicationDetail(overrides: Partial<ApplicationDetail> = {}): A
     friendRequest: null,
     heardAboutScottylabs: "A friend on the Tech committee.",
     preferences: [
-      { committeeId: COMMITTEE_TECH, name: "Tech", rank: 1 },
-      { committeeId: COMMITTEE_DESIGN, name: "Design", rank: 2 },
+      { committeeId: COMMITTEE_TECH, name: "Tech", rank: 1, candidacyId: CANDIDACY_ID },
+      // Ranked, but never put forward - so no reviews hang off it.
+      { committeeId: COMMITTEE_DESIGN, name: "Design", rank: 2, candidacyId: null },
     ],
     sections: [
       {

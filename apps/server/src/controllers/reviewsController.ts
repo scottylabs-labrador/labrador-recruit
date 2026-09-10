@@ -126,6 +126,25 @@ export class ReviewsController extends Controller {
    * The reviews behind a candidacy. A reviewer who has not yet submitted their
    * own review sees only their own, which is what keeps review independent.
    */
+  /**
+   * One candidacy's aggregate, including whether it is flagged as a
+   * disagreement and why. The committee-wide endpoint answers "which are
+   * flagged"; this answers "is this one", for a reader who opened the
+   * applicant rather than the queue.
+   */
+  @Get("candidacies/{candidacyId}/aggregate")
+  @Security(OIDC_AUTH)
+  @Security(BEARER_AUTH)
+  @SuccessResponse(200)
+  async getCandidacyAggregate(@Request() req: ExpressRequest, @Path() candidacyId: string) {
+    const cycleId = await getCycleIdForCandidacy(candidacyId);
+    if (!cycleId) {
+      throw new HttpError(404, "Candidacy not found");
+    }
+    const user = await getRecruitmentUser(req, cycleId);
+    return aggregateService.getCandidacyAggregate(user, candidacyId);
+  }
+
   @Get("candidacies/{candidacyId}/reviews")
   @Security(OIDC_AUTH)
   @Security(BEARER_AUTH)

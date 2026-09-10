@@ -9,6 +9,7 @@ import {
   setApplications,
   setCommittees,
   setCycles,
+  setPeerReviews,
   setProgress,
   setQueue,
   setSession,
@@ -23,6 +24,7 @@ import {
   cycle,
   cycleProgress,
   myStanding,
+  peerReview,
   queueEntry,
 } from "./recruitmentFixtures.ts";
 import { renderApp } from "./render.tsx";
@@ -125,5 +127,52 @@ describe("leadership-only context", () => {
 
     expect(await screen.findByText(FRIEND_REQUEST)).toBeDefined();
     expect(screen.getByText(/never contributes to a score/)).toBeDefined();
+  });
+
+  /**
+   * Opening an applicant should answer "what did we make of them", not just
+   * "what did they say". Both the verdict and the reviews behind it are keyed
+   * by candidacy, so this also checks the candidacy the ranking produced is
+   * threaded through the application detail.
+   */
+  it("shows the committee's verdict and every review under the application", async () => {
+    seedDetail();
+    setStanding(adminStanding());
+    setAggregates([
+      aggregate({
+        disagreement: { flagged: true, reasons: ["Reviews include both a Strong Yes and a No"] },
+      }),
+    ]);
+    setPeerReviews([
+      peerReview({
+        reviewId: "review-a",
+        reviewerUserId: "bob",
+        computedScore: 5,
+        rationale: "Built and shipped a scheduling tool unprompted.",
+      }),
+      peerReview({
+        reviewId: "review-b",
+        reviewerUserId: "carol",
+        computedScore: 2,
+        rationale: "Reads to me as coursework rather than initiative.",
+      }),
+    ]);
+
+    await renderApp("/recruitment/cycle-1/applicant/application-1");
+
+    // The verdict, and why.
+    expect(await screen.findByText("Disagreement")).toBeDefined();
+    expect(screen.getByText("Reviews include both a Strong Yes and a No")).toBeDefined();
+
+    // The reasoning behind it, in each reviewer's own words.
+    expect(screen.getByText("Built and shipped a scheduling tool unprompted.")).toBeDefined();
+    expect(screen.getByText("Reads to me as coursework rather than initiative.")).toBeDefined();
+    expect(screen.getByText(/Score 5/)).toBeDefined();
+    expect(screen.getByText(/Score 2/)).toBeDefined();
+
+    // Only for the committee that actually has a candidacy. Design was ranked
+    // second but never put forward, so there is nothing to show for it.
+    expect(screen.getByText("Tech review")).toBeDefined();
+    expect(screen.queryByText("Design review")).toBeNull();
   });
 });

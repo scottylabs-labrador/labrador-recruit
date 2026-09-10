@@ -579,6 +579,13 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 });
   }),
 
+  http.get(`${RECRUITMENT}/candidacies/:candidacyId/aggregate`, async ({ request }) => {
+    await record("GET", request);
+    const [first] = aggregates;
+    if (first === undefined) return new HttpResponse(null, { status: 404 });
+    return HttpResponse.json(first);
+  }),
+
   http.get(`${RECRUITMENT}/candidacies/:candidacyId/reviews`, async ({ request }) => {
     await record("GET", request);
     return HttpResponse.json(peerReviews);

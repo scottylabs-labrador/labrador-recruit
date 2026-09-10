@@ -53,7 +53,22 @@ export interface ApplicationDetail {
    */
   friendRequest: string | null;
   heardAboutScottylabs: string | null;
-  preferences: Array<{ committeeId: string; name: string; rank: number }>;
+  /**
+   * Every committee they ranked, and the candidacy each ranking produced.
+   *
+   * `candidacyId` is null where the ranking never became a candidacy - a
+   * committee they listed but were not put forward for. It is carried here so
+   * a reader of the application can reach the reviews and the disagreement
+   * verdict attached to it, both of which are keyed by candidacy rather than
+   * by application: one applicant can be under consideration by several
+   * committees at once, each with its own reviews.
+   */
+  preferences: Array<{
+    committeeId: string;
+    name: string;
+    rank: number;
+    candidacyId: string | null;
+  }>;
   sections: AnswerSection[];
 }
 
@@ -226,9 +241,25 @@ export const applicantService = {
     });
 
     const preferences = await db
-      .select({ committeeId: committee.id, name: committee.name, rank: committeePreference.rank })
+      .select({
+        committeeId: committee.id,
+        name: committee.name,
+        rank: committeePreference.rank,
+        // Left join: a ranking without a candidacy is still a ranking, and
+        // dropping those rows would silently shorten the applicant's stated
+        // preference list.
+        candidacyId: committeeCandidacy.id,
+      })
       .from(committeePreference)
       .innerJoin(committee, eq(committeePreference.committeeId, committee.id))
+      .leftJoin(
+        committeeCandidacy,
+        and(
+          eq(committeeCandidacy.applicationId, committeePreference.applicationId),
+          eq(committeeCandidacy.committeeId, committeePreference.committeeId),
+          eq(committeeCandidacy.active, true),
+        ),
+      )
       .where(eq(committeePreference.applicationId, applicationId))
       .orderBy(asc(committeePreference.rank));
 
