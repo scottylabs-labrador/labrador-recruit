@@ -3,6 +3,7 @@ import { Flag } from "lucide-react";
 import { useState } from "react";
 
 import { CommitteePicker } from "@/components/recruitment/CommitteePicker.tsx";
+import { PeerReviews } from "@/components/recruitment/PeerReviews.tsx";
 import { EmptyState, ErrorState } from "@/components/recruitment/StateViews.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
@@ -163,6 +164,25 @@ function DisagreementCard({
             {distribution.map((entry) => `${entry.label} ${entry.count}`).join(" · ")}
           </p>
         )}
+
+        {/*
+          The reviews themselves, not just the statistics over them.
+
+          A spread is a number that says two people disagreed; it cannot say
+          why, and resolving a disagreement means reading what each of them
+          actually wrote. Every reviewer's score, recommendation, confidence
+          and rationale is shown here so the argument is on the page rather
+          than a click away on each reviewer's screen.
+
+          No `currentUserId`: whoever is reading this is doing so as
+          leadership, and the endpoint already decides what they may see -
+          before submitting, a reviewer is returned only their own review.
+        */}
+        <PeerReviews
+          candidacyId={aggregate.candidacyId}
+          title="What each reviewer said"
+          description="Every submitted review behind the numbers above."
+        />
       </CardContent>
     </Card>
   );

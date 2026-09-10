@@ -7,11 +7,19 @@ import {
   setCommittees,
   setCycles,
   setDisagreements,
+  setPeerReviews,
   setRanking,
   setSession,
   setStanding,
 } from "./msw/handlers.ts";
-import { aggregate, committee, cycle, myStanding, rankingRow } from "./recruitmentFixtures.ts";
+import {
+  aggregate,
+  committee,
+  cycle,
+  myStanding,
+  peerReview,
+  rankingRow,
+} from "./recruitmentFixtures.ts";
 import { renderApp } from "./render.tsx";
 
 const SPREAD_REASON = "Spread of 3.0 exceeds the configured threshold of 2.0";
@@ -83,6 +91,46 @@ describe("disagreement queue", () => {
     expect(await screen.findByText("Why this is flagged")).toBeDefined();
     expect(screen.getByText(SPREAD_REASON)).toBeDefined();
     expect(screen.getByText("Robin Fixture")).toBeDefined();
+  });
+
+  /**
+   * A spread is a number that says two people disagreed. It cannot say why,
+   * and resolving the disagreement means reading what each of them wrote - so
+   * the reviews belong on this screen, not a click away on each reviewer's.
+   */
+  it("shows each reviewer's score, recommendation and reasoning", async () => {
+    seed();
+    setDisagreements([aggregate({ disagreement: { flagged: true, reasons: [SPREAD_REASON] } })]);
+    setPeerReviews([
+      peerReview({
+        reviewId: "review-a",
+        reviewerUserId: "bob",
+        recommendation: "yes",
+        computedScore: 4,
+        rationale: "Ships things unprompted, and explains them well.",
+      }),
+      peerReview({
+        reviewId: "review-b",
+        reviewerUserId: "carol",
+        recommendation: "no",
+        computedScore: 2,
+        rationale: "The project described is coursework, not initiative.",
+      }),
+    ]);
+
+    await renderApp("/recruitment/cycle-1/disagreements");
+
+    // The words each reviewer wrote, which is the thing being adjudicated.
+    expect(
+      await screen.findByText("Ships things unprompted, and explains them well."),
+    ).toBeDefined();
+    expect(screen.getByText("The project described is coursework, not initiative.")).toBeDefined();
+
+    // Attributed, and with the score that produced the spread.
+    expect(screen.getByText("bob")).toBeDefined();
+    expect(screen.getByText("carol")).toBeDefined();
+    expect(screen.getByText(/Score 4/)).toBeDefined();
+    expect(screen.getByText(/Score 2/)).toBeDefined();
   });
 
   it("shows an empty state when nothing is flagged", async () => {

@@ -7,8 +7,15 @@ import { confidenceLabel, formatStatistic, recommendationLabel } from "@/lib/rec
 
 interface PeerReviewsProps {
   candidacyId: string;
-  /** The caller's own id, so their review is labelled rather than shown as a peer's. */
-  currentUserId: string;
+  /**
+   * The caller's own id, so their review is labelled rather than shown as a
+   * peer's. Absent where the reader is not one of the reviewers - leadership
+   * reading a disagreement - and then every review is simply attributed.
+   */
+  currentUserId?: string;
+  /** Overridden where the surrounding screen has already said what these are. */
+  title?: string;
+  description?: string;
 }
 
 /**
@@ -16,7 +23,12 @@ interface PeerReviewsProps {
  * caller has submitted, this endpoint returns only their own review. Rendering
  * it here is therefore safe, not a second gate.
  */
-export function PeerReviews({ candidacyId, currentUserId }: PeerReviewsProps) {
+export function PeerReviews({
+  candidacyId,
+  currentUserId,
+  title = "Reviews for this candidacy",
+  description = "Visible now that your own review is submitted.",
+}: PeerReviewsProps) {
   const reviews = $api.useQuery("get", "/recruitment/candidacies/{candidacyId}/reviews", {
     params: { path: { candidacyId } },
   });
@@ -24,10 +36,8 @@ export function PeerReviews({ candidacyId, currentUserId }: PeerReviewsProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Reviews for this candidacy</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Visible now that your own review is submitted.
-        </p>
+        <CardTitle>{title}</CardTitle>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {reviews.isError ? (
