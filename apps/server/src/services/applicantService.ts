@@ -121,7 +121,21 @@ export const applicantService = {
       throw new HttpError(403, "You have no recruitment role in this cycle");
     }
 
-    const limit = Math.min(200, Math.max(1, options?.limit ?? 50));
+    /**
+     * The cap has to clear a whole cycle, because the applicants screen
+     * searches the rows it was given rather than asking the server.
+     *
+     * It was 200 against 455 applications, so the page asked for 500, got the
+     * first 200, and searched those - and an applicant in the other 255 could
+     * not be found by any search term. The screen said "showing 200" and was
+     * telling the truth, which is what made it so quiet.
+     *
+     * Still bounded: a cap is what stops one request dragging an unbounded
+     * table across the wire. `MAX_PAGE` just has to sit above a plausible
+     * cycle rather than above nothing.
+     */
+    const MAX_PAGE = 2000;
+    const limit = Math.min(MAX_PAGE, Math.max(1, options?.limit ?? 50));
     const offset = Math.max(0, options?.offset ?? 0);
     const showIdentity = canReadApplicantIdentity({ user: acUser, cycleId });
 

@@ -198,3 +198,52 @@ const YEAR_LABELS: Record<string, string> = {
 export function yearLabel(value: string): string {
   return YEAR_LABELS[value] ?? value;
 }
+
+/**
+ * Folds a string down to bare lowercase words separated by single spaces.
+ *
+ * Applicant names are typed by applicants, so they arrive in every shape the
+ * form allowed: `Jia Yi, Hu` surname-first with a comma, `Kantinant (Casey)
+ * Laiprasert` with a parenthesised preferred name, `Yu-Min Cho` hyphenated,
+ * and fourteen with a double space in the middle. Stored years are
+ * `first_year`. Matching any of those against what somebody types means
+ * ignoring the punctuation entirely rather than hoping it lines up.
+ *
+ * Diacritics are stripped too. There are none in the current cycle, but a
+ * search that cannot find José when you type Jose is the kind of thing nobody
+ * reports - they assume the applicant is missing.
+ */
+export function foldForSearch(value: string): string {
+  return (
+    value
+      .normalize("NFD")
+      // Combining marks, left behind by NFD once the base letter is separated.
+      .replaceAll(/[̀-ͯ]/gu, "")
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9]+/gu, " ")
+      .trim()
+  );
+}
+
+/**
+ * Whether an applicant matches a search box.
+ *
+ * Every word typed has to appear somewhere, but in any order and in any field:
+ * "mathew sam" finds Sam Mathew, and "cho senior" finds a senior named Cho.
+ * A single substring test over a joined string - which is what this replaced -
+ * could do neither, because it required the words to be adjacent and in the
+ * order the record happened to store them.
+ */
+export function matchesApplicantSearch(
+  item: Pick<ApplicationListItem, "applicantName" | "major" | "year" | "email">,
+  search: string,
+): boolean {
+  const terms = foldForSearch(search).split(" ").filter(Boolean);
+  if (terms.length === 0) return true;
+
+  const haystack = foldForSearch(
+    [item.applicantName, item.major, item.year, item.email].filter((v) => v !== null).join(" "),
+  );
+
+  return terms.every((term) => haystack.includes(term));
+}

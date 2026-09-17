@@ -14,10 +14,15 @@ import {
   TableRow,
 } from "@/components/ui/table.tsx";
 import { $api } from "@/lib/apiClient";
-import { applicantLabel, type ApplicationListItem, yearLabel } from "@/lib/recruitment.ts";
+import { applicantLabel, matchesApplicantSearch, yearLabel } from "@/lib/recruitment.ts";
 
 const COLUMNS = ["Applicant", "Year", "Major", "Committee preferences"];
-const PAGE_LIMIT = 500;
+/**
+ * One request, the whole cycle. The search below filters what this returned,
+ * so anybody past the limit is unfindable - and was: the server used to cap
+ * this at 200 against 455 applications.
+ */
+const PAGE_LIMIT = 1000;
 
 export const Route = createFileRoute("/recruitment/$cycleId/applicants")({
   component: ApplicantsPage,
@@ -41,7 +46,7 @@ function ApplicantsPage() {
 
   const committeeList = committees.data ?? [];
   const all = applications.data ?? [];
-  const filtered = all.filter((item) => matchesSearch(item, search));
+  const filtered = all.filter((item) => matchesApplicantSearch(item, search));
 
   return (
     <div className="flex flex-col gap-4">
@@ -91,6 +96,19 @@ function ApplicantsPage() {
           ? "Loading applicants…"
           : `${filtered.length} of ${all.length} applicant${all.length === 1 ? "" : "s"} shown`}
       </p>
+
+      {/*
+        Said out loud rather than left implicit. Searching a truncated list
+        returns "no applicants match" for somebody who is simply past the end
+        of it, which reads as "they did not apply" - so if the limit ever binds
+        again, the screen admits it instead of quietly lying.
+      */}
+      {all.length >= PAGE_LIMIT ? (
+        <p className="text-sm text-amber-800 dark:text-amber-300">
+          Only the first {PAGE_LIMIT} applicants were loaded, so search covers those. Filter by
+          committee to narrow the list.
+        </p>
+      ) : null}
 
       {applications.isError ? (
         <ErrorState title="Could not load applicants" error={applications.error} />
@@ -152,15 +170,4 @@ function ApplicantsPage() {
       )}
     </div>
   );
-}
-
-/** Plain substring matching over fields the caller can already see. */
-function matchesSearch(item: ApplicationListItem, search: string): boolean {
-  const term = search.trim().toLowerCase();
-  if (term === "") return true;
-  const haystack = [item.applicantName, item.major, item.year, item.email]
-    .filter((value): value is string => value !== null)
-    .join(" ")
-    .toLowerCase();
-  return haystack.includes(term);
 }
