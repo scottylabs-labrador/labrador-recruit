@@ -1,0 +1,24 @@
+{
+  "name": "@recruit/worker",
+  "version": "0.0.0",
+  "dependencies": {
+    "@recruit/db": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.10",
+    "dotenv-cli": "^11.0.0",
+    "vitest": "^4.0.18"
+  },
+  "module": "src/index.ts",
+  "private": true,
+  "scripts": {
+    "build": "bun build src/index.ts --outdir=dist --target=bun --sourcemap",
+    "dev": "secretspec run -P local -- bun run --watch src/index.ts",
+    "dev:local": "dotenv -e ../../.env.local -- bun run --watch src/index.ts",
+    "start": "bun dist/index.js",
+    "test": "vitest run --passWithNoTests"
+  },
+  "type": "module"
+}

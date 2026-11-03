@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  // Declared explicitly rather than relying on automatic @types discovery:
+  // the type-aware lint resolves from the repository root, where `@types/bun`
+  // is not hoisted, and the symptom is a confusing "Cannot find name 'console'".
+  "compilerOptions": {
+    "types": ["bun"]
+  },
+  "include": ["src/**/*.ts"]
+}
