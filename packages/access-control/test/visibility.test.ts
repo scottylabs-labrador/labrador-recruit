@@ -1,4 +1,4 @@
-import { committeeCandidacy, reviewAssignment } from "@labrador/db/schema";
+import { committeeCandidacy, reviewAssignment } from "@recruit/db/schema";
 import { describe, expect, it } from "vitest";
 
 import type { Membership, RecruitmentUser } from "../src/types.ts";

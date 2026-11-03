@@ -6,9 +6,9 @@
       "cache": false,
       "persistent": true
     },
-    "@labrador/server#build:api": {},
+    "@recruit/server#build:api": {},
     "build": {
-      "dependsOn": ["^build", "@labrador/server#build:api"],
+      "dependsOn": ["^build", "@recruit/server#build:api"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": ["dist/**"]
     },

@@ -1,4 +1,4 @@
-import type { answerType, applicantYear } from "@labrador/db/schema";
+import type { answerType, applicantYear } from "@recruit/db/schema";
 
 /**
  * Mirrored from the database enums rather than re-declared, so the importer can

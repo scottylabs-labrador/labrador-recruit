@@ -1,6 +1,6 @@
-import type { RecruitmentUser } from "@labrador/access-control";
-import { canConfigureCycle } from "@labrador/access-control";
-import { committee, recruitmentMembership, user } from "@labrador/db/schema";
+import type { RecruitmentUser } from "@recruit/access-control";
+import { canConfigureCycle } from "@recruit/access-control";
+import { committee, recruitmentMembership, user } from "@recruit/db/schema";
 import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";

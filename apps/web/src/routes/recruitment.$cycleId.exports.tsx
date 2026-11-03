@@ -1,4 +1,4 @@
-import { canDecidePlacement } from "@labrador/access-control";
+import { canDecidePlacement } from "@recruit/access-control";
 import { createFileRoute } from "@tanstack/react-router";
 import { Download, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useState } from "react";

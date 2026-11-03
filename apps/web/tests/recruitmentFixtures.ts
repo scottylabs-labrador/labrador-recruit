@@ -1,4 +1,4 @@
-import type { components, paths } from "@labrador/server/build/swagger";
+import type { components, paths } from "@recruit/server/build/swagger";
 
 /**
  * Synthetic recruitment fixtures. Shapes are taken straight from the generated

@@ -1,4 +1,4 @@
-import type { RecommendationValue } from "@labrador/common/recruitment";
+import type { RecommendationValue } from "@recruit/common/recruitment";
 import type { Request as ExpressRequest } from "express";
 import {
   Body,

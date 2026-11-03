@@ -1,4 +1,4 @@
-import type { User } from "@labrador/access-control";
+import type { User } from "@recruit/access-control";
 
 import { useSession } from "@/lib/authClient";
 

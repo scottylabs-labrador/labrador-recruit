@@ -1,5 +1,5 @@
 {
-  "name": "labrador-recruit",
+  "name": "scottylabs-recruit",
   "version": "0.0.0",
   "commitlint": {
     "extends": [
@@ -11,8 +11,8 @@
     "@commitlint/config-conventional": "^21.2.0",
     "@electric-sql/pglite": "^0.5.5",
     "@electric-sql/pglite-socket": "^0.2.8",
-    "@labrador/db": "workspace:*",
     "@playwright/test": "^1.62.1",
+    "@recruit/db": "workspace:*",
     "dotenv-cli": "^11.0.0",
     "drizzle-orm": "^0.45.2",
     "editorconfig-checker": "^6",

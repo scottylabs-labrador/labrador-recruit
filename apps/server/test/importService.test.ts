@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { RecruitmentUser } from "@labrador/access-control";
-import { applicant, application, committeeCandidacy, review } from "@labrador/db/schema";
+import type { RecruitmentUser } from "@recruit/access-control";
+import { applicant, application, committeeCandidacy, review } from "@recruit/db/schema";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 

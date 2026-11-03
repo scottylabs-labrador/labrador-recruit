@@ -4,8 +4,8 @@ import {
   recruitmentCycle,
   reviewAssignment,
   rubricCriterion,
-} from "@labrador/db/schema";
-import { seedRecruitmentData } from "@labrador/db/seed";
+} from "@recruit/db/schema";
+import { seedRecruitmentData } from "@recruit/db/seed";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 

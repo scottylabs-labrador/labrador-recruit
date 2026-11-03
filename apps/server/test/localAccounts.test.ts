@@ -1,4 +1,4 @@
-import { user } from "@labrador/db/schema";
+import { user } from "@recruit/db/schema";
 import { eq } from "drizzle-orm";
 import request from "supertest";
 import { describe, expect, it } from "vitest";

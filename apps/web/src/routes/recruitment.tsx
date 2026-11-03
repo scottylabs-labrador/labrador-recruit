@@ -1,4 +1,4 @@
-import { canConfigureCycle, canCreateCycle, canImportApplications } from "@labrador/access-control";
+import { canConfigureCycle, canCreateCycle, canImportApplications } from "@recruit/access-control";
 import { createFileRoute, Link, Outlet, useNavigate, useParams } from "@tanstack/react-router";
 
 import { NewCycleForm } from "@/components/recruitment/NewCycleForm.tsx";

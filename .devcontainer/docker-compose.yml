@@ -1,8 +1,8 @@
-name: "labrador-recruit"
+name: "scottylabs-recruit"
 
 services:
   dev:
-    container_name: labrador-recruit-dev
+    container_name: scottylabs-recruit-dev
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
@@ -25,11 +25,11 @@ services:
 
   postgres:
     image: postgres:17
-    container_name: labrador-recruit-postgres
+    container_name: scottylabs-recruit-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: donotuseinprod
-      POSTGRES_DB: labrador-recruit
+      POSTGRES_DB: scottylabs_recruit
     volumes:
       - postgres_data:/var/lib/postgresql/data
     # Loopback only. The password below is a throwaway, which is exactly why

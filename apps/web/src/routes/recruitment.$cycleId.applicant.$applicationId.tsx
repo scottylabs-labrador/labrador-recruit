@@ -48,7 +48,7 @@ function ApplicantDetailPage() {
             `friendRequest` is leadership-only context that must never reach a
             scoring path, so it is shown here — away from the rubric — and only to
             a committee lead or recruitment admin. There is no `readLeadershipContext`
-            action in `@labrador/access-control` to ask for this, so the roles the
+            action in `@recruit/access-control` to ask for this, so the roles the
             server sent on `/me` are read directly rather than repurposing an
             unrelated predicate.
           */}

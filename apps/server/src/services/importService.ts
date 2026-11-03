@@ -1,5 +1,5 @@
-import type { RecruitmentUser } from "@labrador/access-control";
-import { canImportApplications } from "@labrador/access-control";
+import type { RecruitmentUser } from "@recruit/access-control";
+import { canImportApplications } from "@recruit/access-control";
 import {
   applicant,
   application,
@@ -12,7 +12,7 @@ import {
   importRow,
   questionDefinition,
   recruitmentCycle,
-} from "@labrador/db/schema";
+} from "@recruit/db/schema";
 import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
 
 import { env } from "../env.ts";

@@ -1,10 +1,10 @@
-import type { RecruitmentUser } from "@labrador/access-control";
+import type { RecruitmentUser } from "@recruit/access-control";
 import {
   applicantGithubProfile,
   application,
   applicationAnswer,
   questionDefinition,
-} from "@labrador/db/schema";
+} from "@recruit/db/schema";
 import { and, eq, isNull, or, sql } from "drizzle-orm";
 
 import { env } from "../env.ts";

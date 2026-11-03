@@ -1,5 +1,5 @@
-import type { Membership, RecruitmentRole, RecruitmentUser, Role } from "@labrador/access-control";
-import { canDecideCommittee } from "@labrador/access-control";
+import type { Membership, RecruitmentRole, RecruitmentUser, Role } from "@recruit/access-control";
+import { canDecideCommittee } from "@recruit/access-control";
 
 import { $api } from "@/lib/apiClient";
 import { useSession } from "@/lib/authClient";
@@ -7,7 +7,7 @@ import { useSession } from "@/lib/authClient";
 const GLOBAL_ROLES: readonly Role[] = ["admin", "user", "guest"];
 
 export interface RecruitmentStanding {
-  /** The caller as the `@labrador/access-control` predicates expect them. */
+  /** The caller as the `@recruit/access-control` predicates expect them. */
   user: RecruitmentUser;
   /** False while `/me` is still in flight, so callers can hold off on gating. */
   isLoaded: boolean;
@@ -34,7 +34,7 @@ export interface RecruitmentStanding {
 
 /**
  * Loads the caller's own recruitment standing and assembles the
- * `RecruitmentUser` that `@labrador/access-control` takes, so the browser
+ * `RecruitmentUser` that `@recruit/access-control` takes, so the browser
  * evaluates the identical predicates the server evaluates rather than guessing.
  *
  * While `/me` is in flight the caller is treated as having no standing at all.

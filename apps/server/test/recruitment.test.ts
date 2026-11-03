@@ -1,10 +1,10 @@
-import type { RecruitmentUser } from "@labrador/access-control";
+import type { RecruitmentUser } from "@recruit/access-control";
 import {
   application as applicationTable,
   recruitmentCycle as recruitmentCycleTable,
   review as reviewTable,
   reviewAssignment as reviewAssignmentTable,
-} from "@labrador/db/schema";
+} from "@recruit/db/schema";
 import { eq } from "drizzle-orm";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";

@@ -45,7 +45,7 @@ docker compose -f .devcontainer/docker-compose.yml up -d postgres
 ```
 
 That serves PostgreSQL on `localhost:5432` with user `postgres`, password
-`donotuseinprod`, database `labrador-recruit`.
+`donotuseinprod`, database `scottylabs_recruit`.
 
 The `packages/db` scripts resolve their `DATABASE_URL` through secretspec, so they need
 ScottyLabs OpenBao access:
@@ -70,7 +70,7 @@ second run stops on the slug's unique constraint. Re-seeding means starting from
 database:
 
 ```bash
-docker exec labrador-recruit-postgres psql -U postgres -c 'DROP DATABASE "labrador-recruit" WITH (FORCE)' -c 'CREATE DATABASE "labrador-recruit"'
+docker exec scottylabs-recruit-postgres psql -U postgres -c 'DROP DATABASE "scottylabs_recruit" WITH (FORCE)' -c 'CREATE DATABASE "scottylabs_recruit"'
 ```
 
 ## Secrets
@@ -85,7 +85,7 @@ bun run secrets       # OIDC login to bao.scottylabs.org with CMU credentials
 bun run dev
 ```
 
-`secretspec.toml` currently points at vault items under `labrador-recruit/...`. Those paths
+`secretspec.toml` points at vault items under `labrador-recruit/...` (the Goldador team slug, which is unchanged). Those paths
 must be provisioned in OpenBao before `secretspec run -P local` will resolve. Until then,
 use the offline path below.
 
@@ -169,7 +169,7 @@ endpoint your test triggers.
 **Server tests see rows from a previous test.** Every new table must be added to the
 `TRUNCATE` statement in `apps/server/test/harness.ts`, and to `e2e/db.ts` for Playwright.
 
-**The web app cannot find `@labrador/server/build/swagger`.** Run `bun run build:api`.
+**The web app cannot find `@recruit/server/build/swagger`.** Run `bun run build:api`.
 
 **`port in use`.** The web app uses 3000 and the server 80 by default. Find the holder with
 `lsof -i :3000` (macOS/Linux) or `netstat -ano | findstr :3000` (Windows).

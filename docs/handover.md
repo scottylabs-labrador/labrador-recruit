@@ -145,7 +145,7 @@ The type chain matters: **changing a controller means regenerating the client
 types**, or the web build fails against a stale schema.
 
 ```bash
-bun run build --filter=@labrador/server   # regenerates swagger.d.ts
+bun run build --filter=@recruit/server   # regenerates swagger.d.ts
 ```
 
 Authorisation is one rule expressed once. `visibleApplicationWhere` in

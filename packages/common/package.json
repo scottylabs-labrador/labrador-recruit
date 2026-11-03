@@ -1,5 +1,5 @@
 {
-  "name": "@labrador/common",
+  "name": "@recruit/common",
   "version": "0.0.0",
   "devDependencies": {
     "vitest": "^4.0.18"

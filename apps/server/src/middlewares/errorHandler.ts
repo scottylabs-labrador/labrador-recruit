@@ -1,4 +1,4 @@
-import { NotPermittedError } from "@labrador/access-control";
+import { NotPermittedError } from "@recruit/access-control";
 import * as Sentry from "@sentry/bun";
 import type { NextFunction, Request, Response } from "express";
 import { ValidateError } from "tsoa";

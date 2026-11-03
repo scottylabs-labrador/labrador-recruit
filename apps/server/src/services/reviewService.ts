@@ -1,8 +1,8 @@
-import type { RecruitmentUser } from "@labrador/access-control";
-import { canReopenReview, canSubmitReview, canUpdateAssignment } from "@labrador/access-control";
-import { reviewVisibilityWhere } from "@labrador/access-control/visibility";
-import { computeReviewScore, rankToPreferenceScore } from "@labrador/common/recruitment";
-import type { RecommendationValue } from "@labrador/common/recruitment";
+import type { RecruitmentUser } from "@recruit/access-control";
+import { canReopenReview, canSubmitReview, canUpdateAssignment } from "@recruit/access-control";
+import { reviewVisibilityWhere } from "@recruit/access-control/visibility";
+import { computeReviewScore, rankToPreferenceScore } from "@recruit/common/recruitment";
+import type { RecommendationValue } from "@recruit/common/recruitment";
 import {
   application,
   committeeCandidacy,
@@ -12,7 +12,7 @@ import {
   reviewAssignment,
   reviewScore,
   rubricCriterion,
-} from "@labrador/db/schema";
+} from "@recruit/db/schema";
 import { and, eq } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";

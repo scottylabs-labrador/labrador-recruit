@@ -16,8 +16,8 @@
 //   bun run dev:login <andrewId> [--admin] [--name "Full Name"]
 //
 
-import { createDb } from "@labrador/db";
-import { account, session, user } from "@labrador/db/schema";
+import { createDb } from "@recruit/db";
+import { account, session, user } from "@recruit/db/schema";
 import { eq } from "drizzle-orm";
 
 const SESSION_COOKIE = "better-auth.session_token";

@@ -21,7 +21,7 @@ ARG VITE_PUBLIC_POSTHOG_KEY
 
 # Build the web app
 COPY . .
-RUN bun run build --filter=@labrador/web...
+RUN bun run build --filter=@recruit/web...
 
 ################################################################################
 # Aplication Stage

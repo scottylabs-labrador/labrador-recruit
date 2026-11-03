@@ -1,4 +1,4 @@
-import { account, user } from "@labrador/db/schema";
+import { account, user } from "@recruit/db/schema";
 import { and, eq } from "drizzle-orm";
 
 import { auth } from "../lib/auth.ts";

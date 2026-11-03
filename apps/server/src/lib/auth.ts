@@ -1,6 +1,6 @@
-import type { Role } from "@labrador/access-control";
-import * as schema from "@labrador/db/schema";
-import { user as userTable } from "@labrador/db/schema";
+import type { Role } from "@recruit/access-control";
+import * as schema from "@recruit/db/schema";
+import { user as userTable } from "@recruit/db/schema";
 import type { Session, User } from "better-auth";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";

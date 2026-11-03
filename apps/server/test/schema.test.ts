@@ -4,7 +4,7 @@ import {
   review,
   reviewAssignment,
   rubric as rubricTable,
-} from "@labrador/db/schema";
+} from "@recruit/db/schema";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 

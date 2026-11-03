@@ -1,4 +1,4 @@
-import { canConfigureCycle } from "@labrador/access-control";
+import { canConfigureCycle } from "@recruit/access-control";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertTriangle,

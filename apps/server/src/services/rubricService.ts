@@ -1,7 +1,7 @@
-import type { RecruitmentUser } from "@labrador/access-control";
-import { canConfigureCycle } from "@labrador/access-control";
-import { validateRubric } from "@labrador/common/recruitment";
-import { review, rubric, rubricCriterion } from "@labrador/db/schema";
+import type { RecruitmentUser } from "@recruit/access-control";
+import { canConfigureCycle } from "@recruit/access-control";
+import { validateRubric } from "@recruit/common/recruitment";
+import { review, rubric, rubricCriterion } from "@recruit/db/schema";
 import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";

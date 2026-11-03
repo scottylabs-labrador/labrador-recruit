@@ -1,4 +1,4 @@
-import { user } from "@labrador/db/schema";
+import { user } from "@recruit/db/schema";
 import { desc } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";

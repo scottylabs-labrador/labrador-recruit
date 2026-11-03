@@ -1,4 +1,4 @@
-import { finalPlacement } from "@labrador/db/schema";
+import { finalPlacement } from "@recruit/db/schema";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 

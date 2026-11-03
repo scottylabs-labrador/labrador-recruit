@@ -1,12 +1,12 @@
 {
-  "name": "@labrador/web",
+  "name": "@recruit/web",
   "version": "0.0.0",
   "dependencies": {
     "@base-ui/react": "^1.2.0",
     "@fontsource-variable/geist": "^5.3.0",
-    "@labrador/access-control": "workspace:*",
-    "@labrador/server": "workspace:*",
     "@posthog/react": "^1.8.2",
+    "@recruit/access-control": "workspace:*",
+    "@recruit/server": "workspace:*",
     "@tailwindcss/vite": "^4.0.6",
     "@tanstack/react-query": "^5.90.20",
     "@tanstack/react-router": "^1.166.3",

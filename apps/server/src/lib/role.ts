@@ -1,4 +1,4 @@
-import type { Role } from "@labrador/access-control";
+import type { Role } from "@recruit/access-control";
 import type jwt from "jsonwebtoken";
 
 import { env } from "../env.ts";

@@ -1,11 +1,11 @@
-import type { Membership, RecruitmentUser } from "@labrador/access-control";
+import type { Membership, RecruitmentUser } from "@recruit/access-control";
 import {
   application,
   committeeCandidacy,
   recruitmentCycle,
   recruitmentMembership,
   reviewAssignment,
-} from "@labrador/db/schema";
+} from "@recruit/db/schema";
 import { and, eq } from "drizzle-orm";
 import type { Request as ExpressRequest } from "express";
 

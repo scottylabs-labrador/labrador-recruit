@@ -250,7 +250,7 @@ bun run dev                              # api :8080, web :3000
 bun run dev:login                        # local session (a script, never an endpoint)
 bun run quality                          # syncpack, markdownlint, oxfmt, oxlint
 bunx turbo run test                      # full suite
-bun run build --filter=@labrador/server  # regenerate the OpenAPI client types
+bun run build --filter=@recruit/server  # regenerate the OpenAPI client types
 ```
 
 Changing a controller means regenerating the client types, or the web build

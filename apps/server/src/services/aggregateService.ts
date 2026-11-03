@@ -1,12 +1,8 @@
-import type { RecruitmentUser } from "@labrador/access-control";
-import { canReadApplicantIdentity } from "@labrador/access-control";
-import { candidacyVisibilityWhere } from "@labrador/access-control/visibility";
-import {
-  computeAggregate,
-  detectDisagreement,
-  rankCandidacies,
-} from "@labrador/common/recruitment";
-import type { AggregateResult, RecommendationValue } from "@labrador/common/recruitment";
+import type { RecruitmentUser } from "@recruit/access-control";
+import { canReadApplicantIdentity } from "@recruit/access-control";
+import { candidacyVisibilityWhere } from "@recruit/access-control/visibility";
+import { computeAggregate, detectDisagreement, rankCandidacies } from "@recruit/common/recruitment";
+import type { AggregateResult, RecommendationValue } from "@recruit/common/recruitment";
 import {
   applicant,
   application,
@@ -19,7 +15,7 @@ import {
   reviewAssignment,
   reviewScore,
   rubricCriterion,
-} from "@labrador/db/schema";
+} from "@recruit/db/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";

@@ -13,7 +13,7 @@ import {
   reviewAssignment,
   rubric,
   rubricCriterion,
-} from "@labrador/db/schema";
+} from "@recruit/db/schema";
 
 import { testDb } from "./harness.ts";
 

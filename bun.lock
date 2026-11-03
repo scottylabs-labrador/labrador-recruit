@@ -9,8 +9,8 @@
         "@commitlint/config-conventional": "^21.2.0",
         "@electric-sql/pglite": "^0.5.5",
         "@electric-sql/pglite-socket": "^0.2.8",
-        "@labrador/db": "workspace:*",
         "@playwright/test": "^1.62.1",
+        "@recruit/db": "workspace:*",
         "dotenv-cli": "^11.0.0",
         "drizzle-orm": "^0.45.2",
         "editorconfig-checker": "^6",
@@ -26,13 +26,13 @@
       },
     },
     "apps/server": {
-      "name": "@labrador/server",
+      "name": "@recruit/server",
       "version": "0.0.0",
       "dependencies": {
         "@better-auth/drizzle-adapter": "^1.5.4",
-        "@labrador/access-control": "workspace:*",
-        "@labrador/common": "workspace:*",
-        "@labrador/db": "workspace:*",
+        "@recruit/access-control": "workspace:*",
+        "@recruit/common": "workspace:*",
+        "@recruit/db": "workspace:*",
         "@sentry/bun": "^10.42.0",
         "@tsoa/runtime": "^7.0.0-alpha.0",
         "better-auth": "^1.6.26",
@@ -65,14 +65,14 @@
       },
     },
     "apps/web": {
-      "name": "@labrador/web",
+      "name": "@recruit/web",
       "version": "0.0.0",
       "dependencies": {
         "@base-ui/react": "^1.2.0",
         "@fontsource-variable/geist": "^5.3.0",
-        "@labrador/access-control": "workspace:*",
-        "@labrador/server": "workspace:*",
         "@posthog/react": "^1.8.2",
+        "@recruit/access-control": "workspace:*",
+        "@recruit/server": "workspace:*",
         "@tailwindcss/vite": "^4.0.6",
         "@tanstack/react-query": "^5.90.20",
         "@tanstack/react-router": "^1.166.3",
@@ -118,12 +118,26 @@
         "web-vitals": "^5.1.0",
       },
     },
+    "apps/worker": {
+      "name": "@recruit/worker",
+      "version": "0.0.0",
+      "dependencies": {
+        "@recruit/db": "workspace:*",
+        "drizzle-orm": "^0.45.2",
+        "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.3.10",
+        "dotenv-cli": "^11.0.0",
+        "vitest": "^4.0.18",
+      },
+    },
     "packages/access-control": {
-      "name": "@labrador/access-control",
+      "name": "@recruit/access-control",
       "version": "0.0.0",
       "dependencies": {
         "@casl/ability": "^7.0.1",
-        "@labrador/db": "workspace:*",
+        "@recruit/db": "workspace:*",
         "@ucast/core": "^2.0.0",
         "drizzle-orm": "^0.45.2",
       },
@@ -132,14 +146,14 @@
       },
     },
     "packages/common": {
-      "name": "@labrador/common",
+      "name": "@recruit/common",
       "version": "0.0.0",
       "devDependencies": {
         "vitest": "^4.0.18",
       },
     },
     "packages/db": {
-      "name": "@labrador/db",
+      "name": "@recruit/db",
       "version": "0.0.0",
       "dependencies": {
         "drizzle-orm": "^0.45.2",
@@ -493,16 +507,6 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
-    "@labrador/access-control": ["@labrador/access-control@workspace:packages/access-control"],
-
-    "@labrador/common": ["@labrador/common@workspace:packages/common"],
-
-    "@labrador/db": ["@labrador/db@workspace:packages/db"],
-
-    "@labrador/server": ["@labrador/server@workspace:apps/server"],
-
-    "@labrador/web": ["@labrador/web@workspace:apps/web"],
-
     "@modelcontextprotocol/sdk": ["@modelcontextprotocol/sdk@1.30.0", "", { "dependencies": { "@hono/node-server": "^1.19.9 || ^2.0.5", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "content-type": "^1.0.5", "cors": "^2.8.5", "cross-spawn": "^7.0.5", "eventsource": "^3.0.2", "eventsource-parser": "^3.0.0", "express": "^5.2.1", "express-rate-limit": "^8.2.1", "hono": "^4.11.4", "jose": "^6.1.3", "json-schema-typed": "^8.0.2", "pkce-challenge": "^5.0.0", "raw-body": "^3.0.0", "zod": "^3.25 || ^4.0", "zod-to-json-schema": "^3.25.1" }, "peerDependencies": { "@cfworker/json-schema": "^4.1.1" }, "optionalPeers": ["@cfworker/json-schema"] }, "sha512-xKd8OIzlqNzcqcNumGAa6g+PW2kjD5vrpcKOnfldAUPP3j7lnqMPwlTXQm8gF+UwH72z0lqaRbjr9hqGz0eITA=="],
 
     "@mswjs/interceptors": ["@mswjs/interceptors@0.41.9", "", { "dependencies": { "@open-draft/deferred-promise": "^2.2.0", "@open-draft/logger": "^0.3.0", "@open-draft/until": "^2.0.0", "is-node-process": "^1.2.0", "outvariant": "^1.4.3", "strict-event-emitter": "^0.5.1" } }, "sha512-VVPPgHyQ6ShqnrmDWuxjmUIsO9gWyOZFmuOfLd9LfBGQJwZfy0gvv9pbHSJuoFNIYC7ZDX9aoFwowjcdSC4E8w=="],
@@ -684,6 +688,18 @@
     "@posthog/react": ["@posthog/react@1.10.3", "", { "peerDependencies": { "@types/react": ">=16.8.0", "posthog-js": ">=1.257.2", "react": ">=16.8.0" }, "optionalPeers": ["@types/react"] }, "sha512-Qu//fGQmVlX0B9kTA3LLg67e7AYLEmeuA0Bf1qSyUM0uUILcRQGjQezhNQPLYSTakOqvXEnl6fM2iQBF6Toxrw=="],
 
     "@posthog/types": ["@posthog/types@1.404.1", "", {}, "sha512-i2Gei6ARfOSBeTN4s2yUP1p97s2UNI+1NWmtLjhnR/V6t3RFOfI1sBWKcJNWHjtoOCCWoAFU+PNPY6SgT2VtEQ=="],
+
+    "@recruit/access-control": ["@recruit/access-control@workspace:packages/access-control"],
+
+    "@recruit/common": ["@recruit/common@workspace:packages/common"],
+
+    "@recruit/db": ["@recruit/db@workspace:packages/db"],
+
+    "@recruit/server": ["@recruit/server@workspace:apps/server"],
+
+    "@recruit/web": ["@recruit/web@workspace:apps/web"],
+
+    "@recruit/worker": ["@recruit/worker@workspace:apps/worker"],
 
     "@redocly/ajv": ["@redocly/ajv@8.11.2", "", { "dependencies": { "fast-deep-equal": "^3.1.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2", "uri-js-replace": "^1.0.1" } }, "sha512-io1JpnwtIcvojV7QKDUSIuMN/ikdOUd1ReEnUnMKGfDVridQZ31J0MmIuqwuRjWDZfmvr+Q0MqCcfHM2gTivOg=="],
 

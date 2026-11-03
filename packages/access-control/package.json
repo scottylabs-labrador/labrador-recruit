@@ -1,9 +1,9 @@
 {
-  "name": "@labrador/access-control",
+  "name": "@recruit/access-control",
   "version": "0.0.0",
   "dependencies": {
     "@casl/ability": "^7.0.1",
-    "@labrador/db": "workspace:*",
+    "@recruit/db": "workspace:*",
     "@ucast/core": "^2.0.0",
     "drizzle-orm": "^0.45.2"
   },

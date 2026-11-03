@@ -16,7 +16,7 @@ RUN bun ci
 
 # Build the server
 COPY . .
-RUN bun run build --filter=@labrador/server...
+RUN bun run build --filter=@recruit/server...
 
 # Final runtime image
 FROM base AS runner

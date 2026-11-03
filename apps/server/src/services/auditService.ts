@@ -1,4 +1,4 @@
-import { auditEvent } from "@labrador/db/schema";
+import { auditEvent } from "@recruit/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";

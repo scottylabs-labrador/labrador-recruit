@@ -1,4 +1,4 @@
-import { createDb } from "@labrador/db";
+import { createDb } from "@recruit/db";
 
 import { env } from "../env.ts";
 

@@ -1,5 +1,5 @@
 {
-  "name": "@labrador/db",
+  "name": "@recruit/db",
   "version": "0.0.0",
   "dependencies": {
     "drizzle-orm": "^0.45.2",

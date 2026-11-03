@@ -1,4 +1,4 @@
-import type { components, paths } from "@labrador/server/build/swagger";
+import type { components, paths } from "@recruit/server/build/swagger";
 
 export type QueueItem = components["schemas"]["QueueItem"];
 export type CandidacyReviewSummary = components["schemas"]["CandidacyReviewSummary"];
@@ -47,7 +47,7 @@ export const CRITERION_SOURCE_OPTIONS: ReadonlyArray<{ value: CriterionSource; l
 /**
  * Weights are decimals, so 0.30 + 0.20 + 0.20 + 0.15 + 0.10 + 0.05 sums to
  * 1.0000000000000002 in IEEE 754. This mirrors the tolerance
- * `@labrador/common`'s `validateRubric` uses on the server, so the editor's live
+ * `@recruit/common`'s `validateRubric` uses on the server, so the editor's live
  * verdict and the server's verdict cannot disagree on a rubric a human typed.
  */
 export const WEIGHT_SUM_EPSILON = 1e-6;

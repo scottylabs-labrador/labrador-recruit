@@ -1,4 +1,4 @@
-import { recruitmentCycle } from "@labrador/db/schema";
+import { recruitmentCycle } from "@recruit/db/schema";
 import { ne } from "drizzle-orm";
 
 import { env } from "../../env.ts";

@@ -1,7 +1,7 @@
 /**
  * Access-control value types.
  *
- * This package imports types from `@labrador/db/schema` but never the database
+ * This package imports types from `@recruit/db/schema` but never the database
  * client, so the identical predicates run in the browser and on the server.
  */
 
@@ -10,7 +10,7 @@ import type {
   CommitteeCandidacy as DatabaseCandidacy,
   CommitteeDecision as DatabaseDecision,
   ReviewAssignment as DatabaseAssignment,
-} from "@labrador/db/schema";
+} from "@recruit/db/schema";
 
 /** The global role derived from Keycloak JWT groups. */
 export type Role = "admin" | "user" | "guest";

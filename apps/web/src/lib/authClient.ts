@@ -1,4 +1,4 @@
-import type { auth } from "@labrador/server/src/lib/auth";
+import type { auth } from "@recruit/server/src/lib/auth";
 import { customSessionClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { toast } from "react-toastify";

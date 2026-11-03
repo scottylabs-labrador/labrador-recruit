@@ -1,7 +1,7 @@
-import type { RecruitmentUser } from "@labrador/access-control";
-import { canAssignReviewers } from "@labrador/access-control";
-import { assignmentVisibilityWhere } from "@labrador/access-control/visibility";
-import { orderQueue, queuePriorityTier, REVIEWABLE_RANKS } from "@labrador/common/recruitment";
+import type { RecruitmentUser } from "@recruit/access-control";
+import { canAssignReviewers } from "@recruit/access-control";
+import { assignmentVisibilityWhere } from "@recruit/access-control/visibility";
+import { orderQueue, queuePriorityTier, REVIEWABLE_RANKS } from "@recruit/common/recruitment";
 import {
   applicant,
   application,
@@ -15,7 +15,7 @@ import {
   recruitmentMembership,
   review,
   reviewAssignment,
-} from "@labrador/db/schema";
+} from "@recruit/db/schema";
 import { and, asc, count, eq, gt, inArray, isNotNull, ne, sql } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";

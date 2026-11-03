@@ -1,5 +1,5 @@
-import type { User } from "@labrador/access-control";
-import { account, user } from "@labrador/db/schema";
+import type { User } from "@recruit/access-control";
+import { account, user } from "@recruit/db/schema";
 import { fromNodeHeaders } from "better-auth/node";
 import { eq } from "drizzle-orm";
 import type { Request as ExpressRequest } from "express";

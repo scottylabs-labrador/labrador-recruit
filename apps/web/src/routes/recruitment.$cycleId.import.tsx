@@ -1,4 +1,4 @@
-import { canImportApplications } from "@labrador/access-control";
+import { canImportApplications } from "@recruit/access-control";
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertTriangle, Check, FileSpreadsheet, Loader2, Upload } from "lucide-react";
 import { useState } from "react";

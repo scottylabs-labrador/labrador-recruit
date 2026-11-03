@@ -1,6 +1,6 @@
-import type { RecruitmentUser } from "@labrador/access-control";
-import { canAssignReviewers, canDecidePlacement } from "@labrador/access-control";
-import { candidacyVisibilityWhere } from "@labrador/access-control/visibility";
+import type { RecruitmentUser } from "@recruit/access-control";
+import { canAssignReviewers, canDecidePlacement } from "@recruit/access-control";
+import { candidacyVisibilityWhere } from "@recruit/access-control/visibility";
 import {
   applicant,
   application,
@@ -13,7 +13,7 @@ import {
   review,
   reviewAssignment,
   user,
-} from "@labrador/db/schema";
+} from "@recruit/db/schema";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../lib/db.ts";

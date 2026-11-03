@@ -1,4 +1,4 @@
-import { canReadApplicantIdentity, canReopenReview } from "@labrador/access-control";
+import { canReadApplicantIdentity, canReopenReview } from "@recruit/access-control";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {

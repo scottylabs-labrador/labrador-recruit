@@ -1,5 +1,5 @@
-import type { RecruitmentUser } from "@labrador/access-control";
-import { applicantGithubProfile } from "@labrador/db/schema";
+import type { RecruitmentUser } from "@recruit/access-control";
+import { applicantGithubProfile } from "@recruit/db/schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { githubService } from "../src/services/githubService.ts";

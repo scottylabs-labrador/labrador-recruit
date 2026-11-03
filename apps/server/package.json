@@ -1,11 +1,11 @@
 {
-  "name": "@labrador/server",
+  "name": "@recruit/server",
   "version": "0.0.0",
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.5.4",
-    "@labrador/access-control": "workspace:*",
-    "@labrador/common": "workspace:*",
-    "@labrador/db": "workspace:*",
+    "@recruit/access-control": "workspace:*",
+    "@recruit/common": "workspace:*",
+    "@recruit/db": "workspace:*",
     "@sentry/bun": "^10.42.0",
     "@tsoa/runtime": "^7.0.0-alpha.0",
     "better-auth": "^1.6.26",
@@ -41,7 +41,6 @@
   "scripts": {
     "build": "bun build src/server.ts --outdir=dist --target=bun --sourcemap",
     "build:api": "bun run tsoa && bun run openapi",
-    "build:vercel": "bun run build:api && bun build src/vercelEntry.ts --target=node --format=esm --outfile=dist/vercel.js",
     "dev": "concurrently 'bun run server' 'bun run tsoa:watch' 'bun run openapi:watch'",
     "dev:local": "dotenv -e ../../.env.local -- concurrently 'bun run server:local' 'bun run tsoa:watch' 'bun run openapi:watch'",
     "openapi": "bunx --package typescript@6 --package openapi-typescript@7.13.0 openapi-typescript ./build/swagger.yaml -o ./build/swagger.d.ts",

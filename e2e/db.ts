@@ -1,5 +1,5 @@
-import { account, review, reviewAssignment, session, user } from "@labrador/db/schema";
-import { seedRecruitmentData } from "@labrador/db/seed";
+import { account, review, reviewAssignment, session, user } from "@recruit/db/schema";
+import { seedRecruitmentData } from "@recruit/db/seed";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 
