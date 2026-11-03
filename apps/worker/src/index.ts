@@ -88,7 +88,27 @@ function shutdown(signal: string): void {
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
+/**
+ * Logs which database this process will talk to, without ever printing the
+ * connection string.
+ *
+ * `DATABASE_URL` carries a password. `new URL()` includes its input in the
+ * message it throws, so parsing it unguarded would put that password in the
+ * boot log of a malformed deployment - the one situation where somebody is
+ * certainly reading the log and may well paste it into a chat. The host alone
+ * is the useful part and carries no credential.
+ */
+function describeDatabaseTarget(databaseUrl: string): string {
+  try {
+    return new URL(databaseUrl).host;
+  } catch {
+    // Deliberately neither the input nor the original error, which would
+    // reintroduce exactly what this guard exists to keep out.
+    throw new Error("DATABASE_URL is not a valid connection URL");
+  }
+}
+
 // Fail fast and loudly on a configuration mistake, before claiming any work.
-console.log(`worker: database target resolved (${new URL(env.DATABASE_URL).host})`);
+console.log(`worker: database target resolved (${describeDatabaseTarget(env.DATABASE_URL)})`);
 
 await main();
