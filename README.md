@@ -1,34 +1,52 @@
-# Recruit
+# ScottyLabs Recruit
 
-Internal recruitment review platform for ScottyLabs leadership.
+A centralized recruitment management platform for Carnegie Mellon's ScottyLabs
+organization.
 
-Leadership imports the committee application form export, reviewers independently score
-applicants against a configurable rubric, and the platform surfaces aggregate results,
-reviewer disagreement, and committee rankings so leadership can make final placement
-decisions.
+Students apply to multiple ScottyLabs committees through one website. Each
+committee independently controls its own application questions, recruitment team,
+applicant evaluations, and decisions. It replaces the current arrangement of
+separate Google Forms, spreadsheets, and manual tracking.
+
+Labrador is the first committee to use it. Every part of the system is built for
+all committees from the start.
+
+> **This branch is a rebuild.** The git history before `scottylabs-recruit` is
+> the previous single-committee review platform, which is **live and in use** on
+> `main`. Treat it as a quarry, not as the target —
+> [`docs/v1-baseline.md`](docs/v1-baseline.md) says what to take and what to
+> leave.
 
 ## What this is not
 
-This platform **does not evaluate applicants with AI**. It does not score essays, infer
-competence from text, scrape applicant links, or make accept/reject decisions. Every
-subjective score originates from a named human reviewer, and every aggregate is
-deterministic math over those human scores. See [`docs/product-rules.md`](docs/product-rules.md).
+This platform **does not evaluate applicants with AI**. It does not score essays,
+infer competence from text, scrape applicant links, or make accept/reject
+decisions. Every subjective score originates from a named human reviewer, and
+every aggregate is deterministic arithmetic over those human scores.
+
+A committee also never sees another committee's applicants. Both constraints are
+enforced architecturally, not by convention. See
+[`docs/product-rules.md`](docs/product-rules.md).
 
 ## Stack
 
-Built on [ScottyStack](https://github.com/scottylabs-labrador/ScottyStack), ScottyLabs'
-full-stack typesafe template. See the
-[ScottyStack Wiki](https://github.com/ScottyLabs/ScottyStack/wiki) for the underlying
-conventions.
+Built on [ScottyStack](https://github.com/scottylabs-labrador/ScottyStack),
+ScottyLabs' full-stack typesafe template. See the
+[ScottyStack Wiki](https://github.com/ScottyLabs/ScottyStack/wiki) for the
+underlying conventions.
 
-| Layer         | Technology                                                      |
-| ------------- | --------------------------------------------------------------- |
-| Monorepo      | Bun workspaces + Turborepo                                      |
-| Server        | Express 5, tsoa (OpenAPI), Better Auth (password or Keycloak)   |
-| Database      | PostgreSQL, Drizzle ORM                                         |
-| Authorization | CASL, compiled to Drizzle `WHERE` clauses                       |
-| Web           | React 19, Vite, TanStack Router/Query/Form, Tailwind v4, shadcn |
-| Testing       | Vitest, PGlite, MSW, Playwright                                 |
+| Layer         | Technology                                                             |
+| ------------- | ---------------------------------------------------------------------- |
+| Monorepo      | Bun workspaces + Turborepo                                             |
+| Server        | Express 5, tsoa (OpenAPI), Better Auth + Keycloak OIDC                 |
+| Worker        | Bun process draining the notification outbox                           |
+| Database      | PostgreSQL 17, Drizzle ORM                                             |
+| Authorization | CASL, compiled to Drizzle `WHERE` clauses                              |
+| Web           | React 19, Vite, TanStack Router/Query, React Hook Form, Zod, `dnd-kit` |
+| Styling       | Tailwind v4, shadcn/ui                                                 |
+| Files         | Cloudflare R2, presigned URLs                                          |
+| Testing       | Vitest, PGlite, MSW, Playwright                                        |
+| Deployment    | Railway, infrastructure in code                                        |
 
 ## Layout
 
@@ -36,28 +54,30 @@ conventions.
 apps/
   server/            Express + tsoa API
   web/               React single-page app
+  worker/            notification outbox drain and scheduled jobs
 packages/
   access-control/    CASL abilities and the Drizzle WHERE compiler
-  common/            Shared types and utilities
+  common/            pure domain functions: forms, scoring, status machines
   db/                Drizzle schema, migrations, seed
 e2e/                 Playwright suites against a real stack
-docs/                Architecture notes and ADRs
+docs/                design, architecture, and decision records
 ```
 
 ## Getting started
 
-Requires [Bun](https://bun.sh) 1.3.5+. On Windows, everything below runs natively; the
-`.devcontainer` setup is optional.
+Requires [Bun](https://bun.sh) 1.3.5 or newer. Everything below runs natively on
+Windows, macOS, and Linux; the `.devcontainer` setup is optional.
 
 ```bash
 bun install
-bun run build:api     # generate the OpenAPI spec and client types (required first)
+bun run build:api     # generate the OpenAPI spec and client types — required first
 bun run test
 bun run quality       # oxfmt + oxlint
 ```
 
-`bun run build:api` must run before typechecking or testing the web app, because the web
-app imports generated types from `apps/server/build/`.
+**`bun run build:api` must run before any typecheck or test.** The web app
+imports generated types from `apps/server/build/`, which is gitignored. A fresh
+clone that skips this step sees dozens of unrelated-looking type errors.
 
 ### Running the app locally
 
@@ -67,20 +87,9 @@ No ScottyLabs credentials required:
 cp .env.local.example .env.local          # then set BETTER_AUTH_SECRET
 docker compose -f .devcontainer/docker-compose.yml up -d postgres
 bun run db:migrate:local
-bun run db:seed:local                     # synthetic cycle and applicants
+bun run db:seed:local                     # synthetic cycle, committees, applicants
 bun run dev:local                         # web on :3000, API on :8080
-
-bun run apps/server/scripts/createAccount.ts rjones "Robin Jones" --admin
 ```
-
-That last command prints a temporary password once. Sign in with the Andrew ID at
-`http://localhost:3000`; the application makes you choose your own password before it
-shows you anything. Registration is closed on purpose — the Andrew ID is the key every
-membership, assignment and review points at, so it is granted rather than self-asserted.
-
-The separate **"Sign in with your Andrew ID"** button goes to Keycloak and does not work
-locally: the local environment ships a placeholder issuer that does not resolve, and the
-interface withholds the button rather than sending you somewhere that will reject you.
 
 With ScottyLabs organization access, Keycloak sign-in works too:
 
@@ -89,19 +98,49 @@ bun run secrets       # OIDC login to bao.scottylabs.org
 bun run dev
 ```
 
-See [`docs/local-development.md`](docs/local-development.md) for the full setup, including
-what to provision before `bun run dev` will resolve.
+Full setup, including what to provision and how to sign in without OpenBao
+access, in [`docs/local-development.md`](docs/local-development.md).
 
 ## Documentation
 
-| Document                                                 | Contents                                              |
-| -------------------------------------------------------- | ----------------------------------------------------- |
-| [`docs/guide.md`](docs/guide.md)                         | The complete guide: usage, features, stack, internals |
-| [`docs/handover.md`](docs/handover.md)                   | Taking this over: deployment, access, traps, debt     |
-| [`docs/running-a-cycle.md`](docs/running-a-cycle.md)     | Operational runbook: import, assign, review, decide   |
-| [`docs/architecture.md`](docs/architecture.md)           | Where recruitment code lives and how a request flows  |
-| [`docs/product-rules.md`](docs/product-rules.md)         | The no-AI-evaluation rule and privacy constraints     |
-| [`docs/local-development.md`](docs/local-development.md) | Setup, secrets, database, troubleshooting             |
+**Read these three before writing code.** They are short, and they state which of
+your defaults are wrong here.
+
+| Document                                         | Contents                                               |
+| ------------------------------------------------ | ------------------------------------------------------ |
+| [`AGENTS.md`](AGENTS.md)                         | the rules every contributor and agent follows          |
+| [`docs/design.md`](docs/design.md)               | what we are building, why, and what is already decided |
+| [`docs/product-rules.md`](docs/product-rules.md) | the constraints that override everything               |
+
+Then, as needed:
+
+| Document                                                 | Contents                                          |
+| -------------------------------------------------------- | ------------------------------------------------- |
+| [`docs/architecture.md`](docs/architecture.md)           | layering contract, request path, where code lives |
+| [`docs/authorization.md`](docs/authorization.md)         | the permission model in full                      |
+| [`docs/data-model.md`](docs/data-model.md)               | every table and its invariants                    |
+| [`docs/api.md`](docs/api.md)                             | the route table                                   |
+| [`docs/ui.md`](docs/ui.md)                               | every page, route, and component                  |
+| [`docs/workstreams.md`](docs/workstreams.md)             | how the work splits across developers             |
+| [`docs/local-development.md`](docs/local-development.md) | setup, secrets, database, troubleshooting         |
+| [`docs/v1-baseline.md`](docs/v1-baseline.md)             | the previous version: what to take, what to leave |
+| [`docs/adr/`](docs/adr/)                                 | architecture decision records                     |
+| [`.github/CONTRIBUTING.md`](.github/CONTRIBUTING.md)     | branch, commit, review, merge                     |
+
+Documentation inherited from the previous version — [`docs/deployment.md`](docs/deployment.md),
+[`docs/handover.md`](docs/handover.md), [`docs/running-a-cycle.md`](docs/running-a-cycle.md),
+[`docs/guide.md`](docs/guide.md) — describes the **live v1 deployment**. It is
+accurate about that system and is being replaced as this branch lands.
+
+## Contributing
+
+Pick an unclaimed workstream in [`docs/workstreams.md`](docs/workstreams.md),
+claim it, and read its interface contract before you start. Several people and
+agents are building in parallel, so staying inside your boundary matters more
+than it usually does.
+
+Process, branch naming, and the review bar are in
+[`.github/CONTRIBUTING.md`](.github/CONTRIBUTING.md).
 
 ## License
 

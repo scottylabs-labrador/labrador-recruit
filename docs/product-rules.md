@@ -3,6 +3,11 @@
 These rules constrain what the platform is allowed to do. They are not style preferences.
 A change that violates one of them is a defect regardless of how well it is implemented.
 
+They were adopted for the single-committee version and carry over to ScottyLabs Recruit
+unchanged in substance, because they are ScottyLabs recruitment policy rather than a
+property of one implementation. Section 8 is new, and is the rule the multi-committee
+platform adds.
+
 ## 1. No automated applicant evaluation
 
 The platform must not judge, analyse, summarise, classify, rank, or score applicants using
@@ -85,23 +90,33 @@ There is never a score whose derivation the platform cannot display. No "AI scor
 
 ## 3. Independent review
 
-A reviewer must not see another reviewer's scores, recommendation, or rationale for a
-candidacy before submitting their own review. This is enforced in SQL through the
+A reviewer must not see another reviewer's scores, recommendation, or rationale for an
+application before submitting their own review. This is enforced in SQL through the
 access-control layer, not by hiding elements in the interface.
 
-Admins and committee leads may hold aggregate visibility; ordinary reviewers stay blinded
-until their own review is submitted.
+Only a _submitted_ review unblinds. A draft does not.
+
+Admins and committee directors may hold aggregate visibility; ordinary reviewers stay
+blinded until their own review is submitted.
 
 ## 4. Team-specific review
 
 The unit of review is `Applicant x Committee x Reviewer`. An applicant may score
 differently for Tech than for Labrador. Never collapse suitability into one global score.
 
+Each committee runs its own rubric, its own reviewers, and its own decisions. There is no
+cross-committee score, no platform-wide ranking of applicants, and no shared verdict.
+
 ## 5. Recruitment-cycle isolation
 
 Every application, rubric, review, assignment, ranking, and decision belongs to a
 recruitment cycle. Historical cycles stay inspectable without contaminating the current
 one, and settings changes never retroactively mutate submitted review history.
+
+Two mechanisms make this concrete, and both are load-bearing: a published form version is
+immutable, and a rubric locks once the first review has been submitted against it. A
+question's meaning and a criterion's definition cannot change after somebody answered or
+scored against them.
 
 ## 6. Privacy
 
@@ -115,6 +130,51 @@ Application data is PII.
 
 ## 7. Configuration, not code
 
-Rubric criteria, weights, preference mapping, required review counts, disagreement
-thresholds, candidacy generation rules, and committee capacities are database-backed
+Application questions, rubric criteria, weights, required review counts, disagreement
+thresholds, application limits, and committee capacities are database-backed
 configuration. Changing recruitment policy must never require a code change.
+
+A committee director changes their application form without a pull request, a deploy, or
+asking an engineer. If they cannot, that is a defect in this platform's reason for
+existing.
+
+## 8. Committee isolation
+
+A committee sees its own applicants and nobody else's.
+
+Carnegie Mellon students submit essays about themselves to a specific committee. A
+Design director has no business reading what somebody wrote for Tech, and a Tech reviewer
+has no business reading Design's evaluations. This is the rule whose violation would end
+the platform's standing with the committees that agreed to use it.
+
+### Required
+
+- Every query that reaches applicant data is narrowed by a compiled access-control
+  predicate, in SQL, including the reads that precede an update or a delete.
+- A resource the caller may not see returns **404, not 403**. Existence is never leaked.
+- A team, cycle, or application identifier supplied by the client is an untrusted input.
+  Authorization resolves the caller's grants for the requested resource from the database.
+- A reviewer needs **both** a live grant for the committee **and** an assignment to the
+  specific application. Neither alone is sufficient.
+- A grant on a parent team conveys nothing about a subteam, and a grant on a subteam
+  conveys nothing about its parent.
+- Revoking a grant takes effect on the next request. Permissions are not cached.
+
+### Forbidden
+
+- Hand-written ownership checks. A rule expressed twice is a rule that will drift, and
+  this one decides who reads an applicant's essays.
+- Loading rows the caller may not see and filtering them in application code. They reach
+  memory, logs, and error payloads on the way.
+- Any shared aggregate, ranking, or export that spans committees without an
+  organization-scope grant.
+- Treating a hidden interface element as the enforcement mechanism. It is a courtesy to
+  the user; the server is what makes it true.
+
+Because the Keycloak realm brokers straight to CMU SAML, every Andrew ID at the
+university authenticates successfully. Authentication proves only that the caller is some
+CMU affiliate. **Authorization is the entire security boundary**, which is why this rule
+sits alongside the ones about applicant evaluation rather than in a style guide.
+
+Full model in [`authorization.md`](authorization.md). Every access-control rule needs a
+test proving the _denial_ path, not only the happy one.
