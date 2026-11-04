@@ -192,3 +192,60 @@ test("the deadline is enforced by the server, not the browser", async ({ page, c
   await expect(page.getByText("The deadline for this recruitment cycle has passed.")).toBeVisible();
   await expect(page.getByText(/your application has been submitted/i)).toBeHidden();
 });
+
+test("every applicant page fits a phone without sideways scrolling", async ({ page, context }) => {
+  await seedOpenCycle();
+  await seedAlice();
+  await context.addCookies([await sessionCookie(alice.sessionToken)]);
+  // An iPhone SE, which is about as narrow as a current phone gets.
+  await page.setViewportSize({ width: 375, height: 667 });
+
+  await page.goto("/app/committees");
+  await page
+    .getByRole("article", { name: /labrador/i })
+    .getByRole("button", { name: /^apply to labrador$/i })
+    .click();
+  await expect(page.getByText(/already applied/i)).toBeVisible();
+
+  for (const path of [
+    "/recruit",
+    "/signin",
+    "/app/dashboard",
+    "/app/committees",
+    "/app/apply/common",
+    "/app/apply/labrador",
+    "/app/review",
+    "/app/submissions",
+    "/app/profile",
+  ]) {
+    await page.goto(path);
+    // Waits for the page to settle, so this measures the rendered page rather
+    // than a skeleton.
+    await expect(page.getByRole("heading").first()).toBeVisible();
+
+    /*
+     * `document` typed here rather than by adding "dom" to the root tsconfig.
+     *
+     * This callback runs in the browser, but the same config checks the server,
+     * and widening its lib would let server code reference `document` and
+     * compile. A local type for the two properties this needs keeps the
+     * narrower setting everywhere else.
+     */
+    const overflow = await page.evaluate(() => {
+      const root = (
+        globalThis as unknown as {
+          document: { documentElement: { scrollWidth: number; clientWidth: number } };
+        }
+      ).document.documentElement;
+      return root.scrollWidth - root.clientWidth;
+    });
+
+    /*
+     * A page that scrolls sideways on a phone is a page where buttons sit off
+     * the edge, and most applicants will do this on a phone. A one-pixel
+     * tolerance absorbs subpixel rounding in the layout engine; anything more
+     * is content that does not fit.
+     */
+    expect(overflow, `${path} scrolls sideways on a 375px viewport`).toBeLessThanOrEqual(1);
+  }
+});
