@@ -42,10 +42,10 @@ export const candidateProfile = pgTable(
      * flow. Without it, a student editing their common answers in week three
      * would retroactively change an application a committee already read.
      */
-    commonLockedAt: timestamp("common_locked_at"),
+    commonLockedAt: timestamp("common_locked_at", { withTimezone: true }),
 
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },
@@ -86,8 +86,8 @@ export const application = pgTable(
     /** The applicant's own ranking of this committee, when the cycle asks. */
     preferenceRank: integer("preference_rank"),
 
-    submittedAt: timestamp("submitted_at"),
-    withdrawnAt: timestamp("withdrawn_at"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
 
     /**
      * Guards duplicate submission.
@@ -98,8 +98,8 @@ export const application = pgTable(
      */
     idempotencyKey: text("idempotency_key"),
 
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },
@@ -172,9 +172,9 @@ export const formResponse = pgTable(
      */
     revision: integer("revision").notNull().default(0),
 
-    submittedAt: timestamp("submitted_at"),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },
@@ -257,7 +257,7 @@ export const answer = pgTable(
      */
     valueJsonb: jsonb("value_jsonb"),
 
-    updatedAt: timestamp("updated_at")
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },

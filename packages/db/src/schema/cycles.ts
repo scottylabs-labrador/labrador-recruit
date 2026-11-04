@@ -32,17 +32,21 @@ export const recruitmentCycle = pgTable(
     status: cycleStatus("status").notNull().default("draft"),
 
     /**
-     * The IANA zone the cycle's deadlines are expressed in.
+     * The IANA zone this cycle's deadlines are *expressed* in.
      *
-     * Stored rather than assumed, and every comparison is made server-side
-     * against it. A browser clock is never the authority on whether
-     * applications are open — it is attacker-controlled and, more often, simply
-     * wrong.
+     * For display, and for interpreting a date a director types — "closes on 15
+     * February at midnight" means midnight in Pittsburgh, not in UTC. It is
+     * **not** what comparisons use: `opens_at` and `closes_at` are
+     * `timestamptz`, so they carry an unambiguous instant and are compared
+     * directly against the server clock.
+     *
+     * Those two jobs are genuinely different, and conflating them is how a
+     * deadline ends up five hours out twice a year.
      */
     timeZone: text("time_zone").notNull().default("America/New_York"),
 
-    opensAt: timestamp("opens_at"),
-    closesAt: timestamp("closes_at"),
+    opensAt: timestamp("opens_at", { withTimezone: true }),
+    closesAt: timestamp("closes_at", { withTimezone: true }),
 
     /** Null means an applicant may apply to as many committees as they like. */
     maxCommitteesPerApplicant: integer("max_committees_per_applicant"),
@@ -50,8 +54,8 @@ export const recruitmentCycle = pgTable(
     /** Whether an applicant must rank the committees they apply to. */
     requirePreferenceRanking: boolean("require_preference_ranking").notNull().default(false),
 
-    reviewOpensAt: timestamp("review_opens_at"),
-    reviewClosesAt: timestamp("review_closes_at"),
+    reviewOpensAt: timestamp("review_opens_at", { withTimezone: true }),
+    reviewClosesAt: timestamp("review_closes_at", { withTimezone: true }),
 
     /**
      * Set by the release action, and the only thing that makes a decision
@@ -60,13 +64,13 @@ export const recruitmentCycle = pgTable(
      * Preparing a decision notifies nobody. Release is a separate, explicit,
      * audited organization-level act.
      */
-    decisionsReleasedAt: timestamp("decisions_released_at"),
+    decisionsReleasedAt: timestamp("decisions_released_at", { withTimezone: true }),
 
     createdBy: text("created_by")
       .notNull()
       .references(() => user.id, { onDelete: "restrict" }),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },
@@ -118,8 +122,8 @@ export const recruitmentOpening = pgTable(
     status: openingStatus("status").notNull().default("draft"),
 
     /** Narrower window than the cycle's, when a committee wants one. */
-    opensAt: timestamp("opens_at"),
-    closesAt: timestamp("closes_at"),
+    opensAt: timestamp("opens_at", { withTimezone: true }),
+    closesAt: timestamp("closes_at", { withTimezone: true }),
 
     /** Cap on accepted applications. Null means uncapped. */
     applicationLimit: integer("application_limit"),
@@ -130,8 +134,8 @@ export const recruitmentOpening = pgTable(
     /** Overrides the cycle's required review count when set. */
     minimumReviews: integer("minimum_reviews"),
 
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },

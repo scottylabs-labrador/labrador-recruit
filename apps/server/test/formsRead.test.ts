@@ -62,8 +62,10 @@ beforeEach(async () => {
 });
 
 /** A published committee form, which hangs off an opening rather than the cycle. */
-async function seedCommitteeForm(openingStatus: "draft" | "open" | "closed") {
-  await testDb.update(recruitmentOpening).set({ status: openingStatus });
+async function seedCommitteeForm(openingStatus: "draft" | "open" | "closed", opensAt?: Date) {
+  await testDb
+    .update(recruitmentOpening)
+    .set(opensAt ? { status: openingStatus, opensAt } : { status: openingStatus });
   const [row] = await testDb
     .insert(form)
     .values({
@@ -98,9 +100,16 @@ async function seedCommitteeForm(openingStatus: "draft" | "open" | "closed") {
   return row!.id;
 }
 
-async function seedForm(opts: { publish: boolean; cycleStatus?: "draft" | "open" | "archived" }) {
+async function seedForm(opts: {
+  publish: boolean;
+  cycleStatus?: "draft" | "open" | "archived";
+  cycleOpensAt?: Date;
+}) {
   if (opts.cycleStatus) {
     await testDb.update(recruitmentCycle).set({ status: opts.cycleStatus });
+  }
+  if (opts.cycleOpensAt) {
+    await testDb.update(recruitmentCycle).set({ opensAt: opts.cycleOpensAt });
   }
   const [row] = await testDb
     .insert(form)
@@ -283,6 +292,48 @@ describe("GET /v1/forms/:formId/published", () => {
   it("serves a committee form whose opening has closed, so a submitted application stays readable", async () => {
     const formId = await seedCommitteeForm("closed");
 
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
+
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses a committee form whose opening is marked open but has not opened yet", async () => {
+    const soon = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const formId = await seedCommitteeForm("open", soon);
+
+    // The status says open and the window says next week. A director setting
+    // both and expecting the later one to hold is the ordinary case, and
+    // trusting the status alone would publish the questions a week early.
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
+
+    expect(res.status).toBe(404);
+  });
+
+  it("serves a committee form once its window has started", async () => {
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const formId = await seedCommitteeForm("open", past);
+
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
+
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses a form whose cycle is marked open but has not opened yet", async () => {
+    const soon = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const formId = await seedForm({ publish: true, cycleOpensAt: soon });
+
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
+
+    expect(res.status).toBe(404);
+  });
+
+  it("keeps serving a form after its window has closed", async () => {
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    await testDb.update(recruitmentCycle).set({ closesAt: past });
+    const formId = await seedForm({ publish: true });
+
+    // A passed deadline stops submissions, not reading. An applicant who
+    // submitted needs the questions to stay legible next to their answers.
     const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
 
     expect(res.status).toBe(200);

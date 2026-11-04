@@ -54,7 +54,7 @@ export const applicationStatusEvent = pgTable(
     /** Internal. Never returned by a student endpoint. */
     note: text("note"),
 
-    createdAt: timestamp("created_at").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     index("application_status_event_applicationId_idx").on(table.applicationId),
@@ -106,8 +106,8 @@ export const file = pgTable(
      */
     status: fileStatus("status").notNull().default("pending"),
 
-    createdAt: timestamp("created_at").notNull(),
-    committedAt: timestamp("committed_at"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    committedAt: timestamp("committed_at", { withTimezone: true }),
   },
   (table) => [
     uniqueIndex("file_object_key_key").on(table.objectKey),
@@ -141,14 +141,14 @@ export const notificationOutbox = pgTable(
 
     status: notificationStatus("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
-    lastAttemptAt: timestamp("last_attempt_at"),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     lastError: text("last_error"),
 
     /** Backoff. The worker skips rows not yet available. */
-    availableAt: timestamp("available_at").notNull(),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull(),
 
-    createdAt: timestamp("created_at").notNull(),
-    sentAt: timestamp("sent_at"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
   },
   (table) => [
     check("notification_outbox_attempts_ck", sql`${table.attempts} >= 0`),
@@ -201,7 +201,7 @@ export const auditEvent = pgTable(
     /** No applicant content. */
     metadataJson: jsonb("metadata_json"),
 
-    createdAt: timestamp("created_at").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     index("audit_event_cycleId_idx").on(table.cycleId),

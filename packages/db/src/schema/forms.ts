@@ -44,8 +44,8 @@ export const form = pgTable(
     kind: formKind("kind").notNull(),
     title: text("title").notNull(),
     description: text("description"),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },
@@ -103,9 +103,9 @@ export const formVersion = pgTable(
       .references(() => user.id, { onDelete: "restrict" }),
 
     /** Null while draft. Set exactly when the version is published. */
-    publishedAt: timestamp("published_at"),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },

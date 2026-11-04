@@ -45,8 +45,8 @@ export const rubric = pgTable(
     createdBy: text("created_by")
       .notNull()
       .references(() => user.id, { onDelete: "restrict" }),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },
@@ -121,8 +121,8 @@ export const reviewAssignment = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "restrict" }),
     status: assignmentStatus("status").notNull().default("assigned"),
-    assignedAt: timestamp("assigned_at").notNull(),
-    dueAt: timestamp("due_at"),
+    assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }),
   },
   (table) => [
     /**
@@ -170,9 +170,9 @@ export const review = pgTable(
     /** Private to staff. No student endpoint returns this field. */
     comments: text("comments"),
 
-    submittedAt: timestamp("submitted_at"),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },

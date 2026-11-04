@@ -21,7 +21,7 @@ CREATE TABLE "answer" (
 	"form_version_id" uuid NOT NULL,
 	"question_id" uuid NOT NULL,
 	"value_jsonb" jsonb,
-	"updated_at" timestamp NOT NULL
+	"updated_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "application" (
@@ -30,11 +30,11 @@ CREATE TABLE "application" (
 	"opening_id" uuid NOT NULL,
 	"status" "application_status" DEFAULT 'draft' NOT NULL,
 	"preference_rank" integer,
-	"submitted_at" timestamp,
-	"withdrawn_at" timestamp,
+	"submitted_at" timestamp with time zone,
+	"withdrawn_at" timestamp with time zone,
 	"idempotency_key" text,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
 	CONSTRAINT "application_preference_rank_ck" CHECK ("application"."preference_rank" IS NULL OR "application"."preference_rank" > 0)
 );
 --> statement-breakpoint
@@ -42,9 +42,9 @@ CREATE TABLE "candidate_profile" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"cycle_id" uuid NOT NULL,
-	"common_locked_at" timestamp,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL
+	"common_locked_at" timestamp with time zone,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "form_response" (
@@ -54,9 +54,9 @@ CREATE TABLE "form_response" (
 	"application_id" uuid,
 	"status" "form_response_status" DEFAULT 'draft' NOT NULL,
 	"revision" integer DEFAULT 0 NOT NULL,
-	"submitted_at" timestamp,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL,
+	"submitted_at" timestamp with time zone,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
 	CONSTRAINT "form_response_id_version_key" UNIQUE("id","form_version_id"),
 	CONSTRAINT "form_response_single_owner_ck" CHECK (("form_response"."candidate_profile_id" IS NOT NULL AND "form_response"."application_id" IS NULL)
           OR ("form_response"."candidate_profile_id" IS NULL AND "form_response"."application_id" IS NOT NULL)),
@@ -72,20 +72,20 @@ CREATE TABLE "account" (
 	"access_token" text,
 	"refresh_token" text,
 	"id_token" text,
-	"access_token_expires_at" timestamp,
-	"refresh_token_expires_at" timestamp,
+	"access_token_expires_at" timestamp with time zone,
+	"refresh_token_expires_at" timestamp with time zone,
 	"scope" text,
 	"password" text,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "session" (
 	"id" text PRIMARY KEY NOT NULL,
-	"expires_at" timestamp NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
 	"token" text NOT NULL,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
 	"ip_address" text,
 	"user_agent" text,
 	"user_id" text NOT NULL,
@@ -100,8 +100,8 @@ CREATE TABLE "user" (
 	"image" text,
 	"role" text DEFAULT 'user' NOT NULL,
 	"must_change_password" boolean DEFAULT false NOT NULL,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
 	CONSTRAINT "user_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
@@ -109,9 +109,9 @@ CREATE TABLE "verification" (
 	"id" text PRIMARY KEY NOT NULL,
 	"identifier" text NOT NULL,
 	"value" text NOT NULL,
-	"expires_at" timestamp NOT NULL,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL
+	"expires_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "recruitment_cycle" (
@@ -121,16 +121,16 @@ CREATE TABLE "recruitment_cycle" (
 	"description" text,
 	"status" "cycle_status" DEFAULT 'draft' NOT NULL,
 	"time_zone" text DEFAULT 'America/New_York' NOT NULL,
-	"opens_at" timestamp,
-	"closes_at" timestamp,
+	"opens_at" timestamp with time zone,
+	"closes_at" timestamp with time zone,
 	"max_committees_per_applicant" integer,
 	"require_preference_ranking" boolean DEFAULT false NOT NULL,
-	"review_opens_at" timestamp,
-	"review_closes_at" timestamp,
-	"decisions_released_at" timestamp,
+	"review_opens_at" timestamp with time zone,
+	"review_closes_at" timestamp with time zone,
+	"decisions_released_at" timestamp with time zone,
 	"created_by" text NOT NULL,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
 	CONSTRAINT "recruitment_cycle_window_ck" CHECK ("recruitment_cycle"."opens_at" IS NULL OR "recruitment_cycle"."closes_at" IS NULL OR "recruitment_cycle"."closes_at" > "recruitment_cycle"."opens_at"),
 	CONSTRAINT "recruitment_cycle_review_window_ck" CHECK ("recruitment_cycle"."review_opens_at" IS NULL OR "recruitment_cycle"."review_closes_at" IS NULL OR "recruitment_cycle"."review_closes_at" > "recruitment_cycle"."review_opens_at"),
 	CONSTRAINT "recruitment_cycle_max_committees_ck" CHECK ("recruitment_cycle"."max_committees_per_applicant" IS NULL OR "recruitment_cycle"."max_committees_per_applicant" > 0)
@@ -141,13 +141,13 @@ CREATE TABLE "recruitment_opening" (
 	"cycle_id" uuid NOT NULL,
 	"team_id" uuid NOT NULL,
 	"status" "opening_status" DEFAULT 'draft' NOT NULL,
-	"opens_at" timestamp,
-	"closes_at" timestamp,
+	"opens_at" timestamp with time zone,
+	"closes_at" timestamp with time zone,
 	"application_limit" integer,
 	"capacity" integer,
 	"minimum_reviews" integer,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
 	CONSTRAINT "recruitment_opening_window_ck" CHECK ("recruitment_opening"."opens_at" IS NULL OR "recruitment_opening"."closes_at" IS NULL OR "recruitment_opening"."closes_at" > "recruitment_opening"."opens_at"),
 	CONSTRAINT "recruitment_opening_limits_ck" CHECK (("recruitment_opening"."application_limit" IS NULL OR "recruitment_opening"."application_limit" > 0)
           AND ("recruitment_opening"."capacity" IS NULL OR "recruitment_opening"."capacity" > 0)
@@ -162,8 +162,8 @@ CREATE TABLE "form" (
 	"kind" "form_kind" NOT NULL,
 	"title" text NOT NULL,
 	"description" text,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
 	CONSTRAINT "form_kind_owner_ck" CHECK (("form"."kind" = 'common' AND "form"."team_id" IS NULL AND "form"."opening_id" IS NULL)
           OR ("form"."kind" = 'committee' AND "form"."team_id" IS NOT NULL AND "form"."opening_id" IS NOT NULL))
 );
@@ -174,9 +174,9 @@ CREATE TABLE "form_version" (
 	"version" integer NOT NULL,
 	"status" "form_version_status" DEFAULT 'draft' NOT NULL,
 	"created_by" text NOT NULL,
-	"published_at" timestamp,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL,
+	"published_at" timestamp with time zone,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
 	CONSTRAINT "form_version_published_at_ck" CHECK (("form_version"."status" = 'published' AND "form_version"."published_at" IS NOT NULL)
           OR ("form_version"."status" <> 'published' AND "form_version"."published_at" IS NULL)),
 	CONSTRAINT "form_version_version_ck" CHECK ("form_version"."version" > 0)
@@ -204,10 +204,10 @@ CREATE TABLE "invitation" (
 	"team_id" uuid,
 	"cycle_id" uuid,
 	"token_hash" text NOT NULL,
-	"expires_at" timestamp NOT NULL,
-	"accepted_at" timestamp,
-	"revoked_at" timestamp,
-	"created_at" timestamp NOT NULL
+	"expires_at" timestamp with time zone NOT NULL,
+	"accepted_at" timestamp with time zone,
+	"revoked_at" timestamp with time zone,
+	"created_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "invitation_role" (
@@ -223,9 +223,9 @@ CREATE TABLE "permission_grant" (
 	"team_id" uuid,
 	"cycle_id" uuid,
 	"granted_by" text NOT NULL,
-	"created_at" timestamp NOT NULL,
-	"expires_at" timestamp,
-	"revoked_at" timestamp,
+	"created_at" timestamp with time zone NOT NULL,
+	"expires_at" timestamp with time zone,
+	"revoked_at" timestamp with time zone,
 	CONSTRAINT "permission_grant_scope_team_ck" CHECK (("permission_grant"."scope" = 'organization' AND "permission_grant"."team_id" IS NULL)
           OR ("permission_grant"."scope" = 'team' AND "permission_grant"."team_id" IS NOT NULL))
 );
@@ -238,8 +238,8 @@ CREATE TABLE "team" (
 	"parent_team_id" uuid,
 	"active" boolean DEFAULT true NOT NULL,
 	"display_order" integer DEFAULT 0 NOT NULL,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "application_status_event" (
@@ -250,7 +250,7 @@ CREATE TABLE "application_status_event" (
 	"event" "status_event" NOT NULL,
 	"changed_by" text,
 	"note" text,
-	"created_at" timestamp NOT NULL
+	"created_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "audit_event" (
@@ -262,7 +262,7 @@ CREATE TABLE "audit_event" (
 	"subject_type" text NOT NULL,
 	"subject_id" text NOT NULL,
 	"metadata_json" jsonb,
-	"created_at" timestamp NOT NULL
+	"created_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "file" (
@@ -274,8 +274,8 @@ CREATE TABLE "file" (
 	"mime_type" text NOT NULL,
 	"size_bytes" integer NOT NULL,
 	"status" "file_status" DEFAULT 'pending' NOT NULL,
-	"created_at" timestamp NOT NULL,
-	"committed_at" timestamp,
+	"created_at" timestamp with time zone NOT NULL,
+	"committed_at" timestamp with time zone,
 	CONSTRAINT "file_size_ck" CHECK ("file"."size_bytes" > 0)
 );
 --> statement-breakpoint
@@ -286,11 +286,11 @@ CREATE TABLE "notification_outbox" (
 	"payload_json" jsonb,
 	"status" "notification_status" DEFAULT 'pending' NOT NULL,
 	"attempts" integer DEFAULT 0 NOT NULL,
-	"last_attempt_at" timestamp,
+	"last_attempt_at" timestamp with time zone,
 	"last_error" text,
-	"available_at" timestamp NOT NULL,
-	"created_at" timestamp NOT NULL,
-	"sent_at" timestamp,
+	"available_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"sent_at" timestamp with time zone,
 	CONSTRAINT "notification_outbox_attempts_ck" CHECK ("notification_outbox"."attempts" >= 0)
 );
 --> statement-breakpoint
@@ -302,9 +302,9 @@ CREATE TABLE "review" (
 	"recommendation" "recommendation",
 	"confidence" "review_confidence",
 	"comments" text,
-	"submitted_at" timestamp,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL,
+	"submitted_at" timestamp with time zone,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
 	CONSTRAINT "review_id_rubric_key" UNIQUE("id","rubric_id"),
 	CONSTRAINT "review_submitted_at_ck" CHECK (("review"."status" = 'submitted' AND "review"."submitted_at" IS NOT NULL)
           OR ("review"."status" <> 'submitted' AND "review"."submitted_at" IS NULL))
@@ -316,8 +316,8 @@ CREATE TABLE "review_assignment" (
 	"reviewer_id" text NOT NULL,
 	"assigned_by" text NOT NULL,
 	"status" "assignment_status" DEFAULT 'assigned' NOT NULL,
-	"assigned_at" timestamp NOT NULL,
-	"due_at" timestamp
+	"assigned_at" timestamp with time zone NOT NULL,
+	"due_at" timestamp with time zone
 );
 --> statement-breakpoint
 CREATE TABLE "review_score" (
@@ -334,8 +334,8 @@ CREATE TABLE "rubric" (
 	"version" integer NOT NULL,
 	"status" "rubric_status" DEFAULT 'draft' NOT NULL,
 	"created_by" text NOT NULL,
-	"created_at" timestamp NOT NULL,
-	"updated_at" timestamp NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
 	CONSTRAINT "rubric_version_ck" CHECK ("rubric"."version" > 0)
 );
 --> statement-breakpoint

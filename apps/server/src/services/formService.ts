@@ -40,6 +40,26 @@ const READABLE_CYCLE_STATUSES = [
 ] as const;
 
 /**
+ * Whether a window has started.
+ *
+ * An unset `opensAt` means "no later gate than the status", which is the common
+ * case. A set one is authoritative: a director who marks an opening `open` and
+ * dates it next week means next week, and trusting the status alone would
+ * publish the questions early.
+ *
+ * `closesAt` deliberately does **not** appear here. A passed deadline stops
+ * submissions, not reading — an applicant who submitted needs the questions to
+ * stay legible beside their answers.
+ *
+ * The comparison is direct because these columns are `timestamptz`. The cycle's
+ * `time_zone` is for displaying a deadline and for interpreting one a director
+ * typed, not for deciding whether it has passed.
+ */
+function hasOpened(opensAt: Date | null, now: Date): boolean {
+  return opensAt === null || opensAt <= now;
+}
+
+/**
  * Opening statuses whose committee form an applicant may read.
  *
  * The cycle status is not enough, and that is the whole point of these two
@@ -81,7 +101,9 @@ export const formService = {
         title: form.title,
         description: form.description,
         cycleStatus: recruitmentCycle.status,
+        cycleOpensAt: recruitmentCycle.opensAt,
         openingStatus: recruitmentOpening.status,
+        openingOpensAt: recruitmentOpening.opensAt,
         versionId: formVersion.id,
         version: formVersion.version,
       })
@@ -103,18 +125,26 @@ export const formService = {
     if (!row) {
       return null;
     }
-    if (
-      !READABLE_CYCLE_STATUSES.includes(row.cycleStatus as (typeof READABLE_CYCLE_STATUSES)[number])
-    ) {
+    // One clock reading for every comparison, so a form cannot be judged open
+    // by the cycle and shut by the opening within the same request.
+    const now = new Date();
+
+    const cycleReadable =
+      READABLE_CYCLE_STATUSES.includes(
+        row.cycleStatus as (typeof READABLE_CYCLE_STATUSES)[number],
+      ) && hasOpened(row.cycleOpensAt, now);
+    if (!cycleReadable) {
       return null;
     }
-    if (
-      row.kind === "committee" &&
-      !READABLE_OPENING_STATUSES.includes(
-        row.openingStatus as (typeof READABLE_OPENING_STATUSES)[number],
-      )
-    ) {
-      return null;
+
+    if (row.kind === "committee") {
+      const openingReadable =
+        READABLE_OPENING_STATUSES.includes(
+          row.openingStatus as (typeof READABLE_OPENING_STATUSES)[number],
+        ) && hasOpened(row.openingOpensAt, now);
+      if (!openingReadable) {
+        return null;
+      }
     }
 
     const rows = await db

@@ -47,8 +47,8 @@ export const team = pgTable(
     /** Soft retirement. Never delete a team that has recruitment history. */
     active: boolean("active").notNull().default(true),
     displayOrder: integer("display_order").notNull().default(0),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },
@@ -99,13 +99,13 @@ export const permissionGrant = pgTable(
     grantedBy: text("granted_by")
       .notNull()
       .references(() => user.id, { onDelete: "restrict" }),
-    createdAt: timestamp("created_at").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
 
     /** Null for no expiry. Reviewer grants normally expire with their cycle. */
-    expiresAt: timestamp("expires_at"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
 
     /** Set instead of deleting. The history is the audit trail. */
-    revokedAt: timestamp("revoked_at"),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
   (table) => [
     check(
@@ -176,12 +176,12 @@ export const invitation = pgTable(
      * column the raw token could live in.
      */
     tokenHash: text("token_hash").notNull(),
-    expiresAt: timestamp("expires_at").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 
     /** Set in the same transaction that writes the grants. Single use. */
-    acceptedAt: timestamp("accepted_at"),
-    revokedAt: timestamp("revoked_at"),
-    createdAt: timestamp("created_at").notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     uniqueIndex("invitation_token_hash_key").on(table.tokenHash),
