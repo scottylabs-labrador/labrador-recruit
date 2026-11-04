@@ -1,28 +1,54 @@
 import { expect, test } from "@playwright/test";
 
 import { API_URL } from "./config.ts";
-import { resetDb } from "./db.ts";
+import { resetDb, seedOpenCycle } from "./db.ts";
 
 test.beforeEach(async () => {
   await resetDb();
 });
 
-test("a guest is told what the platform is and how to get in", async ({ page }) => {
+test("a guest reads what is recruiting and is sent to sign in", async ({ page }) => {
+  await seedOpenCycle();
+
+  // The root path redirects, so this also asserts that `/recruit` is the one
+  // canonical landing page rather than a second copy of it.
   await page.goto("/");
+  await expect(page).toHaveURL(/\/recruit$/);
 
-  await expect(page.getByText("ScottyLabs Recruit")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "End To End Recruitment" })).toBeVisible();
 
-  /*
-   * Both buttons, by exact name.
-   *
-   * There are deliberately two ways in - the header control and the hero call
-   * to action - and `/sign in/i` matched both, so this test failed on a strict
-   * mode violation whenever both had rendered and passed when the header had
-   * not yet. The passes were the accident. Naming each one exactly asserts the
-   * page we actually intend and fails for a reason that means something.
-   */
-  await expect(page.getByRole("button", { name: "Sign In", exact: true })).toBeVisible();
+  const committee = page.getByRole("article", { name: /labrador/i });
+  await expect(committee).toBeVisible();
+  await expect(committee.getByText(/product teams building for the CMU community/i)).toBeVisible();
+
+  await page.getByRole("link", { name: "Sign in to apply" }).click();
+  await expect(page).toHaveURL(/\/signin/);
   await expect(page.getByRole("button", { name: "Sign in with your Andrew ID" })).toBeVisible();
+});
+
+test("the landing page says nothing is recruiting when nothing is", async ({ page }) => {
+  // No seed at all, against a real empty database. This is the between-seasons
+  // state, and it must read as an explanation rather than as a broken page.
+  await page.goto("/recruit");
+
+  await expect(
+    page.getByRole("heading", { name: /applications are not open right now/i }),
+  ).toBeVisible();
+  await expect(page.getByText(/no committees are recruiting/i)).toBeVisible();
+});
+
+test("an unauthenticated visitor to the applicant surface keeps their destination", async ({
+  page,
+}) => {
+  await seedOpenCycle();
+
+  await page.goto("/app/dashboard");
+
+  // The guard is a navigation courtesy rather than the security boundary - the
+  // endpoints refuse on their own - but losing the destination here would
+  // silently break every link into the applicant surface.
+  await expect(page).toHaveURL(/\/signin\?redirect=%2Fapp%2Fdashboard$/);
+  await expect(page.getByText("/app/dashboard")).toBeVisible();
 });
 
 test("the API reports liveness", async ({ request }) => {

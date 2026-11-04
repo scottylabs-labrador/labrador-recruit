@@ -1,7 +1,7 @@
 import { cleanup, configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 
-import { setIdentityProviderConfigured, setSession } from "./msw/handlers.ts";
+import { resetCatalogue, setIdentityProviderConfigured, setSession } from "./msw/handlers.ts";
 import { server } from "./msw/server.ts";
 
 // Route components are code-split, so the first navigation in a file pays for a
@@ -34,6 +34,7 @@ beforeAll(() => {
 beforeEach(() => {
   setSession(null);
   setIdentityProviderConfigured(true);
+  resetCatalogue();
 });
 
 afterEach(() => {

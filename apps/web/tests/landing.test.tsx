@@ -1,62 +1,36 @@
 /**
- * Regression tests on the landing page that survived the v1 demolition.
+ * The root path.
  *
- * Not test-first — the page already existed. These pin down what the public
- * surface says now that the product is an applicant portal rather than an
- * internal review tool, so #23 inherits a harness and a baseline instead of a
- * blank directory.
+ * Its content moved to `/recruit`, which `docs/ui.md` names as the canonical
+ * landing path, and the assertions about that content moved with it to
+ * `recruit.test.tsx` and `signin.test.tsx`. What is left here is the one thing
+ * this route still does: send people there. A second copy of the page would be
+ * a second place for it to drift, and the stale one is always the one people
+ * have linked to.
  */
 import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { setIdentityProviderConfigured } from "./msw/handlers.ts";
 import { renderApp } from "./render.tsx";
 
-describe("the landing page", () => {
-  it("says what the platform is for an applicant", async () => {
-    await renderApp("/");
+describe("an unknown path", () => {
+  it("explains the link is wrong rather than rendering a bare Not Found", async () => {
+    await renderApp("/application-form-2024");
 
-    // By role, because the nav link carries the same words as the heading.
-    expect(await screen.findByRole("heading", { name: "ScottyLabs Recruit" })).toBeDefined();
-    expect(await screen.findByText(/apply to scottylabs committees in one place/i)).toBeDefined();
+    // The likeliest person here is an applicant following a stale link from an
+    // old announcement. They need a way to the committees and a reassurance
+    // that nothing happened to their application, not a diagnosis.
+    expect(await screen.findByRole("heading", { name: /does not exist/i })).toBeDefined();
+    expect(await screen.findByRole("link", { name: /go to the committees/i })).toBeDefined();
   });
+});
 
-  it("states that no model evaluates an applicant", async () => {
-    await renderApp("/");
+describe("the root path", () => {
+  it("sends a visitor to the recruitment page", async () => {
+    const { router } = await renderApp("/");
 
-    // Product rule 1 is a promise made to applicants, so it is on the page they
-    // see before they decide to apply, not only in the repository.
-    expect(await screen.findByText(/not evaluated by any model/i)).toBeDefined();
-  });
-
-  it("offers single sign-on when an identity provider is configured", async () => {
-    setIdentityProviderConfigured(true);
-
-    await renderApp("/");
-
-    expect(
-      await screen.findByRole("button", { name: /sign in with your andrew id/i }),
-    ).toBeDefined();
-  });
-
-  it("withholds single sign-on when no identity provider is configured", async () => {
-    // Better Auth builds a well-formed authorize URL whether or not the client
-    // exists, so an unconfigured deployment would send somebody to the identity
-    // provider's own "client not found" page, having left the application
-    // entirely. Withholding the button is the difference between a dead end and
-    // an explanation.
-    setIdentityProviderConfigured(false);
-
-    await renderApp("/");
-
-    await screen.findByRole("heading", { name: "ScottyLabs Recruit" });
-
-    // The hook treats sign-in as available *while loading*, deliberately: a
-    // configured deployment is the common case by far, and briefly disabling the
-    // button on every page load would be worse than the rare wrong guess. So
-    // this waits for the answer rather than asserting on the first paint.
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /sign in with your andrew id/i })).toBeNull();
+      expect(router.state.location.pathname).toBe("/recruit");
     });
   });
 });

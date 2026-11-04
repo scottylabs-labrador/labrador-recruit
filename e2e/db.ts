@@ -1,4 +1,11 @@
-import { account, session, user } from "@recruit/db/schema";
+import {
+  account,
+  recruitmentCycle,
+  recruitmentOpening,
+  session,
+  team,
+  user,
+} from "@recruit/db/schema";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 
@@ -99,4 +106,67 @@ export async function seedAlice() {
 
 export async function seedAdmin() {
   await seedUser({ ...adminUser, groups: [ADMIN_GROUP] });
+}
+
+/**
+ * An open cycle with one committee recruiting.
+ *
+ * The suite truncates every table between tests, so without this the public
+ * pages render their between-seasons state — which is worth asserting once,
+ * but is not the flow an applicant walks.
+ */
+export async function seedOpenCycle() {
+  const now = new Date();
+  const past = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const future = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000);
+
+  await db.insert(user).values({
+    id: "director",
+    name: "Director",
+    email: "director@andrew.cmu.edu",
+    emailVerified: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const [cycle] = await db
+    .insert(recruitmentCycle)
+    .values({
+      slug: "e2e-cycle",
+      name: "End To End Recruitment",
+      description: "Apply to ScottyLabs committees.",
+      status: "open",
+      timeZone: "America/New_York",
+      opensAt: past,
+      closesAt: future,
+      maxCommitteesPerApplicant: 2,
+      createdBy: "director",
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: recruitmentCycle.id });
+
+  const [committee] = await db
+    .insert(team)
+    .values({
+      slug: "labrador",
+      name: "Labrador",
+      description: "Product teams building for the CMU community.",
+      displayOrder: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: team.id });
+
+  await db.insert(recruitmentOpening).values({
+    cycleId: cycle!.id,
+    teamId: committee!.id,
+    status: "open",
+    opensAt: past,
+    closesAt: future,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return { cycleId: cycle!.id, teamId: committee!.id };
 }

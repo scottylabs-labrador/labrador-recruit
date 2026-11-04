@@ -20,11 +20,27 @@ const authClient = createAuthClient({
  * someone clicking a button that appeared to do nothing whatsoever, which reads
  * as a broken page rather than an outage they should report.
  */
-export function signIn() {
+export function signIn(destination?: string) {
+  /*
+   * Where to come back to.
+   *
+   * Resolved against our own origin, so a destination that is not a same-site
+   * path cannot turn the identity provider's callback into a redirect to
+   * somebody else's copy of this page. The caller has already validated it;
+   * this is the second of the two places that must agree, because a bypass
+   * here would be invisible from the route.
+   */
+  const callbackURL =
+    destination === undefined
+      ? window.location.href
+      : new URL(destination, window.location.origin).origin === window.location.origin
+        ? new URL(destination, window.location.origin).href
+        : window.location.origin;
+
   void authClient.signIn
     .social({
       provider: "keycloak",
-      callbackURL: window.location.href,
+      callbackURL,
     })
     .then((result) => {
       if (result.error) {

@@ -10,33 +10,173 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/app'
+import { Route as RecruitRouteImport } from './routes/recruit'
+import { Route as SigninRouteImport } from './routes/signin'
+import { Route as AppCommitteesRouteImport } from './routes/app/committees'
+import { Route as AppDashboardRouteImport } from './routes/app/dashboard'
+import { Route as AppProfileRouteImport } from './routes/app/profile'
+import { Route as AppReviewRouteImport } from './routes/app/review'
+import { Route as AppApplyTeamSlugRouteImport } from './routes/app/apply/$teamSlug'
+import { Route as AppApplyCommonRouteImport } from './routes/app/apply/common'
+import { Route as AppSubmissionsIndexRouteImport } from './routes/app/submissions/index'
+import { Route as AppSubmissionsApplicationIdRouteImport } from './routes/app/submissions/$applicationId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecruitRoute = RecruitRouteImport.update({
+  id: '/recruit',
+  path: '/recruit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SigninRoute = SigninRouteImport.update({
+  id: '/signin',
+  path: '/signin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppCommitteesRoute = AppCommitteesRouteImport.update({
+  id: '/committees',
+  path: '/committees',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDashboardRoute = AppDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReviewRoute = AppReviewRouteImport.update({
+  id: '/review',
+  path: '/review',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppApplyTeamSlugRoute = AppApplyTeamSlugRouteImport.update({
+  id: '/apply/$teamSlug',
+  path: '/apply/$teamSlug',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppApplyCommonRoute = AppApplyCommonRouteImport.update({
+  id: '/apply/common',
+  path: '/apply/common',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSubmissionsIndexRoute = AppSubmissionsIndexRouteImport.update({
+  id: '/submissions/',
+  path: '/submissions/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSubmissionsApplicationIdRoute =
+  AppSubmissionsApplicationIdRouteImport.update({
+    id: '/submissions/$applicationId',
+    path: '/submissions/$applicationId',
+    getParentRoute: () => AppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
+  '/recruit': typeof RecruitRoute
+  '/signin': typeof SigninRoute
+  '/app/committees': typeof AppCommitteesRoute
+  '/app/dashboard': typeof AppDashboardRoute
+  '/app/profile': typeof AppProfileRoute
+  '/app/review': typeof AppReviewRoute
+  '/app/apply/$teamSlug': typeof AppApplyTeamSlugRoute
+  '/app/apply/common': typeof AppApplyCommonRoute
+  '/app/submissions/$applicationId': typeof AppSubmissionsApplicationIdRoute
+  '/app/submissions/': typeof AppSubmissionsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
+  '/recruit': typeof RecruitRoute
+  '/signin': typeof SigninRoute
+  '/app/committees': typeof AppCommitteesRoute
+  '/app/dashboard': typeof AppDashboardRoute
+  '/app/profile': typeof AppProfileRoute
+  '/app/review': typeof AppReviewRoute
+  '/app/apply/$teamSlug': typeof AppApplyTeamSlugRoute
+  '/app/apply/common': typeof AppApplyCommonRoute
+  '/app/submissions/$applicationId': typeof AppSubmissionsApplicationIdRoute
+  '/app/submissions': typeof AppSubmissionsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
+  '/recruit': typeof RecruitRoute
+  '/signin': typeof SigninRoute
+  '/app/committees': typeof AppCommitteesRoute
+  '/app/dashboard': typeof AppDashboardRoute
+  '/app/profile': typeof AppProfileRoute
+  '/app/review': typeof AppReviewRoute
+  '/app/apply/$teamSlug': typeof AppApplyTeamSlugRoute
+  '/app/apply/common': typeof AppApplyCommonRoute
+  '/app/submissions/$applicationId': typeof AppSubmissionsApplicationIdRoute
+  '/app/submissions/': typeof AppSubmissionsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/recruit'
+    | '/signin'
+    | '/app/committees'
+    | '/app/dashboard'
+    | '/app/profile'
+    | '/app/review'
+    | '/app/apply/$teamSlug'
+    | '/app/apply/common'
+    | '/app/submissions/$applicationId'
+    | '/app/submissions/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/app'
+    | '/recruit'
+    | '/signin'
+    | '/app/committees'
+    | '/app/dashboard'
+    | '/app/profile'
+    | '/app/review'
+    | '/app/apply/$teamSlug'
+    | '/app/apply/common'
+    | '/app/submissions/$applicationId'
+    | '/app/submissions'
+  id:
+    | '__root__'
+    | '/'
+    | '/app'
+    | '/recruit'
+    | '/signin'
+    | '/app/committees'
+    | '/app/dashboard'
+    | '/app/profile'
+    | '/app/review'
+    | '/app/apply/$teamSlug'
+    | '/app/apply/common'
+    | '/app/submissions/$applicationId'
+    | '/app/submissions/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  RecruitRoute: typeof RecruitRoute
+  SigninRoute: typeof SigninRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +188,115 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recruit': {
+      id: '/recruit'
+      path: '/recruit'
+      fullPath: '/recruit'
+      preLoaderRoute: typeof RecruitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signin': {
+      id: '/signin'
+      path: '/signin'
+      fullPath: '/signin'
+      preLoaderRoute: typeof SigninRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/committees': {
+      id: '/app/committees'
+      path: '/committees'
+      fullPath: '/app/committees'
+      preLoaderRoute: typeof AppCommitteesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/dashboard': {
+      id: '/app/dashboard'
+      path: '/dashboard'
+      fullPath: '/app/dashboard'
+      preLoaderRoute: typeof AppDashboardRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/profile': {
+      id: '/app/profile'
+      path: '/profile'
+      fullPath: '/app/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/review': {
+      id: '/app/review'
+      path: '/review'
+      fullPath: '/app/review'
+      preLoaderRoute: typeof AppReviewRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/apply/$teamSlug': {
+      id: '/app/apply/$teamSlug'
+      path: '/apply/$teamSlug'
+      fullPath: '/app/apply/$teamSlug'
+      preLoaderRoute: typeof AppApplyTeamSlugRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/apply/common': {
+      id: '/app/apply/common'
+      path: '/apply/common'
+      fullPath: '/app/apply/common'
+      preLoaderRoute: typeof AppApplyCommonRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/submissions/': {
+      id: '/app/submissions/'
+      path: '/submissions'
+      fullPath: '/app/submissions/'
+      preLoaderRoute: typeof AppSubmissionsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/submissions/$applicationId': {
+      id: '/app/submissions/$applicationId'
+      path: '/submissions/$applicationId'
+      fullPath: '/app/submissions/$applicationId'
+      preLoaderRoute: typeof AppSubmissionsApplicationIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
+interface AppRouteChildren {
+  AppCommitteesRoute: typeof AppCommitteesRoute
+  AppDashboardRoute: typeof AppDashboardRoute
+  AppProfileRoute: typeof AppProfileRoute
+  AppReviewRoute: typeof AppReviewRoute
+  AppApplyTeamSlugRoute: typeof AppApplyTeamSlugRoute
+  AppApplyCommonRoute: typeof AppApplyCommonRoute
+  AppSubmissionsApplicationIdRoute: typeof AppSubmissionsApplicationIdRoute
+  AppSubmissionsIndexRoute: typeof AppSubmissionsIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppCommitteesRoute: AppCommitteesRoute,
+  AppDashboardRoute: AppDashboardRoute,
+  AppProfileRoute: AppProfileRoute,
+  AppReviewRoute: AppReviewRoute,
+  AppApplyTeamSlugRoute: AppApplyTeamSlugRoute,
+  AppApplyCommonRoute: AppApplyCommonRoute,
+  AppSubmissionsApplicationIdRoute: AppSubmissionsApplicationIdRoute,
+  AppSubmissionsIndexRoute: AppSubmissionsIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  RecruitRoute: RecruitRoute,
+  SigninRoute: SigninRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
