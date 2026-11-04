@@ -1,15 +1,18 @@
 import {
   account,
+  form,
+  formVersion,
+  question,
   recruitmentCycle,
   recruitmentOpening,
   session,
   team,
   user,
 } from "@recruit/db/schema";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 
-import { ADMIN_GROUP, DATABASE_URL } from "./config.ts";
+import { ADMIN_GROUP, BETTER_AUTH_SECRET, DATABASE_URL } from "./config.ts";
 
 export const db = drizzle(DATABASE_URL);
 
@@ -100,6 +103,51 @@ export async function seedUser(opts: {
   });
 }
 
+/**
+ * Signs a value the way Better Auth signs its session cookie.
+ *
+ * HMAC-SHA256 over the raw secret, standard base64 - the same four lines as
+ * `makeSignature` in `better-auth/crypto`, through the same WebCrypto API,
+ * because that package is not resolvable from this workspace root. Copied
+ * rather than reimplemented: if the server ever changes how it signs, this
+ * helper fails loudly on the next run rather than silently authenticating
+ * nobody.
+ */
+async function makeSignature(value: string, secret: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
+  return Buffer.from(signature).toString("base64");
+}
+
+/**
+ * The signed session cookie for a seeded user.
+ *
+ * Without it the end-to-end suite could only exercise the public pages, and
+ * the applicant surface - most of the product - was covered only in jsdom
+ * against a mocked API, which cannot catch a cookie that is not sent or a CORS
+ * rule that drops credentials.
+ */
+export async function sessionCookie(sessionToken: string) {
+  const signature = await makeSignature(sessionToken, BETTER_AUTH_SECRET);
+  return {
+    name: "better-auth.session_token",
+    value: `${sessionToken}.${signature}`,
+    domain: "localhost",
+    path: "/",
+    httpOnly: true,
+    // http on localhost, so the cookie cannot be `Secure` or the browser will
+    // decline to send it at all.
+    secure: false,
+    sameSite: "Lax" as const,
+  };
+}
+
 export async function seedAlice() {
   await seedUser(alice);
 }
@@ -158,15 +206,115 @@ export async function seedOpenCycle() {
     })
     .returning({ id: team.id });
 
-  await db.insert(recruitmentOpening).values({
+  const [opening] = await db
+    .insert(recruitmentOpening)
+    .values({
+      cycleId: cycle!.id,
+      teamId: committee!.id,
+      status: "open",
+      opensAt: past,
+      closesAt: future,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: recruitmentOpening.id });
+
+  /*
+   * Both forms, published.
+   *
+   * `createApplication` refuses an opening with no committee form - opening a
+   * committee and publishing its questions are separate acts, and a director
+   * can do the first without the second. The suite found that by failing, which
+   * is the seed being incomplete rather than the product being wrong.
+   */
+  const commonFormId = await publishForm({
+    cycleId: cycle!.id,
+    kind: "common",
+    title: "Shared questions",
+    questionKey: "major",
+    label: "Your major",
+    type: "short_text",
+  });
+  const committeeFormId = await publishForm({
     cycleId: cycle!.id,
     teamId: committee!.id,
-    status: "open",
-    opensAt: past,
-    closesAt: future,
-    createdAt: now,
-    updatedAt: now,
+    openingId: opening!.id,
+    kind: "committee",
+    title: "Labrador application",
+    questionKey: "why",
+    label: "Why Labrador?",
+    type: "long_text",
   });
 
-  return { cycleId: cycle!.id, teamId: committee!.id };
+  return {
+    cycleId: cycle!.id,
+    teamId: committee!.id,
+    openingId: opening!.id,
+    commonFormId,
+    committeeFormId,
+  };
+}
+
+/** A published form with one required question, which is all any test needs. */
+async function publishForm(opts: {
+  cycleId: string;
+  teamId?: string;
+  openingId?: string;
+  kind: "common" | "committee";
+  title: string;
+  questionKey: string;
+  label: string;
+  type: "short_text" | "long_text";
+}) {
+  const now = new Date();
+  const [row] = await db
+    .insert(form)
+    .values({
+      cycleId: opts.cycleId,
+      teamId: opts.teamId ?? null,
+      openingId: opts.openingId ?? null,
+      kind: opts.kind,
+      title: opts.title,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: form.id });
+  const [version] = await db
+    .insert(formVersion)
+    .values({
+      formId: row!.id,
+      version: 1,
+      status: "published",
+      publishedAt: now,
+      createdBy: "director",
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: formVersion.id });
+  await db.insert(question).values({
+    formVersionId: version!.id,
+    questionKey: opts.questionKey,
+    type: opts.type,
+    label: opts.label,
+    required: true,
+    position: 1,
+  });
+  return row!.id;
+}
+
+/**
+ * Moves a cycle's deadline into the past.
+ *
+ * Lets a test put the stack in the state where the browser still believes the
+ * cycle is open - which is precisely when a client-side deadline check would
+ * wave a late submission through.
+ */
+export async function closeCycleDeadline(cycleId: string) {
+  await db
+    .update(recruitmentCycle)
+    .set({
+      opensAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+      closesAt: new Date(Date.now() - 60 * 1000),
+    })
+    .where(eq(recruitmentCycle.id, cycleId));
 }

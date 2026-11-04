@@ -1,4 +1,22 @@
+import type { components } from "@recruit/server/build/swagger";
 import { http, HttpResponse } from "msw";
+
+/**
+ * Every fixture in this file is typed against the generated API schema.
+ *
+ * Three of them were originally hand-written and all three were wrong: the
+ * question definitions invented `id`, `helpText` and `visibleWhen` so the form
+ * rendered nothing; the 409 body nested `details.revision` where the server
+ * spreads it at the top level; and the submission result invented
+ * `{ submittedAt, applicationIds, commonLocked }` where the server returns
+ * `{ submitted: [...] }` - and that last one had a *passing* test against a
+ * response the server has never sent.
+ *
+ * A fixture that does not match the contract tests a product that does not
+ * exist. Aliasing them to `components["schemas"][...]` makes the next drift a
+ * compile error instead of a green test.
+ */
+type Schemas = components["schemas"];
 
 /**
  * The mocked API surface.
@@ -26,26 +44,9 @@ export function setIdentityProviderConfigured(next: boolean) {
   identityProviderConfigured = next;
 }
 
-export interface CurrentCycle {
-  slug: string;
-  name: string;
-  description: string | null;
-  timeZone: string;
-  opensAt: string | null;
-  closesAt: string | null;
-  maxCommitteesPerApplicant: number | null;
-  requirePreferenceRanking: boolean;
-}
+export type CurrentCycle = Schemas["CurrentCycle"];
 
-export interface PublicOpening {
-  openingId: string;
-  teamSlug: string;
-  teamName: string;
-  description: string | null;
-  accepting: boolean;
-  opensAt: string | null;
-  closesAt: string | null;
-}
+export type PublicOpening = Schemas["PublicOpening"];
 
 /**
  * The default cycle every test starts from.
@@ -100,30 +101,11 @@ export function setOpenings(next: PublicOpening[]) {
   openings = next;
 }
 
-export interface ProfileView {
-  cycleSlug: string;
-  cycleName: string;
-  closesAt: string | null;
-  commonLocked: boolean;
-}
+export type ProfileView = Schemas["ProfileView"];
 
-export type ApplicantStatus =
-  | "Draft"
-  | "Submitted"
-  | "Under Review"
-  | "Interview"
-  | "Decision Available"
-  | "Withdrawn";
+export type ApplicantStatus = ApplicationSummary["status"];
 
-export interface ApplicationSummary {
-  applicationId: string;
-  openingId: string;
-  committeeName: string;
-  committeeSlug: string;
-  status: ApplicantStatus;
-  lastSavedAt: string | null;
-  submittedAt: string | null;
-}
+export type ApplicationSummary = Schemas["ApplicationSummary"];
 
 export const DEFAULT_PROFILE: ProfileView = {
   cycleSlug: "spring-2027",
@@ -167,33 +149,25 @@ export const applyCalls: string[] = [];
  */
 export const preferenceCalls: string[][] = [];
 
+/** Every submission the page sent: the key and what it named. */
+export const submissionCalls: Schemas["SubmitBody"][] = [];
+
 /**
- * Mirrors `QuestionDefinition` from `@recruit/common`, field for field.
+ * How the next submission is answered.
  *
- * The first version of this fixture invented its own names - `id`,
- * `helpText`, `visibleWhen` - and the form rendered nothing at all, because a
- * fixture that does not match the contract tests a product that does not
- * exist. These names are the contract.
+ * `"ok"` commits. `"incomplete"` is the 422 the server returns when a required
+ * answer is missing, carrying the per-application detail the review page has
+ * to render. `"deadline"` is the 409 for a passed deadline.
  */
-export interface QuestionDefinitionFixture {
-  questionKey: string;
-  type: string;
-  label: string;
-  description?: string | null;
-  required: boolean;
-  position: number;
-  config: Record<string, unknown> | null;
-  visibilityRule: Record<string, unknown> | null;
+let nextSubmission: "ok" | "incomplete" | "deadline" = "ok";
+
+export function setNextSubmission(next: "ok" | "incomplete" | "deadline") {
+  nextSubmission = next;
 }
 
-export interface PublishedFormFixture {
-  formId: string;
-  kind: "common" | "committee";
-  title: string;
-  description: string | null;
-  version: number;
-  questions: QuestionDefinitionFixture[];
-}
+export type QuestionDefinitionFixture = Schemas["QuestionDefinition"];
+
+export type PublishedFormFixture = Schemas["PublishedForm"];
 
 export const COMMON_FORM: PublishedFormFixture = {
   formId: "form-common",
@@ -257,14 +231,7 @@ export function setForms(next: PublishedFormFixture[]) {
   forms = next;
 }
 
-export interface CommonResponseFixture {
-  formId: string;
-  title: string;
-  description: string | null;
-  revision: number;
-  answers: Record<string, unknown>;
-  locked: boolean;
-}
+export type CommonResponseFixture = Schemas["CommonResponseView"];
 
 export const DEFAULT_COMMON_RESPONSE: CommonResponseFixture = {
   formId: "form-common",
@@ -282,15 +249,15 @@ export function setCommonResponse(next: CommonResponseFixture) {
 }
 
 /** Answers and revisions per application, for the committee draft routes. */
-const applicationDrafts = new Map<
-  string,
-  { formId: string | null; revision: number; answers: Record<string, unknown> }
->();
+const applicationDrafts = new Map<string, ApplicationDraft>();
 
-export function setApplicationDraft(
-  applicationId: string,
-  draft: { formId: string | null; revision: number; answers: Record<string, unknown> },
-) {
+interface ApplicationDraft {
+  formId: string | null;
+  revision: number;
+  answers: Schemas["AnswerMap"];
+}
+
+export function setApplicationDraft(applicationId: string, draft: ApplicationDraft) {
   applicationDrafts.set(applicationId, { ...draft });
 }
 
@@ -311,7 +278,7 @@ export function failNextDraftSaveWithConflict() {
 export const draftSaves: {
   target: string;
   revision: number;
-  answers: { questionKey: string; value: unknown }[];
+  answers: Schemas["DraftBody"]["answers"];
 }[] = [];
 
 export function resetCatalogue() {
@@ -319,6 +286,8 @@ export function resetCatalogue() {
   applyCalls.length = 0;
   preferenceCalls.length = 0;
   draftSaves.length = 0;
+  submissionCalls.length = 0;
+  nextSubmission = "ok";
   forms = [COMMON_FORM, COMMITTEE_FORM];
   commonResponse = { ...DEFAULT_COMMON_RESPONSE, answers: {} };
   applicationDrafts.clear();
@@ -370,10 +339,7 @@ export const handlers = [
   http.get(`${API}/v1/me/common-response`, () => HttpResponse.json(commonResponse)),
 
   http.patch(`${API}/v1/me/common-response/draft`, async ({ request }) => {
-    const body = (await request.json()) as {
-      revision: number;
-      answers: { questionKey: string; value: unknown }[];
-    };
+    const body = (await request.json()) as Schemas["DraftBody"];
     draftSaves.push({ target: "common", revision: body.revision, answers: body.answers });
 
     if (nextSaveConflicts) {
@@ -414,10 +380,7 @@ export const handlers = [
 
   http.patch(`${API}/v1/me/applications/:applicationId/draft`, async ({ params, request }) => {
     const id = String(params["applicationId"]);
-    const body = (await request.json()) as {
-      revision: number;
-      answers: { questionKey: string; value: unknown }[];
-    };
+    const body = (await request.json()) as Schemas["DraftBody"];
     draftSaves.push({ target: id, revision: body.revision, answers: body.answers });
 
     if (nextSaveConflicts) {
@@ -447,8 +410,56 @@ export const handlers = [
     });
   }),
 
+  http.post(`${API}/v1/me/submissions`, async ({ request }) => {
+    const body = (await request.json()) as Schemas["SubmitBody"];
+    submissionCalls.push(body);
+
+    if (nextSubmission === "incomplete") {
+      return HttpResponse.json(
+        {
+          name: "ValidationFailedError",
+          message: "Some answers are missing.",
+          problems: [
+            {
+              applicationId: "app-labrador",
+              committeeName: "Labrador",
+              missing: ["why"],
+              invalid: [],
+            },
+          ],
+        },
+        { status: 422 },
+      );
+    }
+    if (nextSubmission === "deadline") {
+      return HttpResponse.json(
+        {
+          name: "ConflictError",
+          message: "The deadline for this recruitment cycle has passed.",
+        },
+        { status: 409 },
+      );
+    }
+
+    applications = applications.map((row) =>
+      body.applicationIds.includes(row.applicationId)
+        ? { ...row, status: "Submitted" as const, submittedAt: "2027-01-22T18:00:00.000Z" }
+        : row,
+    );
+    commonResponse.locked = true;
+    return HttpResponse.json({
+      submitted: body.applicationIds.map((applicationId) => ({
+        applicationId,
+        committeeName:
+          applications.find((row) => row.applicationId === applicationId)?.committeeName ??
+          "Committee",
+        submittedAt: "2027-01-22T18:00:00.000Z",
+      })),
+    });
+  }),
+
   http.patch(`${API}/v1/me/applications/preferences`, async ({ request }) => {
-    const body = (await request.json()) as { applicationIds: string[] };
+    const body = (await request.json()) as Schemas["PreferencesBody"];
     preferenceCalls.push(body.applicationIds);
     return new HttpResponse(null, { status: 200 });
   }),
