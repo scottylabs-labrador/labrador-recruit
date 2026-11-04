@@ -53,13 +53,19 @@ export async function resetDb(): Promise<void> {
  * | code  | meaning |
  * | ----- | ------- |
  * | 23505 | unique violation |
- * | 23503 | foreign key violation |
+ * | 23503 | foreign key violation (the referencing side) |
+ * | 23001 | restrict violation (`ON DELETE RESTRICT` refusing a delete) |
  * | 23514 | check violation |
  * | 23502 | not-null violation |
+ *
+ * Note that 23503 and 23001 are not interchangeable. Inserting a child whose
+ * parent is missing is 23503; deleting a parent a child still references under
+ * `ON DELETE RESTRICT` is 23001. Expecting the wrong one passes for the wrong
+ * reason or fails for no reason.
  */
 export async function expectRejection(
   write: () => Promise<unknown>,
-  sqlState: "23505" | "23503" | "23514" | "23502",
+  sqlState: "23505" | "23503" | "23001" | "23514" | "23502",
 ): Promise<void> {
   try {
     await write();

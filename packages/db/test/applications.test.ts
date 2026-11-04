@@ -172,6 +172,42 @@ describe("application", () => {
     expect(rows).toHaveLength(2);
   });
 
+  it("scopes the idempotency key to the applicant", async () => {
+    const [t2] = await db
+      .insert(team)
+      .values({ slug: "design", name: "Design", createdAt: now, updatedAt: now })
+      .returning({ id: team.id });
+    const [other] = await db
+      .insert(recruitmentOpening)
+      .values({ cycleId, teamId: t2!.id, createdAt: now, updatedAt: now })
+      .returning({ id: recruitmentOpening.id });
+    await db.insert(user).values({
+      id: "bmorales",
+      name: "Blair",
+      email: "bmorales@andrew.cmu.edu",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const [otherProfile] = await db
+      .insert(candidateProfile)
+      .values({ userId: "bmorales", cycleId, createdAt: now, updatedAt: now })
+      .returning({ id: candidateProfile.id });
+    await insertApplication({ idempotencyKey: "key-a" });
+
+    // A key is client-supplied. Globally unique, one applicant could burn
+    // another applicant's key and make their submission look like a replay.
+    await db.insert(application).values({
+      candidateProfileId: otherProfile!.id,
+      openingId: other!.id,
+      idempotencyKey: "key-a",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const rows = await db.select().from(application);
+    expect(rows).toHaveLength(2);
+  });
+
   it("starts as a draft", async () => {
     await insertApplication();
 

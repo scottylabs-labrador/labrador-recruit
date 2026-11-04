@@ -354,7 +354,7 @@ CREATE TABLE "rubric_criterion" (
 );
 --> statement-breakpoint
 ALTER TABLE "answer" ADD CONSTRAINT "answer_response_version_fk" FOREIGN KEY ("form_response_id","form_version_id") REFERENCES "public"."form_response"("id","form_version_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "answer" ADD CONSTRAINT "answer_version_question_fk" FOREIGN KEY ("form_version_id","question_id") REFERENCES "public"."question"("form_version_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "answer" ADD CONSTRAINT "answer_version_question_fk" FOREIGN KEY ("form_version_id","question_id") REFERENCES "public"."question"("form_version_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "application" ADD CONSTRAINT "application_candidate_profile_id_candidate_profile_id_fk" FOREIGN KEY ("candidate_profile_id") REFERENCES "public"."candidate_profile"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "application" ADD CONSTRAINT "application_opening_id_recruitment_opening_id_fk" FOREIGN KEY ("opening_id") REFERENCES "public"."recruitment_opening"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "candidate_profile" ADD CONSTRAINT "candidate_profile_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -383,10 +383,8 @@ ALTER TABLE "permission_grant" ADD CONSTRAINT "permission_grant_cycle_id_recruit
 ALTER TABLE "permission_grant" ADD CONSTRAINT "permission_grant_granted_by_user_id_fk" FOREIGN KEY ("granted_by") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "team" ADD CONSTRAINT "team_parent_team_id_team_id_fk" FOREIGN KEY ("parent_team_id") REFERENCES "public"."team"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "application_status_event" ADD CONSTRAINT "application_status_event_application_id_application_id_fk" FOREIGN KEY ("application_id") REFERENCES "public"."application"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "application_status_event" ADD CONSTRAINT "application_status_event_changed_by_user_id_fk" FOREIGN KEY ("changed_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "audit_event" ADD CONSTRAINT "audit_event_actor_user_id_user_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "audit_event" ADD CONSTRAINT "audit_event_cycle_id_recruitment_cycle_id_fk" FOREIGN KEY ("cycle_id") REFERENCES "public"."recruitment_cycle"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "audit_event" ADD CONSTRAINT "audit_event_team_id_team_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."team"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "application_status_event" ADD CONSTRAINT "application_status_event_changed_by_user_id_fk" FOREIGN KEY ("changed_by") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "audit_event" ADD CONSTRAINT "audit_event_actor_user_id_user_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "file" ADD CONSTRAINT "file_owner_user_id_user_id_fk" FOREIGN KEY ("owner_user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "file" ADD CONSTRAINT "file_application_id_application_id_fk" FOREIGN KEY ("application_id") REFERENCES "public"."application"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "review" ADD CONSTRAINT "review_assignment_id_review_assignment_id_fk" FOREIGN KEY ("assignment_id") REFERENCES "public"."review_assignment"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -395,14 +393,14 @@ ALTER TABLE "review_assignment" ADD CONSTRAINT "review_assignment_application_id
 ALTER TABLE "review_assignment" ADD CONSTRAINT "review_assignment_reviewer_id_user_id_fk" FOREIGN KEY ("reviewer_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "review_assignment" ADD CONSTRAINT "review_assignment_assigned_by_user_id_fk" FOREIGN KEY ("assigned_by") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "review_score" ADD CONSTRAINT "review_score_review_rubric_fk" FOREIGN KEY ("review_id","rubric_id") REFERENCES "public"."review"("id","rubric_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "review_score" ADD CONSTRAINT "review_score_rubric_criterion_fk" FOREIGN KEY ("rubric_id","criterion_id") REFERENCES "public"."rubric_criterion"("rubric_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "review_score" ADD CONSTRAINT "review_score_rubric_criterion_fk" FOREIGN KEY ("rubric_id","criterion_id") REFERENCES "public"."rubric_criterion"("rubric_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "rubric" ADD CONSTRAINT "rubric_opening_id_recruitment_opening_id_fk" FOREIGN KEY ("opening_id") REFERENCES "public"."recruitment_opening"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "rubric" ADD CONSTRAINT "rubric_created_by_user_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "rubric_criterion" ADD CONSTRAINT "rubric_criterion_rubric_id_rubric_id_fk" FOREIGN KEY ("rubric_id") REFERENCES "public"."rubric"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "answer_response_question_key" ON "answer" USING btree ("form_response_id","question_id");--> statement-breakpoint
 CREATE INDEX "answer_formResponseId_idx" ON "answer" USING btree ("form_response_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "application_profile_opening_key" ON "application" USING btree ("candidate_profile_id","opening_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "application_idempotency_key" ON "application" USING btree ("idempotency_key") WHERE "application"."idempotency_key" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "application_profile_idempotency_key" ON "application" USING btree ("candidate_profile_id","idempotency_key") WHERE "application"."idempotency_key" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "application_candidateProfileId_idx" ON "application" USING btree ("candidate_profile_id");--> statement-breakpoint
 CREATE INDEX "application_openingId_idx" ON "application" USING btree ("opening_id");--> statement-breakpoint
 CREATE INDEX "application_status_idx" ON "application" USING btree ("status");--> statement-breakpoint

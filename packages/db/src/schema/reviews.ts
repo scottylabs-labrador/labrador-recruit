@@ -202,6 +202,13 @@ export const review = pgTable(
  * is the column that lets a composite foreign key guarantee the criterion
  * belongs to the rubric this review was scored against, rather than to some
  * other version of it.
+ *
+ * Not guaranteed here, and worth knowing before #26: that a review's rubric
+ * belongs to the same opening as its application. `review -> assignment ->
+ * application -> opening` and `review -> rubric -> opening` are separate
+ * chains. The review service has to check they agree, with a test for it.
+ * Tying them in the schema would mean carrying `opening_id` on both
+ * `review_assignment` and `review`.
  */
 export const reviewScore = pgTable(
   "review_score",
@@ -219,11 +226,19 @@ export const reviewScore = pgTable(
       foreignColumns: [review.id, review.rubricId],
     }).onDelete("cascade"),
 
+    /*
+     * `restrict`, not `cascade`.
+     *
+     * A score entered by a named human reviewer is the only input to every
+     * aggregate this platform reports, and it cannot be recomputed. Cascading
+     * would let a criterion deletion destroy it silently; refusing turns that
+     * into an error somebody has to look at.
+     */
     foreignKey({
       name: "review_score_rubric_criterion_fk",
       columns: [table.rubricId, table.criterionId],
       foreignColumns: [rubricCriterion.rubricId, rubricCriterion.id],
-    }).onDelete("cascade"),
+    }).onDelete("restrict"),
 
     uniqueIndex("review_score_review_criterion_key").on(table.reviewId, table.criterionId),
     index("review_score_reviewId_idx").on(table.reviewId),

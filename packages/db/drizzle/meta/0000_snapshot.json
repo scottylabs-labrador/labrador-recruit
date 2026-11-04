@@ -1,5 +1,5 @@
 {
-  "id": "07c4afa2-286c-46af-a115-3f1ee9c7e6cb",
+  "id": "7da86241-f412-4310-908d-2807bb3681a6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -112,7 +112,7 @@
             "form_version_id",
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -212,9 +212,15 @@
           "method": "btree",
           "with": {}
         },
-        "application_idempotency_key": {
-          "name": "application_idempotency_key",
+        "application_profile_idempotency_key": {
+          "name": "application_profile_idempotency_key",
           "columns": [
+            {
+              "expression": "candidate_profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "idempotency_key",
               "isExpression": false,
@@ -2555,7 +2561,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -2698,33 +2704,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "audit_event_cycle_id_recruitment_cycle_id_fk": {
-          "name": "audit_event_cycle_id_recruitment_cycle_id_fk",
-          "tableFrom": "audit_event",
-          "tableTo": "recruitment_cycle",
-          "columnsFrom": [
-            "cycle_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "audit_event_team_id_team_id_fk": {
-          "name": "audit_event_team_id_team_id_fk",
-          "tableFrom": "audit_event",
-          "tableTo": "team",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -3401,7 +3381,7 @@
             "rubric_id",
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },

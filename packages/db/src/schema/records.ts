@@ -13,9 +13,7 @@ import {
 
 import { application } from "./applications.ts";
 import { user } from "./auth.ts";
-import { recruitmentCycle } from "./cycles.ts";
 import { applicationStatus, fileStatus, notificationStatus, statusEvent } from "./enums.ts";
-import { team } from "./org.ts";
 
 /**
  * Every status change an application ever underwent.
@@ -40,12 +38,18 @@ export const applicationStatusEvent = pgTable(
     event: statusEvent("event").notNull(),
 
     /**
-     * Null for an applicant-initiated change.
+     * Null for an applicant-initiated change, and only for that.
      *
      * A withdrawal is the applicant's own act, and attributing it to whichever
      * staff member happened to be nearby would be a false record.
+     *
+     * `restrict` rather than `set null` for the same reason as
+     * `audit_event.actor_user_id`, and here it is worse: because null already
+     * *means* applicant-initiated, nulling a deleted staff member would convert
+     * their decision into the applicant's own. That is a false record, not a
+     * missing one.
      */
-    changedBy: text("changed_by").references(() => user.id, { onDelete: "set null" }),
+    changedBy: text("changed_by").references(() => user.id, { onDelete: "restrict" }),
 
     /** Internal. Never returned by a student endpoint. */
     note: text("note"),
@@ -166,11 +170,27 @@ export const auditEvent = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
 
-    /** Null for a system action. */
-    actorUserId: text("actor_user_id").references(() => user.id, { onDelete: "set null" }),
+    /**
+     * Null for a genuine system action, and only for that.
+     *
+     * `restrict` rather than `set null`: nulling it on user deletion would
+     * silently reclassify somebody's action as the system's, which is the exact
+     * repudiation an audit log exists to prevent. A user who has acted cannot
+     * be hard-deleted, which is the correct trade for a security log.
+     */
+    actorUserId: text("actor_user_id").references(() => user.id, { onDelete: "restrict" }),
 
-    cycleId: uuid("cycle_id").references(() => recruitmentCycle.id, { onDelete: "cascade" }),
-    teamId: uuid("team_id").references(() => team.id, { onDelete: "cascade" }),
+    /*
+     * Scope, as plain ids with no foreign key.
+     *
+     * Deliberate. An audit trail that disappears with its subject is no audit
+     * trail, and the moment somebody deletes a team or a cycle is exactly when
+     * its history matters most. `action`, `subjectType` and `subjectId` already
+     * record what was acted on, so a dangling scope id is still readable
+     * evidence.
+     */
+    cycleId: uuid("cycle_id"),
+    teamId: uuid("team_id"),
 
     /** Dotted, e.g. `grant.created`, `form_version.published`. */
     action: text("action").notNull(),

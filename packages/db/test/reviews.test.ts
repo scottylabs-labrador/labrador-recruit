@@ -7,6 +7,7 @@
  * same composite-foreign-key technique as `answer`, so a score cannot reference
  * a criterion from a different rubric.
  */
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -311,6 +312,76 @@ describe("application_status_event", () => {
 
     const rows = await db.select().from(applicationStatusEvent);
     expect(rows.map((r) => r.event).sort()).toEqual(["accepted", "confirmed", "offered"]);
+  });
+});
+
+describe("deletion safety", () => {
+  it("refuses to delete a criterion that a submitted score references", async () => {
+    const rubricId = await insertRubric();
+    const criterionId = await insertCriterion(rubricId);
+    const assignmentId = await insertAssignment("reviewer-a");
+    const [reviewRow] = await db
+      .insert(review)
+      .values({ assignmentId, rubricId, createdAt: now, updatedAt: now })
+      .returning({ id: review.id });
+    await db
+      .insert(reviewScore)
+      .values({ reviewId: reviewRow!.id, rubricId, criterionId, score: 4 });
+
+    // Cascading here would silently destroy a human reviewer's score, which is
+    // the one thing in this system that cannot be recomputed. A locked rubric
+    // should be undeletable, and the database is the right place to insist.
+    await expectRejection(
+      () => db.delete(rubricCriterion).where(eq(rubricCriterion.id, criterionId)),
+      "23001",
+    );
+  });
+
+  it("keeps an audit event when the team it refers to is deleted", async () => {
+    const teams = await db.select({ id: team.id }).from(team);
+    await db.insert(auditEvent).values({
+      actorUserId: "rjones",
+      teamId: teams[0]!.id,
+      action: "grant.created",
+      subjectType: "permission_grant",
+      subjectId: "00000000-0000-0000-0000-000000000000",
+      createdAt: now,
+    });
+
+    // An audit trail that disappears with its subject is no audit trail. The
+    // moment somebody deletes a team is exactly when its history matters.
+    await db.delete(team).where(eq(team.id, teams[0]!.id));
+
+    const rows = await db.select().from(auditEvent);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("refuses to delete a user who recorded an audit event", async () => {
+    await db.insert(auditEvent).values({
+      actorUserId: "rjones",
+      action: "form_version.published",
+      subjectType: "form_version",
+      subjectId: "00000000-0000-0000-0000-000000000000",
+      createdAt: now,
+    });
+
+    // Nulling the actor would turn their action into a system action, and for
+    // `application_status_event` it would turn a staff decision into an
+    // applicant one. Attribution has to survive.
+    await expectRejection(() => db.delete(user).where(eq(user.id, "rjones")), "23001");
+  });
+
+  it("refuses to delete a user who changed an application status", async () => {
+    await db.insert(applicationStatusEvent).values({
+      applicationId,
+      oldStatus: "submitted",
+      newStatus: "shortlisted",
+      event: "shortlisted",
+      changedBy: "rjones",
+      createdAt: now,
+    });
+
+    await expectRejection(() => db.delete(user).where(eq(user.id, "rjones")), "23001");
   });
 });
 

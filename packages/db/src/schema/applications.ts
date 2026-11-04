@@ -106,11 +106,18 @@ export const application = pgTable(
   (table) => [
     uniqueIndex("application_profile_opening_key").on(table.candidateProfileId, table.openingId),
 
-    // Partial, because most applications never carry a key and NULLs would
-    // otherwise collide under a plain unique index on some engines and not
-    // others — being explicit costs nothing and removes the question.
-    uniqueIndex("application_idempotency_key")
-      .on(table.idempotencyKey)
+    /*
+     * Scoped to the applicant, not global.
+     *
+     * The key is client-supplied. Globally unique, one applicant could burn
+     * another's key — making a real submission look like a replay of somebody
+     * else's — and could probe for collisions to learn a key is in use. Replay
+     * lookups must filter by the authenticated caller's profile too.
+     *
+     * Partial, because most applications carry no key at all.
+     */
+    uniqueIndex("application_profile_idempotency_key")
+      .on(table.candidateProfileId, table.idempotencyKey)
       .where(sql`${table.idempotencyKey} IS NOT NULL`),
 
     check(
@@ -216,10 +223,19 @@ export const formResponse = pgTable(
  * 2. `(form_version_id, question_id)` must match a real question, so the
  *    question genuinely belongs to that version.
  *
- * Together those make it **impossible** for an answer to reference a question
- * from a different form — including a different committee's form. That is a
- * cross-tenant leak the data layer refuses outright, rather than one a service
- * has to remember to prevent.
+ * Together those make it impossible for an answer to reference a question from
+ * **a different version than its own response's**. The database refuses it
+ * outright rather than a service having to remember to.
+ *
+ * What this does **not** yet guarantee, and a reader should not assume it does:
+ * that a committee response's form belongs to the same opening as its
+ * application. The chains `form_response -> application -> opening` and
+ * `form_response -> form_version -> form -> opening` are not tied together
+ * compositely, so a service bug could attach one committee's form response to
+ * another committee's application. `applicationService` checks it, with a test
+ * (#19); enforcing it in the schema would mean carrying `opening_id` onto
+ * `form_response`, which a common response does not have. Recorded here rather
+ * than left as a claim the schema does not back.
  */
 export const answer = pgTable(
   "answer",
@@ -252,11 +268,21 @@ export const answer = pgTable(
       foreignColumns: [formResponse.id, formResponse.formVersionId],
     }).onDelete("cascade"),
 
+    /*
+     * `restrict`, not `cascade`.
+     *
+     * Cascading would mean a deleted question silently takes an applicant's
+     * answer with it — and an answer is the one thing here that cannot be
+     * recomputed. A published version is immutable, so nothing should be
+     * deleting its questions; making the database refuse turns a service bug
+     * into an error instead of quiet data loss. Draft versions carry no
+     * answers, so editing a draft is unaffected.
+     */
     foreignKey({
       name: "answer_version_question_fk",
       columns: [table.formVersionId, table.questionId],
       foreignColumns: [question.formVersionId, question.id],
-    }).onDelete("cascade"),
+    }).onDelete("restrict"),
 
     uniqueIndex("answer_response_question_key").on(table.formResponseId, table.questionId),
     index("answer_formResponseId_idx").on(table.formResponseId),
