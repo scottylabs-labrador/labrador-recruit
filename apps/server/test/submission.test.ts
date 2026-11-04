@@ -20,12 +20,13 @@ import {
   question,
   recruitmentCycle,
   recruitmentOpening,
+  submission,
   team,
   user,
 } from "@recruit/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import request from "supertest";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../src/app.ts";
 import { seedApplicant } from "./fixtures.ts";
@@ -184,6 +185,128 @@ async function readyApplication(
 
   return applicationId;
 }
+
+describe("atomicity under an injected failure at every step", () => {
+  /*
+   * A real failure, raised by the database, at each write the transaction
+   * makes.
+   *
+   * A trigger rather than a mock. Mocking the transaction handle would test
+   * the mock: what matters is that a genuine error mid-transaction rolls the
+   * whole thing back, and only Postgres can answer that. Each table below is
+   * one step of `submissionService`'s transaction, in the order it runs, so
+   * installing the trigger on a different table moves the failure to a
+   * different step.
+   *
+   * What every case asserts is identical and is the entire point: **no
+   * partial finalization.** The application is still a draft, the shared
+   * answers are not locked, no `submission` row exists to make a retry look
+   * like a replay, and no confirmation email is queued for work that was not
+   * saved.
+   */
+  const STEPS = [
+    { table: "submission", on: "INSERT", step: "recording the submission itself" },
+    { table: "form_response", on: "UPDATE", step: "finalizing a response" },
+    { table: "application", on: "UPDATE", step: "marking the application submitted" },
+    { table: "application_status_event", on: "INSERT", step: "writing the audit event" },
+    { table: "candidate_profile", on: "UPDATE", step: "locking the shared answers" },
+    { table: "notification_outbox", on: "INSERT", step: "queueing the confirmation" },
+  ] as const;
+
+  async function failOn(table: string, on: string) {
+    await testDb.execute(
+      sql.raw(`
+      CREATE OR REPLACE FUNCTION inject_failure() RETURNS trigger AS $$
+      BEGIN
+        RAISE EXCEPTION 'injected failure';
+      END;
+      $$ LANGUAGE plpgsql;
+    `),
+    );
+    await testDb.execute(
+      sql.raw(`
+        CREATE TRIGGER inject_failure_trigger
+        BEFORE ${on} ON "${table}"
+        FOR EACH ROW EXECUTE FUNCTION inject_failure();
+      `),
+    );
+  }
+
+  /*
+   * Dropped after every case, from every table.
+   *
+   * `resetDb` truncates rows; a trigger is a schema object and survives it.
+   * Leaving one installed broke every later test's draft save with a failure
+   * that looked like the product was broken rather than the harness.
+   */
+  afterEach(async () => {
+    for (const { table } of STEPS) {
+      await testDb.execute(sql.raw(`DROP TRIGGER IF EXISTS inject_failure_trigger ON "${table}";`));
+    }
+  });
+
+  for (const { table, on, step } of STEPS) {
+    it(`finalizes nothing when ${step} fails`, async () => {
+      const applicant = await seedApplicant("aquinn");
+      const applicationId = await readyApplication(applicant.headers);
+      await failOn(table, on);
+
+      const res = await request(app)
+        .post("/v1/me/submissions")
+        .set(applicant.headers)
+        .send({ idempotencyKey: "key-a", applicationIds: [applicationId] });
+
+      // Not a 2xx, and - just as important - not a confirmation body.
+      expect(res.status).toBeGreaterThanOrEqual(400);
+
+      const [row] = await testDb.select().from(application);
+      expect(row!.status).toBe("draft");
+      expect(row!.submittedAt).toBeNull();
+      expect(row!.submissionId).toBeNull();
+
+      const [person] = await testDb.select().from(candidateProfile);
+      // Locking on a failed attempt would leave somebody unable to fix the
+      // very answers the failure was about.
+      expect(person!.commonLockedAt).toBeNull();
+
+      // No `submission` row, so a retry is a fresh attempt rather than being
+      // recognised as a replay of one that never happened.
+      expect(await testDb.select().from(submission)).toHaveLength(0);
+      expect(await testDb.select().from(notificationOutbox)).toHaveLength(0);
+    });
+  }
+
+  it("still submits once the injected failure is removed", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await readyApplication(applicant.headers);
+    await failOn("submission", "INSERT");
+
+    const refused = await request(app)
+      .post("/v1/me/submissions")
+      .set(applicant.headers)
+      .send({ idempotencyKey: "key-a", applicationIds: [applicationId] });
+    expect(refused.status).toBeGreaterThanOrEqual(400);
+
+    await testDb.execute(sql.raw(`DROP TRIGGER inject_failure_trigger ON "submission";`));
+
+    /*
+     * The same idempotency key, and it must work.
+     *
+     * The rolled-back attempt must leave nothing behind that makes the honest
+     * retry look like a duplicate - which is exactly what a `submission` row
+     * surviving the rollback would do, and it would be indistinguishable from
+     * the platform refusing somebody's application for no reason they can see.
+     */
+    const res = await request(app)
+      .post("/v1/me/submissions")
+      .set(applicant.headers)
+      .send({ idempotencyKey: "key-a", applicationIds: [applicationId] });
+
+    expect(res.status).toBe(200);
+    const [row] = await testDb.select().from(application);
+    expect(row!.status).toBe("submitted");
+  });
+});
 
 describe("audit integrity", () => {
   it("records the status the application actually moved from", async () => {
