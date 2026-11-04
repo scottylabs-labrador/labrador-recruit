@@ -7,6 +7,7 @@
  * caller cannot reach somebody else's work.
  */
 import {
+  answer,
   application,
   applicationStatusEvent,
   candidateProfile,
@@ -923,6 +924,66 @@ describe("POST /v1/me/applications/:id/withdraw", () => {
     expect(res.status).toBe(200);
     const events = await testDb.select().from(applicationStatusEvent);
     expect(events).toHaveLength(1);
+  });
+});
+
+describe("two draft writes racing from the same revision", () => {
+  it("lets one win and refuses the other with the current revision", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const created = await request(app)
+      .post("/v1/me/applications")
+      .set(applicant.headers)
+      .send({ openingId: labradorOpening });
+    const applicationId = created.body.applicationId as string;
+
+    // Read the revision rather than assume it. Hardcoding 1 made both writes
+    // stale and both 409 - a test that would have "passed" the moment somebody
+    // weakened the guard to accept anything.
+    const detail = await request(app)
+      .get(`/v1/me/applications/${applicationId}`)
+      .set(applicant.headers);
+    const revision = detail.body.revision as number;
+
+    /*
+     * A laptop and a phone, both autosaving from the same revision.
+     *
+     * Issued together rather than in sequence, so this exercises the revision
+     * guard inside the transaction rather than two writes that happen to be
+     * ordered. Exactly one must win: taking the last write would lose whatever
+     * the slower tab did not have, which is somebody's paragraph.
+     *
+     * PGlite runs in-process and serializes, so these do not overlap in the
+     * database the way two Postgres connections would. What is being asserted
+     * is the *outcome contract* - one 200, one 409 carrying the revision to
+     * retry from - not the interleaving.
+     */
+    const [first, second] = await Promise.all([
+      request(app)
+        .patch(`/v1/me/applications/${applicationId}/draft`)
+        .set(applicant.headers)
+        .send({ revision, answers: [{ questionKey: "major", value: "From the laptop" }] }),
+      request(app)
+        .patch(`/v1/me/applications/${applicationId}/draft`)
+        .set(applicant.headers)
+        .send({ revision, answers: [{ questionKey: "major", value: "From the phone" }] }),
+    ]);
+
+    // An explicit comparator: the default sort is lexicographic, so [200, 409]
+    // and [409, 200] would both be "sorted" only by accident of the digits.
+    const statuses = [first!.status, second!.status].sort((a, b) => a - b);
+    expect(statuses).toEqual([200, 409]);
+
+    const refused = first!.status === 409 ? first! : second!;
+    // `currentRevision`, which is what `ConflictError`'s details actually
+    // carry, so the client can reload and retry rather than guess.
+    expect(refused.body.currentRevision).toBe(revision + 1);
+
+    // And the winner's answer is what is stored - not a merge of both, which
+    // would be a sentence neither person wrote.
+    const stored = await testDb.select().from(answer);
+    const values = stored.map((row) => row.valueJsonb);
+    expect(values).toHaveLength(1);
+    expect(["From the laptop", "From the phone"]).toContain(values[0]);
   });
 });
 

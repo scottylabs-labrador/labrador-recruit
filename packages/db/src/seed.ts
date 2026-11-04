@@ -45,6 +45,30 @@ const CREATED_AT = new Date("2026-11-01T12:00:00Z");
 const OPENS_AT = new Date("2027-01-15T12:00:00Z");
 const CLOSES_AT = new Date("2027-02-15T12:00:00Z");
 
+/**
+ * The staff personas, and what each one is for.
+ *
+ * Not a cast list. Each exists because some rule or screen cannot be exercised
+ * without it, so **sign in as the one whose situation matches what you are
+ * building** rather than as whoever is first.
+ *
+ * - `dchen` — organization admin, no team. The only one who can release
+ *   decisions, and the one to use when checking that a global grant reaches
+ *   every committee.
+ * - `mokafor` — director of Labrador. The ordinary staff case: full authority
+ *   over one committee and none anywhere else.
+ * - `jtanaka` — director of Design. Exists so "a director cannot see another
+ *   committee's applicants" has two sides. Every cross-committee refusal
+ *   should be checked as `mokafor` against `jtanaka`'s applicants.
+ * - `pvarma` — question editor on Labrador. Can change that committee's form
+ *   and **cannot read an applicant**, which is the narrowest grant in the
+ *   model and the one most likely to be widened by accident.
+ * - `lhaddad`, `osorensen` — reviewers on Labrador. Two of them, because
+ *   independent blinded review needs a reviewer who has submitted and one who
+ *   has not; see the review seeding below for which is which.
+ * - `rmbeki` — reviewer on Design. A reviewer with an assignment on a
+ *   different committee, for the assignment gate.
+ */
 const STAFF = [
   { id: "dchen", name: "Dana Chen", role: "org_admin" as const, team: null },
   { id: "mokafor", name: "Miriam Okafor", role: "committee_director" as const, team: "labrador" },
@@ -55,6 +79,27 @@ const STAFF = [
   { id: "rmbeki", name: "Ruth Mbeki", role: "reviewer" as const, team: "design" },
 ];
 
+/**
+ * The applicant personas.
+ *
+ * Twelve, so the statuses below spread across them without two screens
+ * fighting over one row. They are otherwise interchangeable by design — an
+ * applicant's *situation* comes from `APPLICATION_STATUSES`, not from who they
+ * are, which is the whole point of a platform that does not treat applicants
+ * differently.
+ *
+ * The ones worth knowing by name:
+ *
+ * - `aquinn` — first in the list, so the first status in
+ *   `APPLICATION_STATUSES` is theirs: a **draft**. Use them for anything about
+ *   an unfinished application.
+ * - `bmorales` — the second, and therefore **submitted**. The applicant to use
+ *   when you need somebody whose answers are locked.
+ * - `gadeyemi` — lands on **withdrawn**, which is the state most code forgets.
+ *
+ * Every name and every essay here is invented. **Never put real applicant data
+ * in this file** — `docs/product-rules.md` section 6.
+ */
 const APPLICANTS = [
   { id: "aquinn", name: "Avery Quinn", major: "Computer Science", year: 2029 },
   { id: "bmorales", name: "Blair Morales", major: "Design", year: 2028 },

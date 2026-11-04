@@ -107,6 +107,31 @@ describe("seedDevelopmentData", () => {
     }
   });
 
+  it("puts the named personas in the states the seed file documents", async () => {
+    await seedDevelopmentData(db);
+
+    const rows = await db
+      .select({ userId: candidateProfile.userId, status: application.status })
+      .from(application)
+      .innerJoin(candidateProfile, eq(application.candidateProfileId, candidateProfile.id));
+
+    function statusesFor(andrewId: string) {
+      return rows.filter((row) => row.userId === andrewId).map((row) => row.status);
+    }
+
+    /*
+     * The seed file tells a developer to sign in as `aquinn` for a draft,
+     * `bmorales` for something submitted, and `gadeyemi` for a withdrawal.
+     * Those sentences come from `index % APPLICATION_STATUSES.length`, which
+     * nothing stopped from shifting the moment somebody inserts a name into
+     * either list - and the documentation would then send people to the wrong
+     * applicant while still reading as true.
+     */
+    expect(statusesFor("aquinn")).toContain("draft");
+    expect(statusesFor("bmorales")).toContain("submitted");
+    expect(statusesFor("gadeyemi")).toContain("withdrawn");
+  });
+
   it("produces staff grants covering every role", async () => {
     await seedDevelopmentData(db);
 

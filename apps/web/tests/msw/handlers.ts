@@ -348,7 +348,11 @@ export const handlers = [
         {
           name: "ConflictError",
           message: "Your answers changed somewhere else. Reload to see the newer version.",
-          revision: 9,
+          // `currentRevision`, which is what `saveAnswers` puts in
+          // `ConflictError`'s details. The fourth fixture in this file caught
+          // inventing a field name - harmless today only because the page
+          // shows the server's message and does not read this one.
+          currentRevision: 9,
         },
         { status: 409 },
       );
@@ -389,7 +393,7 @@ export const handlers = [
         {
           name: "ConflictError",
           message: "Your answers changed somewhere else. Reload to see the newer version.",
-          revision: 9,
+          currentRevision: 9,
         },
         { status: 409 },
       );
