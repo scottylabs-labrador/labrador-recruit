@@ -7,7 +7,13 @@ export * from "./org.ts";
 export * from "./records.ts";
 export * from "./reviews.ts";
 
-import type { answer, application, candidateProfile, formResponse } from "./applications.ts";
+import type {
+  answer,
+  application,
+  candidateProfile,
+  formResponse,
+  submission,
+} from "./applications.ts";
 import type { session, user } from "./auth.ts";
 import type { recruitmentCycle, recruitmentOpening } from "./cycles.ts";
 import type { form, formVersion, question } from "./forms.ts";
@@ -31,6 +37,7 @@ export type CandidateProfile = typeof candidateProfile.$inferSelect;
 export type Application = typeof application.$inferSelect;
 export type FormResponse = typeof formResponse.$inferSelect;
 export type Answer = typeof answer.$inferSelect;
+export type Submission = typeof submission.$inferSelect;
 
 export type RecruitmentCycle = typeof recruitmentCycle.$inferSelect;
 export type RecruitmentOpening = typeof recruitmentOpening.$inferSelect;

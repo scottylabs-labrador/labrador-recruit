@@ -1,5 +1,5 @@
 {
-  "id": "e6db558a-3a71-4ab0-ae6b-e27e6e7969e8",
+  "id": "09e057b8-4d48-4526-8e40-6f1b01d02152",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -171,9 +171,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "idempotency_key": {
-          "name": "idempotency_key",
-          "type": "text",
+        "submission_id": {
+          "name": "submission_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -212,24 +212,17 @@
           "method": "btree",
           "with": {}
         },
-        "application_profile_idempotency_key": {
-          "name": "application_profile_idempotency_key",
+        "application_submissionId_idx": {
+          "name": "application_submissionId_idx",
           "columns": [
             {
-              "expression": "candidate_profile_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "idempotency_key",
+              "expression": "submission_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
-          "isUnique": true,
-          "where": "\"application\".\"idempotency_key\" IS NOT NULL",
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -305,6 +298,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "application_submission_id_submission_id_fk": {
+          "name": "application_submission_id_submission_id_fk",
+          "tableFrom": "application",
+          "tableTo": "submission",
+          "columnsFrom": [
+            "submission_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -620,6 +626,95 @@
           "value": "(\"form_response\".\"status\" = 'submitted' AND \"form_response\".\"submitted_at\" IS NOT NULL)\n          OR (\"form_response\".\"status\" <> 'submitted' AND \"form_response\".\"submitted_at\" IS NULL)"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.submission": {
+      "name": "submission",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "candidate_profile_id": {
+          "name": "candidate_profile_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "submitted_at": {
+          "name": "submitted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "submission_profile_key_key": {
+          "name": "submission_profile_key_key",
+          "columns": [
+            {
+              "expression": "candidate_profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "submission_candidateProfileId_idx": {
+          "name": "submission_candidateProfileId_idx",
+          "columns": [
+            {
+              "expression": "candidate_profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "submission_candidate_profile_id_candidate_profile_id_fk": {
+          "name": "submission_candidate_profile_id_candidate_profile_id_fk",
+          "tableFrom": "submission",
+          "tableTo": "candidate_profile",
+          "columnsFrom": [
+            "candidate_profile_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.account": {

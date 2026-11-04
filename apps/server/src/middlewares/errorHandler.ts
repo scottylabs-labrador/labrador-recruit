@@ -61,6 +61,23 @@ export class ConflictError extends HttpError {
   }
 }
 
+/**
+ * The request was well formed but its content is not acceptable.
+ *
+ * Carries `problems` so a client can link each message to the field it belongs
+ * to. A single sentence on a form with forty questions is not a usable error —
+ * somebody will submit forty times to find them all.
+ */
+export class ValidationFailedError extends HttpError {
+  problems: unknown;
+
+  constructor(message: string, problems?: unknown) {
+    super(422, message);
+    this.name = "ValidationFailed";
+    this.problems = problems;
+  }
+}
+
 export class InternalServerError extends HttpError {
   constructor(message: string) {
     super(500, message);
@@ -96,6 +113,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
   }
 
   // The HTTP errors take priority over unknown errors
+  if (err instanceof ValidationFailedError) {
+    return res.status(err.status).json({
+      name: err.name,
+      message: err.message,
+      ...(err.problems === undefined ? {} : { problems: err.problems }),
+    });
+  }
+
   if (err instanceof ConflictError) {
     return res.status(err.status).json({ name: err.name, message: err.message, ...err.details });
   }

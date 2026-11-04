@@ -56,6 +56,43 @@ export const candidateProfile = pgTable(
 );
 
 /**
+ * One act of submitting, covering one or more applications.
+ *
+ * Its own row because that is what the act is: an applicant presses Submit once
+ * and several committees receive an application. The idempotency key lives here
+ * rather than on `application`, where a key shared across a batch would collide
+ * with itself on the second row — the endpoint shape and a per-application key
+ * are simply incompatible.
+ *
+ * Scoped to the applicant, not global. The key is client-supplied, so a global
+ * one would let somebody burn another applicant's key and make their real
+ * submission look like a replay.
+ */
+export const submission = pgTable(
+  "submission",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    candidateProfileId: uuid("candidate_profile_id")
+      .notNull()
+      .references(() => candidateProfile.id, { onDelete: "cascade" }),
+
+    /**
+     * Supplied by the client so a retry is recognisable as the same act.
+     *
+     * A double tap on a flaky campus connection must not submit twice or send
+     * two confirmation emails.
+     */
+    idempotencyKey: text("idempotency_key").notNull(),
+
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("submission_profile_key_key").on(table.candidateProfileId, table.idempotencyKey),
+    index("submission_candidateProfileId_idx").on(table.candidateProfileId),
+  ],
+);
+
+/**
  * One application to one opening.
  *
  * The unit of review, the unit of decision, and the unit of committee scoping.
@@ -90,13 +127,14 @@ export const application = pgTable(
     withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
 
     /**
-     * Guards duplicate submission.
+     * The act that submitted this, or null while it is a draft.
      *
-     * A constraint rather than a disabled button: a double-tap on a flaky campus
-     * connection must not create two submissions or send two confirmation
-     * emails.
+     * `restrict` on delete, because a submission row is the record of when an
+     * applicant pressed Submit and what it covered.
      */
-    idempotencyKey: text("idempotency_key"),
+    submissionId: uuid("submission_id").references((): never => submission.id as never, {
+      onDelete: "restrict",
+    }),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
@@ -106,19 +144,7 @@ export const application = pgTable(
   (table) => [
     uniqueIndex("application_profile_opening_key").on(table.candidateProfileId, table.openingId),
 
-    /*
-     * Scoped to the applicant, not global.
-     *
-     * The key is client-supplied. Globally unique, one applicant could burn
-     * another's key — making a real submission look like a replay of somebody
-     * else's — and could probe for collisions to learn a key is in use. Replay
-     * lookups must filter by the authenticated caller's profile too.
-     *
-     * Partial, because most applications carry no key at all.
-     */
-    uniqueIndex("application_profile_idempotency_key")
-      .on(table.candidateProfileId, table.idempotencyKey)
-      .where(sql`${table.idempotencyKey} IS NOT NULL`),
+    index("application_submissionId_idx").on(table.submissionId),
 
     check(
       "application_preference_rank_ck",
@@ -288,6 +314,14 @@ export const answer = pgTable(
     index("answer_formResponseId_idx").on(table.formResponseId),
   ],
 );
+
+export const submissionRelations = relations(submission, ({ one, many }) => ({
+  profile: one(candidateProfile, {
+    fields: [submission.candidateProfileId],
+    references: [candidateProfile.id],
+  }),
+  applications: many(application),
+}));
 
 export const candidateProfileRelations = relations(candidateProfile, ({ one, many }) => ({
   user: one(user, { fields: [candidateProfile.userId], references: [user.id] }),

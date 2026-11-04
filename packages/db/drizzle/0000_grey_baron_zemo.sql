@@ -32,7 +32,7 @@ CREATE TABLE "application" (
 	"preference_rank" integer,
 	"submitted_at" timestamp with time zone,
 	"withdrawn_at" timestamp with time zone,
-	"idempotency_key" text,
+	"submission_id" uuid,
 	"created_at" timestamp with time zone NOT NULL,
 	"updated_at" timestamp with time zone NOT NULL,
 	CONSTRAINT "application_preference_rank_ck" CHECK ("application"."preference_rank" IS NULL OR "application"."preference_rank" > 0)
@@ -62,6 +62,13 @@ CREATE TABLE "form_response" (
           OR ("form_response"."candidate_profile_id" IS NULL AND "form_response"."application_id" IS NOT NULL)),
 	CONSTRAINT "form_response_submitted_at_ck" CHECK (("form_response"."status" = 'submitted' AND "form_response"."submitted_at" IS NOT NULL)
           OR ("form_response"."status" <> 'submitted' AND "form_response"."submitted_at" IS NULL))
+);
+--> statement-breakpoint
+CREATE TABLE "submission" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"candidate_profile_id" uuid NOT NULL,
+	"idempotency_key" text NOT NULL,
+	"submitted_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "account" (
@@ -357,11 +364,13 @@ ALTER TABLE "answer" ADD CONSTRAINT "answer_response_version_fk" FOREIGN KEY ("f
 ALTER TABLE "answer" ADD CONSTRAINT "answer_version_question_fk" FOREIGN KEY ("form_version_id","question_id") REFERENCES "public"."question"("form_version_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "application" ADD CONSTRAINT "application_candidate_profile_id_candidate_profile_id_fk" FOREIGN KEY ("candidate_profile_id") REFERENCES "public"."candidate_profile"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "application" ADD CONSTRAINT "application_opening_id_recruitment_opening_id_fk" FOREIGN KEY ("opening_id") REFERENCES "public"."recruitment_opening"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "application" ADD CONSTRAINT "application_submission_id_submission_id_fk" FOREIGN KEY ("submission_id") REFERENCES "public"."submission"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "candidate_profile" ADD CONSTRAINT "candidate_profile_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "candidate_profile" ADD CONSTRAINT "candidate_profile_cycle_id_recruitment_cycle_id_fk" FOREIGN KEY ("cycle_id") REFERENCES "public"."recruitment_cycle"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "form_response" ADD CONSTRAINT "form_response_form_version_id_form_version_id_fk" FOREIGN KEY ("form_version_id") REFERENCES "public"."form_version"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "form_response" ADD CONSTRAINT "form_response_candidate_profile_id_candidate_profile_id_fk" FOREIGN KEY ("candidate_profile_id") REFERENCES "public"."candidate_profile"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "form_response" ADD CONSTRAINT "form_response_application_id_application_id_fk" FOREIGN KEY ("application_id") REFERENCES "public"."application"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "submission" ADD CONSTRAINT "submission_candidate_profile_id_candidate_profile_id_fk" FOREIGN KEY ("candidate_profile_id") REFERENCES "public"."candidate_profile"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "recruitment_cycle" ADD CONSTRAINT "recruitment_cycle_created_by_user_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
@@ -400,7 +409,7 @@ ALTER TABLE "rubric_criterion" ADD CONSTRAINT "rubric_criterion_rubric_id_rubric
 CREATE UNIQUE INDEX "answer_response_question_key" ON "answer" USING btree ("form_response_id","question_id");--> statement-breakpoint
 CREATE INDEX "answer_formResponseId_idx" ON "answer" USING btree ("form_response_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "application_profile_opening_key" ON "application" USING btree ("candidate_profile_id","opening_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "application_profile_idempotency_key" ON "application" USING btree ("candidate_profile_id","idempotency_key") WHERE "application"."idempotency_key" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "application_submissionId_idx" ON "application" USING btree ("submission_id");--> statement-breakpoint
 CREATE INDEX "application_candidateProfileId_idx" ON "application" USING btree ("candidate_profile_id");--> statement-breakpoint
 CREATE INDEX "application_openingId_idx" ON "application" USING btree ("opening_id");--> statement-breakpoint
 CREATE INDEX "application_status_idx" ON "application" USING btree ("status");--> statement-breakpoint
@@ -409,6 +418,8 @@ CREATE INDEX "candidate_profile_cycleId_idx" ON "candidate_profile" USING btree 
 CREATE UNIQUE INDEX "form_response_profile_version_key" ON "form_response" USING btree ("candidate_profile_id","form_version_id") WHERE "form_response"."candidate_profile_id" IS NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "form_response_application_version_key" ON "form_response" USING btree ("application_id","form_version_id") WHERE "form_response"."application_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "form_response_formVersionId_idx" ON "form_response" USING btree ("form_version_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "submission_profile_key_key" ON "submission" USING btree ("candidate_profile_id","idempotency_key");--> statement-breakpoint
+CREATE INDEX "submission_candidateProfileId_idx" ON "submission" USING btree ("candidate_profile_id");--> statement-breakpoint
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "session_userId_idx" ON "session" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "verification_identifier_idx" ON "verification" USING btree ("identifier");--> statement-breakpoint

@@ -16,6 +16,7 @@ import {
   formResponse,
   formVersion,
   question,
+  submission,
   recruitmentCycle,
   recruitmentOpening,
   team,
@@ -134,28 +135,7 @@ describe("application", () => {
     await expectRejection(() => insertApplication(), "23505");
   });
 
-  it("rejects a reused idempotency key", async () => {
-    await insertApplication({ idempotencyKey: "key-a" });
-    const [other] = await db
-      .insert(recruitmentOpening)
-      .values({
-        cycleId,
-        teamId: (await db.select({ id: team.id }).from(team))[0]!.id,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .onConflictDoNothing()
-      .returning({ id: recruitmentOpening.id });
-
-    // A double-tap on a flaky connection must not create two submissions, and
-    // the guard is a constraint rather than a disabled button.
-    await expectRejection(
-      () => insertApplication({ openingId: other?.id ?? openingId, idempotencyKey: "key-a" }),
-      "23505",
-    );
-  });
-
-  it("allows many applications with no idempotency key", async () => {
+  it("allows many applications for one profile", async () => {
     const [t2] = await db
       .insert(team)
       .values({ slug: "design", name: "Design", createdAt: now, updatedAt: now })
@@ -172,15 +152,24 @@ describe("application", () => {
     expect(rows).toHaveLength(2);
   });
 
-  it("scopes the idempotency key to the applicant", async () => {
-    const [t2] = await db
-      .insert(team)
-      .values({ slug: "design", name: "Design", createdAt: now, updatedAt: now })
-      .returning({ id: team.id });
-    const [other] = await db
-      .insert(recruitmentOpening)
-      .values({ cycleId, teamId: t2!.id, createdAt: now, updatedAt: now })
-      .returning({ id: recruitmentOpening.id });
+  it("starts as a draft", async () => {
+    await insertApplication();
+
+    const [row] = await db.select().from(application);
+    expect(row!.status).toBe("draft");
+  });
+});
+
+describe("submission", () => {
+  it("rejects a reused idempotency key for one applicant", async () => {
+    const values = { candidateProfileId: profileId, idempotencyKey: "key-a", submittedAt: now };
+    await db.insert(submission).values(values);
+
+    // A double tap on a flaky connection must not submit twice.
+    await expectRejection(() => db.insert(submission).values(values), "23505");
+  });
+
+  it("lets two applicants use the same key", async () => {
     await db.insert(user).values({
       id: "bmorales",
       name: "Blair",
@@ -192,27 +181,30 @@ describe("application", () => {
       .insert(candidateProfile)
       .values({ userId: "bmorales", cycleId, createdAt: now, updatedAt: now })
       .returning({ id: candidateProfile.id });
-    await insertApplication({ idempotencyKey: "key-a" });
 
-    // A key is client-supplied. Globally unique, one applicant could burn
-    // another applicant's key and make their submission look like a replay.
-    await db.insert(application).values({
-      candidateProfileId: otherProfile!.id,
-      openingId: other!.id,
-      idempotencyKey: "key-a",
-      createdAt: now,
-      updatedAt: now,
-    });
+    // The key is client-supplied. Globally unique, one applicant could burn
+    // another's key and make their real submission look like a replay.
+    await db
+      .insert(submission)
+      .values({ candidateProfileId: profileId, idempotencyKey: "shared", submittedAt: now });
+    await db
+      .insert(submission)
+      .values({ candidateProfileId: otherProfile!.id, idempotencyKey: "shared", submittedAt: now });
 
-    const rows = await db.select().from(application);
+    const rows = await db.select().from(submission);
     expect(rows).toHaveLength(2);
   });
 
-  it("starts as a draft", async () => {
-    await insertApplication();
+  it("refuses to delete a submission an application still points at", async () => {
+    const [row] = await db
+      .insert(submission)
+      .values({ candidateProfileId: profileId, idempotencyKey: "key-a", submittedAt: now })
+      .returning({ id: submission.id });
+    await insertApplication({ submissionId: row!.id, status: "submitted", submittedAt: now });
 
-    const [row] = await db.select().from(application);
-    expect(row!.status).toBe("draft");
+    // The row is the record of when somebody pressed Submit and what it
+    // covered. Losing it would leave applications submitted by nothing.
+    await expectRejection(() => db.delete(submission), "23001");
   });
 });
 
