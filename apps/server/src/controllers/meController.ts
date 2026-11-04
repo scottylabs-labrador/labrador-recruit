@@ -42,6 +42,17 @@ interface CreateApplicationBody {
   openingId: string;
 }
 
+interface PreferencesBody {
+  /**
+   * Every committee the applicant has applied to, most preferred first.
+   *
+   * The whole set, not a subset. A partial ranking leaves an application
+   * sitting unranked beside ranked ones, which reads as "least preferred" to
+   * the committee holding it - a statement the applicant did not make.
+   */
+  applicationIds: string[];
+}
+
 interface SubmitBody {
   /**
    * Supplied by the client so a retry is recognisable as the same act.
@@ -107,6 +118,28 @@ export class MeController extends Controller {
     const result = await applicationService.createApplication(await callerId(req), body.openingId);
     this.setStatus(result.created ? 201 : 200);
     return result.summary;
+  }
+
+  /**
+   * Records the applicant's order of preference across their committees.
+   *
+   * Takes the whole ordering in one call. A ranking is a single statement
+   * about a set, and assembling it from per-application writes is how a set
+   * ends up with two first choices.
+   *
+   * Declared **before** `applications/{applicationId}` matters: tsoa emits
+   * routes in declaration order, so a literal path that could also match a
+   * parameterised one has to come first or the parameter swallows it.
+   */
+  @Patch("applications/preferences")
+  @Security(OIDC_AUTH)
+  @Security(BEARER_AUTH)
+  @SuccessResponse(200)
+  async setPreferences(
+    @Request() req: ExpressRequest,
+    @Body() body: PreferencesBody,
+  ): Promise<void> {
+    await applicationService.setPreferences(await callerId(req), body.applicationIds);
   }
 
   @Get("applications/{applicationId}")

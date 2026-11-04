@@ -12,7 +12,7 @@ import {
   recruitmentOpening,
   team,
 } from "@recruit/db/schema";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne } from "drizzle-orm";
 
 import { currentCycleOrder, hasOpened, visibleCycleWhere } from "../lib/cycleVisibility.ts";
 import { db } from "../lib/db.ts";
@@ -780,6 +780,108 @@ export const applicationService = {
    * because two `withdrawn` events would make the history say it happened
    * twice.
    */
+  /**
+   * Records the applicant's order of preference across their committees.
+   *
+   * Takes the whole ordering at once and writes `1..n` in the order given,
+   * rather than taking one rank per call. A ranking is a single statement
+   * about a set, and assembling it from independent writes is how a set ends
+   * up with two first choices or a gap where one used to be.
+   *
+   * All or nothing, inside one transaction. A half-applied ranking is worse
+   * than none: an unranked application sitting beside ranked ones reads as
+   * "least preferred" to the committee holding it, which is a statement the
+   * applicant never made.
+   */
+  setPreferences: async (userId: string, applicationIds: string[]): Promise<void> => {
+    const now = new Date();
+    const { profile, cycle } = await ensureProfile(userId);
+    assertWritable(cycle, now);
+
+    /*
+     * Duplicates refused before anything is read.
+     *
+     * Two first choices is not an ordering, and taking the last occurrence of
+     * an id would quietly record a preference nobody expressed.
+     */
+    if (new Set(applicationIds).size !== applicationIds.length) {
+      throw new ConflictError("An application was listed more than once.");
+    }
+
+    /*
+     * Withdrawn applications are excluded from what must be ranked.
+     *
+     * Withdrawing is the applicant saying "not this one". Requiring them to
+     * then rank it would be asking how much they prefer something they have
+     * just declined.
+     */
+    const rankable = await db
+      .select({ id: application.id, status: application.status })
+      .from(application)
+      .where(
+        and(
+          eq(application.candidateProfileId, profile.id),
+          isNull(application.withdrawnAt),
+          ne(application.status, "withdrawn"),
+        ),
+      );
+
+    const owned = new Set(rankable.map((row) => row.id));
+    /*
+     * An id we do not own is 404, not 403, and nothing is written.
+     *
+     * A 403 would confirm that somebody else's application exists, which is
+     * the one thing an applicant must not be able to learn by guessing ids.
+     */
+    if (applicationIds.some((id) => !owned.has(id))) {
+      throw new NotFoundError();
+    }
+    if (applicationIds.length !== rankable.length) {
+      throw new ConflictError(
+        "Rank every committee you have applied to, so none is left without a position.",
+      );
+    }
+    /*
+     * Submitting is final, and the ranking is part of what was submitted.
+     *
+     * A committee that has already read "first choice" must not find that it
+     * has quietly become second.
+     */
+    if (rankable.some((row) => row.status !== "draft")) {
+      throw new ConflictError(
+        "You have already submitted an application, so your order of preference is fixed.",
+      );
+    }
+
+    if (applicationIds.length === 0) {
+      // Nothing to rank is not an error. The page sends whatever it is
+      // showing, and refusing would make an ordinary first visit look broken.
+      return;
+    }
+
+    await db.transaction(async (tx) => {
+      for (const [index, applicationId] of applicationIds.entries()) {
+        await tx
+          .update(application)
+          .set({ preferenceRank: index + 1, updatedAt: now })
+          /*
+           * The owner is in the predicate, not only in the check above.
+           *
+           * The read that proved ownership and this write are separate
+           * statements, and the predicate is what makes the write itself
+           * incapable of touching another applicant's row.
+           */
+          .where(
+            and(
+              eq(application.id, applicationId),
+              eq(application.candidateProfileId, profile.id),
+              eq(application.status, "draft"),
+            ),
+          );
+      }
+    });
+  },
+
   withdrawApplication: async (
     userId: string,
     applicationId: string,

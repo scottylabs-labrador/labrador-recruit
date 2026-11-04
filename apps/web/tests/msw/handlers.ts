@@ -155,8 +155,22 @@ export function setApplications(next: ApplicationSummary[]) {
  */
 export const withdrawCalls: string[] = [];
 
+/** Every opening the page asked to apply to, in order. */
+export const applyCalls: string[] = [];
+
+/**
+ * The last ordering the page sent, and every ordering it sent.
+ *
+ * The whole list each time, because a ranking is one statement about a set -
+ * a page that sent them one at a time would pass a "did it call the endpoint"
+ * assertion while recording two first choices.
+ */
+export const preferenceCalls: string[][] = [];
+
 export function resetCatalogue() {
   withdrawCalls.length = 0;
+  applyCalls.length = 0;
+  preferenceCalls.length = 0;
   currentCycle = DEFAULT_CYCLE;
   openings = DEFAULT_OPENINGS;
   profile = DEFAULT_PROFILE;
@@ -193,6 +207,36 @@ export const handlers = [
   ),
 
   http.get(`${API}/v1/me/applications`, () => HttpResponse.json(applications)),
+
+  http.patch(`${API}/v1/me/applications/preferences`, async ({ request }) => {
+    const body = (await request.json()) as { applicationIds: string[] };
+    preferenceCalls.push(body.applicationIds);
+    return new HttpResponse(null, { status: 200 });
+  }),
+
+  http.post(`${API}/v1/me/applications`, async ({ request }) => {
+    const body = (await request.json()) as { openingId: string };
+    applyCalls.push(body.openingId);
+    const opening = openings.find((row) => row.openingId === body.openingId);
+    if (opening === undefined) {
+      return HttpResponse.json({ message: "Not found" }, { status: 404 });
+    }
+    const existing = applications.find((row) => row.openingId === body.openingId);
+    if (existing !== undefined) {
+      return HttpResponse.json(existing);
+    }
+    const created: ApplicationSummary = {
+      applicationId: `app-${opening.teamSlug}`,
+      openingId: opening.openingId,
+      committeeName: opening.teamName,
+      committeeSlug: opening.teamSlug,
+      status: "Draft",
+      lastSavedAt: null,
+      submittedAt: null,
+    };
+    applications = [...applications, created];
+    return HttpResponse.json(created, { status: 201 });
+  }),
 
   http.post(`${API}/v1/me/applications/:applicationId/withdraw`, ({ params }) => {
     const id = String(params["applicationId"]);

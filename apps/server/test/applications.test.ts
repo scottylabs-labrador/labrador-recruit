@@ -925,3 +925,168 @@ describe("POST /v1/me/applications/:id/withdraw", () => {
     expect(events).toHaveLength(1);
   });
 });
+
+describe("PATCH /v1/me/applications/preferences", () => {
+  async function createApplication(headers: Record<string, string>, openingId: string) {
+    const res = await request(app).post("/v1/me/applications").set(headers).send({ openingId });
+    return res.body.applicationId as string;
+  }
+
+  it("ranks the caller's applications in the order given", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const first = await createApplication(applicant.headers, labradorOpening);
+    const second = await createApplication(applicant.headers, designOpening);
+
+    const res = await request(app)
+      .patch("/v1/me/applications/preferences")
+      .set(applicant.headers)
+      .send({ applicationIds: [second, first] });
+
+    expect(res.status).toBe(200);
+    const rows = await testDb.select().from(application);
+    expect(rows.find((row) => row.id === second)!.preferenceRank).toBe(1);
+    expect(rows.find((row) => row.id === first)!.preferenceRank).toBe(2);
+  });
+
+  it("refuses a list naming somebody else's application, and ranks nothing", async () => {
+    const owner = await seedApplicant("aquinn");
+    const other = await seedApplicant("bmorales");
+    const mine = await createApplication(other.headers, labradorOpening);
+    const theirs = await createApplication(owner.headers, designOpening);
+
+    const res = await request(app)
+      .patch("/v1/me/applications/preferences")
+      .set(other.headers)
+      .send({ applicationIds: [mine, theirs] });
+
+    /*
+     * 404 rather than 403, and nothing written.
+     *
+     * A 403 would confirm that the other application exists, which is the one
+     * thing an applicant must not be able to learn by guessing ids. And a
+     * partial write would leave the caller's own ranking half applied, which a
+     * committee would read as a stated preference.
+     */
+    expect(res.status).toBe(404);
+    const rows = await testDb.select().from(application);
+    expect(rows.every((row) => row.preferenceRank === null)).toBe(true);
+  });
+
+  it("refuses a list that names the same application twice", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const first = await createApplication(applicant.headers, labradorOpening);
+    await createApplication(applicant.headers, designOpening);
+
+    const res = await request(app)
+      .patch("/v1/me/applications/preferences")
+      .set(applicant.headers)
+      .send({ applicationIds: [first, first] });
+
+    // Two first choices is not an ordering, and silently taking the last
+    // occurrence would record a preference nobody expressed.
+    expect(res.status).toBe(409);
+  });
+
+  it("refuses a list that leaves one of the caller's applications out", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const first = await createApplication(applicant.headers, labradorOpening);
+    await createApplication(applicant.headers, designOpening);
+
+    const res = await request(app)
+      .patch("/v1/me/applications/preferences")
+      .set(applicant.headers)
+      .send({ applicationIds: [first] });
+
+    /*
+     * A partial ranking is worse than none.
+     *
+     * An unranked application beside ranked ones reads as "least preferred" to
+     * the committee holding it, which is a statement the applicant did not
+     * make.
+     */
+    expect(res.status).toBe(409);
+    const rows = await testDb.select().from(application);
+    expect(rows.every((row) => row.preferenceRank === null)).toBe(true);
+  });
+
+  it("ignores a withdrawn application rather than demanding it be ranked", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const kept = await createApplication(applicant.headers, labradorOpening);
+    const dropped = await createApplication(applicant.headers, designOpening);
+    await request(app)
+      .post(`/v1/me/applications/${dropped}/withdraw`)
+      .set(applicant.headers)
+      .send({});
+
+    const res = await request(app)
+      .patch("/v1/me/applications/preferences")
+      .set(applicant.headers)
+      .send({ applicationIds: [kept] });
+
+    // Withdrawing is the applicant saying "not this one". Requiring them to
+    // then rank it would be asking how much they prefer something they just
+    // declined.
+    expect(res.status).toBe(200);
+    const rows = await testDb.select().from(application);
+    expect(rows.find((row) => row.id === kept)!.preferenceRank).toBe(1);
+    expect(rows.find((row) => row.id === dropped)!.preferenceRank).toBeNull();
+  });
+
+  it("refuses to reorder once an application has been submitted", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const first = await createApplication(applicant.headers, labradorOpening);
+    const second = await createApplication(applicant.headers, designOpening);
+    await testDb
+      .update(application)
+      .set({ status: "submitted", submittedAt: now })
+      .where(eq(application.id, first));
+
+    const res = await request(app)
+      .patch("/v1/me/applications/preferences")
+      .set(applicant.headers)
+      .send({ applicationIds: [second, first] });
+
+    // Submitting is final, and the ranking is part of what was submitted. A
+    // committee that has already read "first choice" must not find it has
+    // quietly become second.
+    expect(res.status).toBe(409);
+  });
+
+  it("refuses once the cycle deadline has passed", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const first = await createApplication(applicant.headers, labradorOpening);
+    const second = await createApplication(applicant.headers, designOpening);
+    await testDb.update(recruitmentCycle).set({ closesAt: passedDeadline });
+
+    const res = await request(app)
+      .patch("/v1/me/applications/preferences")
+      .set(applicant.headers)
+      .send({ applicationIds: [second, first] });
+
+    // The same read/write asymmetry as every other applicant write: the
+    // deadline is evaluated server-side and is the authority.
+    expect(res.status).toBe(409);
+  });
+
+  it("refuses an unauthenticated caller", async () => {
+    const res = await request(app)
+      .patch("/v1/me/applications/preferences")
+      .send({ applicationIds: [] });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("accepts an empty list from somebody with no applications", async () => {
+    const applicant = await seedApplicant("aquinn");
+    await request(app).get("/v1/me/profile").set(applicant.headers);
+
+    const res = await request(app)
+      .patch("/v1/me/applications/preferences")
+      .set(applicant.headers)
+      .send({ applicationIds: [] });
+
+    // Nothing to rank is not an error. The page sends whatever it is showing,
+    // and refusing would make an ordinary first visit look broken.
+    expect(res.status).toBe(200);
+  });
+});
