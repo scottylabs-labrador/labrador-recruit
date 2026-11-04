@@ -249,3 +249,95 @@ test("every applicant page fits a phone without sideways scrolling", async ({ pa
     expect(overflow, `${path} scrolls sideways on a 375px viewport`).toBeLessThanOrEqual(1);
   }
 });
+
+test("a long form with every question type fits a phone", async ({ page, context }) => {
+  await seedOpenCycle({ everyQuestionType: true });
+  await seedAlice();
+  await context.addCookies([await sessionCookie(alice.sessionToken)]);
+  await page.setViewportSize({ width: 375, height: 667 });
+
+  await page.goto("/app/apply/common");
+  await expect(page.getByLabel("Your major")).toBeVisible();
+
+  // Every type is present, including the two that carry no answer.
+  await expect(page.getByRole("heading", { name: "About you" })).toBeVisible();
+  await expect(page.getByText(/not evaluated by any model/i)).toBeVisible();
+  await expect(page.getByText(/uploads are not available yet/i)).toBeVisible();
+
+  const overflow = await page.evaluate(() => {
+    const root = (
+      globalThis as unknown as {
+        document: { documentElement: { scrollWidth: number; clientWidth: number } };
+      }
+    ).document.documentElement;
+    return root.scrollWidth - root.clientWidth;
+  });
+
+  // A long form is where overflow shows up: a wide select, a long label, or a
+  // radio group that will not wrap.
+  expect(overflow, "the long form scrolls sideways on a 375px viewport").toBeLessThanOrEqual(1);
+});
+
+test("every control on a long form can be completed by keyboard in a real browser", async ({
+  page,
+  context,
+}) => {
+  await seedOpenCycle({ everyQuestionType: true });
+  await seedAlice();
+  await context.addCookies([await sessionCookie(alice.sessionToken)]);
+
+  await page.goto("/app/apply/common");
+  await expect(page.getByLabel("Your major")).toBeVisible();
+
+  await page.getByLabel("Your major").focus();
+  await page.keyboard.type("Statistics");
+
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("Because of the people.");
+
+  // A radio group is reached with Tab and chosen with an arrow key.
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("ArrowDown");
+
+  // Each checkbox is its own stop; Space toggles.
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Space");
+
+  /*
+   * The select, by keyboard, in Chromium.
+   *
+   * Type-to-select rather than ArrowDown: headless Chromium opens the native
+   * popup on an arrow key instead of moving the selection, so an arrow
+   * assertion would be testing the harness. Typing the option's first letters
+   * is the platform behaviour that a keyboard user actually relies on, and it
+   * only works at all because this is a real `<select>` - the whole reason
+   * `QuestionField` uses native elements rather than a custom listbox.
+   */
+  const campus = page.getByLabel("Campus");
+  await campus.focus();
+  /*
+   * Empty to start, not pre-selected on the first option.
+   *
+   * A required dropbox that arrives showing "Pittsburgh" looks answered, so
+   * somebody scrolls past it and submits an answer they never gave. Worth
+   * asserting rather than assuming.
+   */
+  await expect(campus).toHaveValue("");
+  await page.keyboard.type("Doha");
+  await expect(campus).toHaveValue("Doha");
+
+  await page.getByLabel("Graduating year").focus();
+  await page.keyboard.type("2028");
+
+  await page.getByLabel("GitHub profile").focus();
+  await page.keyboard.type("https://github.com/alice");
+
+  // Saved from the keyboard too, and the server is what confirms it.
+  await page.getByRole("button", { name: /save draft/i }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/^Saved /)).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByLabel("Your major")).toHaveValue("Statistics");
+  await expect(page.getByLabel("Graduating year")).toHaveValue("2028");
+});

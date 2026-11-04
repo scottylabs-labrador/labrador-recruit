@@ -163,7 +163,57 @@ export async function seedAdmin() {
  * pages render their between-seasons state — which is worth asserting once,
  * but is not the flow an applicant walks.
  */
-export async function seedOpenCycle() {
+/**
+ * The ten question types, as one long form.
+ *
+ * `#22`'s definition of done asks for a mobile-viewport test of a long form
+ * and keyboard completion of every type. jsdom can answer neither honestly -
+ * it has no layout and no native `<select>` keyboard behaviour - so the real
+ * browser gets a real form carrying all of them.
+ */
+const EVERY_QUESTION_TYPE = [
+  { questionKey: "major", type: "short_text" as const, label: "Your major", required: true },
+  { questionKey: "essay", type: "long_text" as const, label: "Why ScottyLabs?", required: true },
+  {
+    questionKey: "year",
+    type: "single_select" as const,
+    label: "Year",
+    required: true,
+    configJson: { choices: ["First year", "Sophomore", "Junior", "Senior"] },
+  },
+  {
+    questionKey: "interests",
+    type: "multi_select" as const,
+    label: "Interests",
+    required: false,
+    configJson: { choices: ["Design", "Infrastructure", "Product", "Events"] },
+  },
+  {
+    questionKey: "campus",
+    type: "dropdown" as const,
+    label: "Campus",
+    required: true,
+    configJson: { choices: ["Pittsburgh", "Doha", "Silicon Valley"] },
+  },
+  { questionKey: "graduating", type: "number" as const, label: "Graduating year", required: true },
+  { questionKey: "github", type: "url" as const, label: "GitHub profile", required: false },
+  { questionKey: "resume", type: "file_upload" as const, label: "Your resume", required: false },
+  {
+    questionKey: "about-section",
+    type: "section_heading" as const,
+    label: "About you",
+    required: false,
+  },
+  {
+    questionKey: "notice",
+    type: "static_content" as const,
+    label: "Before you start",
+    required: false,
+    description: "Applicants are not evaluated by any model.",
+  },
+];
+
+export async function seedOpenCycle(opts: { everyQuestionType?: boolean } = {}) {
   const now = new Date();
   const past = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const future = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000);
@@ -234,6 +284,7 @@ export async function seedOpenCycle() {
     questionKey: "major",
     label: "Your major",
     type: "short_text",
+    everyQuestionType: opts.everyQuestionType ?? false,
   });
   const committeeFormId = await publishForm({
     cycleId: cycle!.id,
@@ -265,6 +316,7 @@ async function publishForm(opts: {
   questionKey: string;
   label: string;
   type: "short_text" | "long_text";
+  everyQuestionType?: boolean;
 }) {
   const now = new Date();
   const [row] = await db
@@ -291,14 +343,24 @@ async function publishForm(opts: {
       updatedAt: now,
     })
     .returning({ id: formVersion.id });
-  await db.insert(question).values({
-    formVersionId: version!.id,
-    questionKey: opts.questionKey,
-    type: opts.type,
-    label: opts.label,
-    required: true,
-    position: 1,
-  });
+  if (opts.everyQuestionType === true) {
+    await db.insert(question).values(
+      EVERY_QUESTION_TYPE.map((definition, index) => ({
+        formVersionId: version!.id,
+        ...definition,
+        position: index + 1,
+      })),
+    );
+  } else {
+    await db.insert(question).values({
+      formVersionId: version!.id,
+      questionKey: opts.questionKey,
+      type: opts.type,
+      label: opts.label,
+      required: true,
+      position: 1,
+    });
+  }
   return row!.id;
 }
 

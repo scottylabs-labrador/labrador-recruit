@@ -136,6 +136,21 @@ describe("every question type renders a usable control", () => {
     expect(onChange).toHaveBeenLastCalledWith("langs", ["Rust"]);
   });
 
+  it("withholds a file upload rather than offering a box that does nothing", () => {
+    renderForm([q("resume", "file_upload", { label: "Your resume", required: true })]);
+
+    /*
+     * #21 owns uploads and is not built yet.
+     *
+     * A text box here would accept whatever somebody typed and look exactly
+     * like a working upload, and the applicant would believe their resume was
+     * attached. Saying so plainly is the only honest placeholder - and this
+     * test is what stops the default branch quietly turning it into an input.
+     */
+    expect(screen.getByText(/uploads are not available yet/i)).toBeDefined();
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
   it("renders a section heading as a heading, with no control", () => {
     renderForm([q("part-one", "section_heading", { label: "Part one" })]);
 
@@ -362,5 +377,104 @@ describe("keyboard operability", () => {
 
     const labels = screen.getAllByText(/^(First|Second)$/).map((node) => node.textContent);
     expect(labels).toEqual(["First", "Second"]);
+  });
+});
+
+describe("a whole form can be completed from the keyboard", () => {
+  /*
+   * Every answer-carrying type, filled without a pointer.
+   *
+   * `Tab` order alone is not enough to prove this: a radio group is reached
+   * with Tab but *chosen* with the arrow keys, a checkbox with Space, and a
+   * select with typing or arrows. A form that can be reached but not completed
+   * is a form somebody cannot submit, and this one has a deadline.
+   */
+  const EVERY_TYPE = [
+    q("major", "short_text", { label: "Major", position: 1 }),
+    q("essay", "long_text", { label: "Essay", position: 2 }),
+    q("year", "single_select", {
+      label: "Year",
+      position: 3,
+      config: { choices: ["Junior", "Senior"] },
+    }),
+    q("interests", "multi_select", {
+      label: "Interests",
+      position: 4,
+      config: { choices: ["Design", "Infra"] },
+    }),
+    q("campus", "dropdown", {
+      label: "Campus",
+      position: 5,
+      config: { choices: ["Pittsburgh", "Doha"] },
+    }),
+    q("graduating", "number", { label: "Graduating", position: 6 }),
+    q("github", "url", { label: "GitHub", position: 7 }),
+  ];
+
+  it("fills every control without a pointer", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderForm(EVERY_TYPE);
+
+    await user.tab();
+    await user.keyboard("Statistics");
+
+    await user.tab();
+    await user.keyboard("I would like to join.");
+
+    // A radio group: Tab lands on it, an arrow key chooses within it.
+    await user.tab();
+    await user.keyboard("{ArrowDown}");
+
+    // Checkboxes: each is its own tab stop, and Space toggles.
+    await user.tab();
+    await user.keyboard(" ");
+
+    // Past the second checkbox, onto the select.
+    await user.tab();
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByLabelText("Campus"));
+    /*
+     * `selectOptions` rather than an arrow key.
+     *
+     * jsdom does not implement native `<select>` keyboard navigation, so an
+     * arrow key here would prove nothing about a real browser either way. What
+     * this asserts is the part jsdom can answer - the select is a genuine tab
+     * stop and reports the chosen value - and the end-to-end suite walks a real
+     * one in Chromium.
+     */
+    await user.selectOptions(screen.getByLabelText("Campus"), "Doha");
+
+    await user.tab();
+    await user.keyboard("2028");
+
+    await user.tab();
+    await user.keyboard("https://github.com/aquinn");
+
+    expect(onChange).toHaveBeenCalledWith("major", "Statistics");
+    expect(onChange).toHaveBeenCalledWith("essay", "I would like to join.");
+    expect(onChange).toHaveBeenCalledWith("year", "Senior");
+    expect(onChange).toHaveBeenCalledWith("interests", ["Design"]);
+    expect(onChange).toHaveBeenCalledWith("campus", "Doha");
+    expect(onChange).toHaveBeenCalledWith("graduating", 2028);
+    expect(onChange).toHaveBeenCalledWith("github", "https://github.com/aquinn");
+  });
+
+  it("puts the focus somewhere visible on every control", async () => {
+    const user = userEvent.setup();
+    renderForm(EVERY_TYPE);
+
+    /*
+     * Eight tab stops, counted: two text controls, one radio group (a group
+     * with nothing chosen exposes exactly one), two checkboxes, a select, a
+     * number and a url. Nine would wrap around to the body and pass for the
+     * wrong reason.
+     *
+     * A control that cannot take focus is one a keyboard user walks straight
+     * past without ever learning it was there.
+     */
+    for (let step = 0; step < 8; step += 1) {
+      await user.tab();
+      expect(document.activeElement).not.toBe(document.body);
+    }
   });
 });
