@@ -525,6 +525,76 @@ describe("validation", () => {
     expect(res.status).toBe(422);
   });
 
+  it("refuses a file_upload answer that is not a uuid at all", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await readyApplication(applicant.headers);
+    await request(app)
+      .patch(`/v1/me/applications/${applicationId}/draft`)
+      .set(applicant.headers)
+      .send({ revision: 1, answers: [{ questionKey: "portfolio", value: "not-a-file-id" }] });
+
+    /*
+     * The ownership check used to infer "this is a file reference" from the
+     * *shape* of the value. Anything that did not look like a uuid was silently
+     * skipped, so an arbitrary string in a `file_upload` answer bypassed the
+     * ownership and committed checks entirely and was stored as the answer.
+     */
+    const res = await request(app)
+      .post("/v1/me/submissions")
+      .set(applicant.headers)
+      .send({ idempotencyKey: "key-a", applicationIds: [applicationId] });
+
+    expect(res.status).toBe(422);
+  });
+
+  it("refuses a file_upload answer whose uuid is padded with whitespace", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await readyApplication(applicant.headers);
+    const [theirs] = await testDb
+      .insert(file)
+      .values({
+        ownerUserId: "dchen",
+        objectKey: "uploads/theirs",
+        originalFilename: "theirs.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 1024,
+        status: "committed",
+        committedAt: now,
+        createdAt: now,
+      })
+      .returning({ id: file.id });
+    await request(app)
+      .patch(`/v1/me/applications/${applicationId}/draft`)
+      .set(applicant.headers)
+      .send({ revision: 1, answers: [{ questionKey: "portfolio", value: ` ${theirs!.id} ` }] });
+
+    // The shape check is where the bypass lived: one space and the value stops
+    // matching the pattern, so the ownership check never saw it.
+    const res = await request(app)
+      .post("/v1/me/submissions")
+      .set(applicant.headers)
+      .send({ idempotencyKey: "key-a", applicationIds: [applicationId] });
+
+    expect(res.status).toBe(422);
+  });
+
+  it("does not treat a text answer that looks like a uuid as a file", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await readyApplication(applicant.headers, labradorOpening, {
+      aiProject: "123e4567-e89b-42d3-a456-426614174000",
+    });
+
+    // The other direction of the same bug: a legitimate text answer that
+    // happens to look like an id was ownership-checked and failed, blocking a
+    // submission for no reason the applicant could act on.
+    const res = await request(app)
+      .post("/v1/me/submissions")
+      .set(applicant.headers)
+      .send({ idempotencyKey: "key-a", applicationIds: [applicationId] });
+
+    expect(res.status).toBe(200);
+  });
+
   it("refuses a file reference that was never committed", async () => {
     const applicant = await seedApplicant("aquinn");
     const applicationId = await readyApplication(applicant.headers);
@@ -606,6 +676,127 @@ describe("deadlines and state", () => {
       .send({ idempotencyKey: "key-a", applicationIds: [] });
 
     expect(res.status).toBe(422);
+  });
+});
+
+describe("concurrency and versions", () => {
+  it("submits against whatever revision validation read", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await readyApplication(applicant.headers);
+    // A revision well away from the default, so the write is provably matching
+    // the value validation read rather than a hardcoded one.
+    await testDb
+      .update(formResponse)
+      .set({ revision: 99 })
+      .where(eq(formResponse.applicationId, applicationId));
+
+    const res = await request(app)
+      .post("/v1/me/submissions")
+      .set(applicant.headers)
+      .send({ idempotencyKey: "key-a", applicationIds: [applicationId] });
+
+    expect(res.status).toBe(200);
+  });
+
+  /*
+   * Not tested: a draft save landing *between* validation and the write.
+   *
+   * That is the race the revision guard exists for, and this suite cannot
+   * drive it. Validation and the write are separate statements, so the
+   * interleaving needs either a genuinely concurrent Postgres or an injection
+   * seam inside the service — and PGlite serializes requests in-process, so
+   * issuing both at once proves nothing.
+   *
+   * An earlier version of this test bumped the revision *before* the submit and
+   * asserted a 409. It passed, and it was meaningless: validation then read 99
+   * and the guard enforced 99, so the guard was never exercised. Recorded as a
+   * gap rather than papered over with a test that passes for the wrong reason.
+   */
+
+  it("validates against the version the response is bound to, not the newest", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await readyApplication(applicant.headers);
+
+    // A director publishes a new version after the applicant started. Their
+    // response still names v1, which is the whole point of versioning.
+    const [committeeForm] = await testDb
+      .select({ id: form.id })
+      .from(form)
+      .where(eq(form.openingId, labradorOpening));
+    const [v2] = await testDb
+      .insert(formVersion)
+      .values({
+        formId: committeeForm!.id,
+        version: 2,
+        status: "published",
+        publishedAt: new Date(now.getTime() + 1000),
+        createdBy: "dchen",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: formVersion.id });
+    await testDb.insert(question).values({
+      formVersionId: v2!.id,
+      questionKey: "interest",
+      type: "single_select",
+      label: "Area of interest",
+      required: true,
+      position: 1,
+      configJson: { choices: ["AI", "Design"] },
+    });
+
+    const res = await request(app)
+      .post("/v1/me/submissions")
+      .set(applicant.headers)
+      .send({ idempotencyKey: "key-a", applicationIds: [applicationId] });
+
+    /*
+     * Loading the newest version's questions made every v1 answer look
+     * unrecognised, so the prune deleted all of them. The same class of defect
+     * as the empty keep set, arriving by a different route.
+     */
+    expect(res.status).toBe(200);
+    const detail = await request(app)
+      .get(`/v1/me/applications/${applicationId}`)
+      .set(applicant.headers);
+    expect(detail.body.answers.interest).toBe("AI");
+    expect(detail.body.answers["ai-project"]).toBeTruthy();
+  });
+
+  it("uses the current cycle's profile when the applicant has an older one", async () => {
+    const applicant = await seedApplicant("aquinn");
+    // A cycle they applied in previously, opened earlier than the current one.
+    const [old] = await testDb
+      .insert(recruitmentCycle)
+      .values({
+        slug: "fall-2026",
+        name: "Fall 2026",
+        status: "archived",
+        opensAt: new Date(past.getTime() - 86_400_000),
+        createdBy: "dchen",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: recruitmentCycle.id });
+    await testDb
+      .insert(candidateProfile)
+      .values({ userId: applicant.andrewId, cycleId: old!.id, createdAt: now, updatedAt: now });
+
+    const applicationId = await readyApplication(applicant.headers);
+
+    // The profile lookup had no cycle filter, so it returned whichever row came
+    // back first, and locking or submitting against last season's profile would
+    // be wrong in a way nobody would notice until it mattered.
+    const res = await request(app)
+      .post("/v1/me/submissions")
+      .set(applicant.headers)
+      .send({ idempotencyKey: "key-a", applicationIds: [applicationId] });
+
+    expect(res.status).toBe(200);
+    const profiles = await testDb.select().from(candidateProfile);
+    const locked = profiles.filter((row) => row.commonLockedAt !== null);
+    expect(locked).toHaveLength(1);
+    expect(locked[0]!.cycleId).toBe(cycleId);
   });
 });
 

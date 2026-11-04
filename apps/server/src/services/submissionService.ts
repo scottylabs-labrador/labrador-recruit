@@ -24,7 +24,7 @@ import {
 } from "@recruit/db/schema";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
-import { hasOpened } from "../lib/cycleVisibility.ts";
+import { currentCycleOrder, hasOpened, visibleCycleWhere } from "../lib/cycleVisibility.ts";
 import { db } from "../lib/db.ts";
 import type { Transaction } from "../lib/db.ts";
 import {
@@ -101,11 +101,22 @@ export const submissionService = {
     // of it, and the batch size matches what the applicant meant.
     const wanted = [...new Set(applicationIds)];
 
+    /*
+     * The profile for the cycle an applicant is actually applying to.
+     *
+     * The lookup had no cycle filter, so somebody who applied in a previous
+     * season got whichever row came back first — and locking or submitting
+     * against last season's profile is wrong in a way nobody would notice until
+     * it mattered. Resolved through the same current-cycle rule the other
+     * applicant routes use, so the two cannot disagree.
+     */
     const [profile] = await db
       .select({ id: candidateProfile.id, commonLockedAt: candidateProfile.commonLockedAt })
       .from(candidateProfile)
-      .innerJoin(user, eq(candidateProfile.userId, user.id))
-      .where(eq(candidateProfile.userId, userId));
+      .innerJoin(recruitmentCycle, eq(candidateProfile.cycleId, recruitmentCycle.id))
+      .where(and(eq(candidateProfile.userId, userId), visibleCycleWhere(now)))
+      .orderBy(currentCycleOrder)
+      .limit(1);
     if (!profile) {
       throw new NotFoundError();
     }
@@ -227,6 +238,8 @@ export const submissionService = {
       target: (typeof targets)[number];
       responseId: string;
       versionId: string;
+      revision: number;
+      definitions: QuestionDefinition[];
       keep: AnswerMap;
       questionIds: Map<string, string>;
     }[] = [];
@@ -253,16 +266,30 @@ export const submissionService = {
         target,
         responseId: check.responseId,
         versionId: check.versionId,
+        // Carried through, not re-read. The revision guards the write against a
+        // draft save landing mid-submit, and the definitions decide which
+        // answers are file references — both have to be the ones validation
+        // actually used, or the guard guards nothing.
+        revision: check.revision,
+        definitions: check.definitions,
         keep: check.result.answers,
         questionIds: check.questionIds,
       });
     }
 
     // Step 6: uploads must be committed and the applicant's own.
-    const referenced = [
-      ...(commonCheck === null ? [] : fileRefs(commonCheck.keep)),
-      ...perApplication.flatMap((entry) => fileRefs(entry.keep)),
+    const refs = [
+      ...(commonCheck === null ? [] : [fileRefs(commonCheck.definitions, commonCheck.keep)]),
+      ...perApplication.map((entry) => fileRefs(entry.definitions, entry.keep)),
     ];
+    const malformed = refs.flatMap((ref) => ref.malformed);
+    if (malformed.length > 0) {
+      throw new ValidationFailedError("An attached file is not valid.", [
+        { applicationId: "files", committeeName: "Attachments", missing: malformed, invalid: [] },
+      ]);
+    }
+
+    const referenced = refs.flatMap((ref) => ref.ids);
     if (referenced.length > 0) {
       const usable = await db
         .select({ id: file.id })
@@ -302,10 +329,35 @@ export const submissionService = {
 
       for (const entry of perApplication) {
         await pruneHiddenAnswers(tx, entry);
-        await tx
+        /*
+         * The revision read during validation, enforced here.
+         *
+         * Validation runs against `db` and this runs against `tx`, so a draft
+         * save landing between them would otherwise finalize answers that were
+         * never validated. The `status = 'draft'` guard catches a competing
+         * *submit*; this catches a competing *save*.
+         *
+         * Not covered by a test: the suite runs against PGlite, which
+         * serializes requests in-process, so the interleaving this guards
+         * cannot be produced. See the note in `test/submission.test.ts`.
+         */
+        const finalized = await tx
           .update(formResponse)
           .set({ status: "submitted", submittedAt: now, updatedAt: now })
-          .where(eq(formResponse.id, entry.responseId));
+          .where(
+            and(
+              eq(formResponse.id, entry.responseId),
+              eq(formResponse.revision, entry.revision),
+              eq(formResponse.status, "draft"),
+            ),
+          )
+          .returning({ id: formResponse.id });
+
+        if (finalized.length === 0) {
+          throw new ConflictError(
+            "Your answers changed while this was being submitted. Reload and try again.",
+          );
+        }
 
         const updated = await tx
           .update(application)
@@ -340,10 +392,22 @@ export const submissionService = {
 
       if (commonCheck !== null) {
         await pruneHiddenAnswers(tx, commonCheck);
-        await tx
+        const finalized = await tx
           .update(formResponse)
           .set({ status: "submitted", submittedAt: now, updatedAt: now })
-          .where(eq(formResponse.id, commonCheck.responseId));
+          .where(
+            and(
+              eq(formResponse.id, commonCheck.responseId),
+              eq(formResponse.revision, commonCheck.revision),
+            ),
+          )
+          .returning({ id: formResponse.id });
+
+        if (finalized.length === 0) {
+          throw new ConflictError(
+            "Your shared answers changed while this was being submitted. Reload and try again.",
+          );
+        }
       }
 
       /*
@@ -383,23 +447,47 @@ export const submissionService = {
   },
 };
 
-/**
- * The file ids an answer set references.
- *
- * Takes the map rather than a wrapper, because the dual-shaped version was how
- * the empty-keep bug hid: two optional fields, and the caller silently reading
- * whichever happened to be set.
- */
-function fileRefs(answers: AnswerMap): string[] {
-  return Object.values(answers).filter(
-    (value): value is string => typeof value === "string" && isUuid(value),
-  );
-}
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function isUuid(value: string): boolean {
-  return UUID.test(value);
+/**
+ * The file ids an answer set references, by **question type**.
+ *
+ * Previously this inferred "that is a file reference" from the *shape* of the
+ * value, and that was a bypass in both directions. A `file_upload` answer that
+ * did not look like a uuid — one space of padding was enough — was silently
+ * skipped, so an arbitrary string evaded the ownership and committed checks and
+ * was stored as the answer. And a legitimate text answer that happened to look
+ * like an id was ownership-checked and failed, blocking a submission for no
+ * reason the applicant could act on.
+ *
+ * Driven by the definitions instead, and anything that is not a canonical uuid
+ * is a hard failure rather than a value quietly passed over.
+ */
+function fileRefs(
+  definitions: readonly QuestionDefinition[],
+  answers: AnswerMap,
+): { ids: string[]; malformed: string[] } {
+  const ids: string[] = [];
+  const malformed: string[] = [];
+
+  for (const definition of definitions) {
+    if (definition.type !== "file_upload") {
+      continue;
+    }
+    const value = answers[definition.questionKey];
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+    if (typeof value !== "string" || !UUID.test(value)) {
+      malformed.push(definition.questionKey);
+      continue;
+    }
+    // Canonical lowercase, so two spellings of one id cannot disagree about
+    // ownership.
+    ids.push(value.toLowerCase());
+  }
+
+  return { ids, malformed };
 }
 
 /**
@@ -452,15 +540,51 @@ async function validateResponseFor(opts: {
     return null;
   }
 
-  const [version] = await db
-    .select({ id: formVersion.id })
-    .from(formVersion)
-    .where(and(eq(formVersion.formId, formRow.id), eq(formVersion.status, "published")))
-    .orderBy(desc(formVersion.version))
-    .limit(1);
-  if (!version) {
+  /*
+   * The response first, then **its** version's questions.
+   *
+   * Loading the newest published version instead made every answer from an
+   * older one look unrecognised, so the prune deleted all of them — the same
+   * class of defect as an empty keep set, arriving by a different route. A
+   * response names the exact version it was answered against; that is the whole
+   * point of the column, and reading it is how an answer stays meaningful after
+   * a republish.
+   */
+  const [response] = await db
+    .select({
+      id: formResponse.id,
+      formVersionId: formResponse.formVersionId,
+      revision: formResponse.revision,
+    })
+    .from(formResponse)
+    // Joined to the version so a common response is found by *its form* rather
+    // than by a version id we would have to know in advance — which is the
+    // thing this lookup exists to discover.
+    .innerJoin(formVersion, eq(formResponse.formVersionId, formVersion.id))
+    .where(
+      opts.applicationId === undefined
+        ? and(
+            eq(formResponse.candidateProfileId, opts.profileId!),
+            eq(formVersion.formId, formRow.id),
+          )
+        : eq(formResponse.applicationId, opts.applicationId),
+    );
+
+  const versionId =
+    response?.formVersionId ??
+    (
+      await db
+        .select({ id: formVersion.id })
+        .from(formVersion)
+        .where(and(eq(formVersion.formId, formRow.id), eq(formVersion.status, "published")))
+        .orderBy(desc(formVersion.version))
+        .limit(1)
+    )[0]?.id;
+
+  if (versionId === undefined) {
     return null;
   }
+  const version = { id: versionId };
 
   const questionRows = await db
     .select({
@@ -478,18 +602,6 @@ async function validateResponseFor(opts: {
     .where(eq(question.formVersionId, version.id))
     .orderBy(asc(question.position));
 
-  const [response] = await db
-    .select({ id: formResponse.id })
-    .from(formResponse)
-    .where(
-      opts.applicationId === undefined
-        ? and(
-            eq(formResponse.candidateProfileId, opts.profileId!),
-            eq(formResponse.formVersionId, version.id),
-          )
-        : eq(formResponse.applicationId, opts.applicationId),
-    );
-
   const answers: AnswerMap = {};
   if (response) {
     const rows = await db
@@ -506,6 +618,8 @@ async function validateResponseFor(opts: {
   return {
     responseId: response?.id ?? "",
     versionId: version.id,
+    revision: response?.revision ?? 0,
+    definitions,
     questionIds: new Map(questionRows.map((row) => [row.questionKey, row.id])),
     result: validateResponse(definitions, answers),
     /*
