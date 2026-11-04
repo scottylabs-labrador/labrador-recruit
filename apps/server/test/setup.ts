@@ -1,3 +1,5 @@
+import { beforeEach, vi } from "vitest";
+
 /**
  * Seeds the environment before any module that validates it is imported.
  *
@@ -15,3 +17,20 @@ process.env["BETTER_AUTH_URL"] ??= "https://auth.example.com";
 process.env["BETTER_AUTH_SECRET"] ??= "test-secret-not-used-outside-this-suite";
 process.env["DATABASE_URL"] ??= "postgres://localhost:5432/test";
 process.env["SERVER_URL"] ??= "https://api.example.com";
+
+/**
+ * Points the server's db at the in-process one.
+ *
+ * Mocked rather than injected, because `lib/db.ts` is imported for its side
+ * effect of creating a pool from `DATABASE_URL`, and a test suite should not
+ * open a socket to discover that.
+ */
+vi.mock("../src/lib/db.ts", async () => {
+  const { testDb } = await import("./harness.ts");
+  return { db: testDb };
+});
+
+beforeEach(async () => {
+  const { resetDb } = await import("./harness.ts");
+  await resetDb();
+});

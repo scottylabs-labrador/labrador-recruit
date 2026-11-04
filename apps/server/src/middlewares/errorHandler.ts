@@ -28,6 +28,21 @@ export class AuthorizationError extends HttpError {
   }
 }
 
+/**
+ * Not found, or not visible to this caller.
+ *
+ * One class for both, on purpose. Returning 404 rather than 403 for something
+ * the caller may not see is what stops the platform leaking that a record
+ * exists — see `docs/authorization.md`. Having a separate "forbidden but it
+ * exists" error available here would make that mistake easy to reach for.
+ */
+export class NotFoundError extends HttpError {
+  constructor(message = "Not found") {
+    super(404, message);
+    this.name = "NotFound";
+  }
+}
+
 export class InternalServerError extends HttpError {
   constructor(message: string) {
     super(500, message);
