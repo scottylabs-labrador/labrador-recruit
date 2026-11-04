@@ -2,21 +2,20 @@ import { Link } from "@tanstack/react-router";
 
 import { UserProfile } from "@/components/user/UserProfile.tsx";
 
+/**
+ * The application shell's navigation.
+ *
+ * Deliberately bare. The student and staff surfaces arrive with #23 and #24,
+ * and the links into them belong to a role switcher driven by `GET /v1/me`
+ * rather than to a hardcoded list here — somebody with no grants should never
+ * see a staff link at all. See `docs/ui.md` section 4.
+ */
 export function NavBar() {
   return (
     <nav className="flex items-center justify-between px-6 py-4 bg-gray-800 text-white shadow-lg">
-      <div className="flex items-center gap-6">
-        <Link to="/" className="text-xl font-semibold">
-          Recruit
-        </Link>
-        <Link
-          to="/recruitment"
-          className="rounded-md px-2 py-1 text-sm font-medium text-gray-200 hover:bg-white/10 hover:text-white"
-          activeProps={{ className: "bg-white/10 text-white", "aria-current": "page" }}
-        >
-          Recruitment
-        </Link>
-      </div>
+      <Link to="/" className="text-xl font-semibold">
+        ScottyLabs Recruit
+      </Link>
       <UserProfile />
     </nav>
   );

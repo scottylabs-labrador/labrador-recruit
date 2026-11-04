@@ -1,4 +1,4 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
@@ -11,14 +11,14 @@ export const Route = createFileRoute("/")({
 });
 
 /**
- * Signed in, `/` is a redirect rather than a screen. Everything anyone does
- * here happens inside a cycle, and `/recruitment` already renders the three
- * cases that follow from standing: the cycles you can open, the "ask an admin
- * to enrol you" state, and the picker. Duplicating any of that here would mean
- * two places to keep in step with the membership rules.
+ * The public landing page.
+ *
+ * Signed in, this currently stays put: the student dashboard it should redirect
+ * to arrives with #23. Leaving the redirect in place pointing at a route that
+ * no longer exists would be a worse placeholder than none.
  */
 function IndexComponent() {
-  const { data: auth, isPending } = useSession();
+  const { isPending } = useSession();
   const identityProvider = useIdentityProvider();
 
   if (isPending) {
@@ -30,18 +30,13 @@ function IndexComponent() {
     );
   }
 
-  if (auth?.user) {
-    return <Navigate to="/recruitment" replace />;
-  }
-
   return (
     <div className="mx-auto w-full max-w-[1400px] px-6 py-16">
       <div className="max-w-[62ch]">
-        <h1 className="text-2xl leading-tight font-semibold">Recruit</h1>
+        <h1 className="text-2xl leading-tight font-semibold">ScottyLabs Recruit</h1>
         <p className="mt-3 text-[0.95rem] leading-7 text-muted-foreground">
-          The recruitment review platform for ScottyLabs leadership. Leadership imports the
-          committee application form, reviewers score applicants against a published rubric, and the
-          platform reports aggregates, reviewer disagreement, and committee rankings.
+          Apply to ScottyLabs committees in one place. Fill in the shared questions once, answer
+          each committee&rsquo;s own questions, and track every application from here.
         </p>
         <p className="mt-3 text-[0.95rem] leading-7 text-muted-foreground">
           Applicants are not evaluated by any model. Every subjective score comes from a named human

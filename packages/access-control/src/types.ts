@@ -1,115 +1,26 @@
 /**
  * Access-control value types.
  *
- * This package imports types from `@recruit/db/schema` but never the database
- * client, so the identical predicates run in the browser and on the server.
+ * This package imports types from `@recruit/db/schema` but **never the database
+ * client**, so the identical predicates run in the browser and on the server.
+ * That is what stops one rule becoming two implementations that drift.
  */
 
-import type {
-  Application as DatabaseApplication,
-  CommitteeCandidacy as DatabaseCandidacy,
-  CommitteeDecision as DatabaseDecision,
-  ReviewAssignment as DatabaseAssignment,
-} from "@recruit/db/schema";
-
-/** The global role derived from Keycloak JWT groups. */
+/**
+ * The global role, derived from the identity provider's `groups` claim.
+ *
+ * Deliberately coarse. It decides whether somebody can bootstrap — create the
+ * first cycle, the first teams, the first grants — and nothing else. Authority
+ * over applicant data comes from `permission_grant` rows, not from here.
+ */
 export type Role = "admin" | "user" | "guest";
 
-/** The authenticated caller, as every existing ScottyStack service expects it. */
+/** The authenticated caller, before any cycle-scoped grants are resolved. */
 export type User = { id: string; role: Role };
 
-/** A recruitment role held within one cycle. */
-export type RecruitmentRole = "reviewer" | "committee_lead" | "recruitment_admin";
-
-/** One `recruitment_membership` row reduced to what the rules need. */
-export interface Membership {
-  role: RecruitmentRole;
-  /** Null for a cycle-wide membership, which is how admins are represented. */
-  committeeId: string | null;
-}
-
-/**
- * Everything the ability builder needs beyond the caller's identity.
- *
- * Built per request by the server. Two fields deserve explanation:
- *
- * `unblindedCandidacyIds` carries the candidacies where the caller has already
- * submitted their own review. Reviewer blindness depends on the state of a
- * *different* row, which a plain column comparison cannot express, so the
- * server resolves that set once and the rule then becomes an ordinary `$in`
- * condition that compiles to SQL like any other.
- *
- * `blindReviewEnabled` mirrors the cycle setting and hides applicant identity
- * from ordinary reviewers.
+/*
+ * TODO(track-b): the recruitment subject and action vocabulary, and the
+ * grant-based `ScopedUser`, land with #10. The compiler in `drizzle.ts` is
+ * already here and is the mechanism those rules compile through — see
+ * `docs/authorization.md`.
  */
-export interface RecruitmentContext {
-  cycleId: string | null;
-  memberships: Membership[];
-  unblindedCandidacyIds?: string[];
-  blindReviewEnabled?: boolean;
-}
-
-/** The caller together with their recruitment standing in one cycle. */
-export interface RecruitmentUser extends User {
-  recruitment: RecruitmentContext;
-}
-
-export type ApplicationSubject = Pick<DatabaseApplication, "cycleId">;
-
-export type CandidacySubject = Pick<DatabaseCandidacy, "committeeId" | "active">;
-
-/**
- * Reviews and assignments share a subject shape because a review's visibility
- * is decided by its assignment's columns. Services join `review` to
- * `review_assignment` and apply the compiled predicate to the assignment table.
- */
-export interface AssignmentSubject {
-  reviewerUserId: DatabaseAssignment["reviewerUserId"];
-  candidacyId: DatabaseAssignment["candidacyId"];
-}
-
-export type ReviewSubject = AssignmentSubject;
-
-/**
- * A decision, and the committee whose decision it is.
- *
- * `committeeId` is not on the decision row itself - it reaches this through the
- * candidacy - but the rule cannot be committee-scoped without it, and a rule
- * that cannot be scoped is a rule that applies everywhere. A committee lead who
- * also reviews for another committee could otherwise record that committee's
- * decisions, because the only narrowing was the visibility predicate, and that
- * is the union of what someone leads and what they review.
- */
-export type DecisionSubject = Pick<DatabaseDecision, "candidacyId"> & {
-  committeeId: string;
-};
-
-/** Applicant identity fields, gated separately from the application body. */
-export interface IdentitySubject {
-  cycleId: string;
-}
-
-export type RecruitmentAction =
-  | "read"
-  | "readIdentity"
-  | "readLeadershipContext"
-  | "readPeerReview"
-  | "create"
-  | "update"
-  | "submit"
-  | "reopen"
-  | "assign"
-  | "decide"
-  | "configure"
-  | "import"
-  | "delete";
-
-export type RecruitmentSubjectName =
-  | "Application"
-  | "Identity"
-  | "Candidacy"
-  | "Assignment"
-  | "Review"
-  | "Decision"
-  | "Placement"
-  | "Cycle";

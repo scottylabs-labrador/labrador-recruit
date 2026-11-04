@@ -1,41 +1,17 @@
-import { beforeEach, vi } from "vitest";
-
-/** Seeds env vars before app modules that validate process.env are imported. */
+/**
+ * Seeds the environment before any module that validates it is imported.
+ *
+ * `src/env.ts` parses `process.env` at module load and throws on a missing
+ * variable, so a suite that imports the app transitively needs these present
+ * before the first import rather than before the first test.
+ */
 process.env["ADMIN_GROUP"] ??= "test-admins";
 process.env["ALLOWED_ORIGINS_REGEX"] ??= ".*";
 process.env["AUTH_ISSUER"] ??= "https://auth.example.com";
 process.env["AUTH_CLIENT_ID"] ??= "test-client-id";
-// The harness signs bearer tokens with `AUTH_CLIENT_ID` as the audience, so the
-// tests need a registered-looking client - which would otherwise switch password
-// sign-in off and take the local-account tests with it. Both doors are forced
-// open here so each can be tested on its own terms.
-process.env["PASSWORD_SIGN_IN"] ??= "on";
 process.env["AUTH_CLIENT_SECRET"] ??= "test-client-secret";
 process.env["AUTH_JWKS_URI"] ??= "https://auth.example.com/.well-known/jwks.json";
 process.env["BETTER_AUTH_URL"] ??= "https://auth.example.com";
+process.env["BETTER_AUTH_SECRET"] ??= "test-secret-not-used-outside-this-suite";
 process.env["DATABASE_URL"] ??= "postgres://localhost:5432/test";
 process.env["SERVER_URL"] ??= "https://api.example.com";
-
-vi.mock("../src/lib/db.ts", async () => {
-  const { testDb } = await import("./harness.ts");
-  return { db: testDb };
-});
-
-vi.mock("jwks-rsa", async () => {
-  const { publicKeyPem } = await import("./keys.ts");
-  return {
-    default: () => ({
-      getSigningKey: (
-        _kid: string | undefined,
-        cb: (err: Error | null, key?: { getPublicKey: () => string }) => void,
-      ) => {
-        cb(null, { getPublicKey: () => publicKeyPem });
-      },
-    }),
-  };
-});
-
-beforeEach(async () => {
-  const { resetDb } = await import("./harness.ts");
-  await resetDb();
-});

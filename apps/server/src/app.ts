@@ -4,7 +4,7 @@ import path from "node:path";
 import { toNodeHandler } from "better-auth/node";
 import cors, { type CorsOptions } from "cors";
 import type { ErrorRequestHandler, RequestHandler } from "express";
-import express from "express";
+import express, { Router } from "express";
 import swaggerUi, { type JsonObject } from "swagger-ui-express";
 import { parse as parseYaml } from "yaml";
 
@@ -81,7 +81,20 @@ if (swaggerJson !== null) {
   });
 }
 
-RegisterRoutes(app);
+/**
+ * The API lives under `/v1`.
+ *
+ * Mounted on a router rather than set through tsoa's `spec.basePath`, which
+ * only prefixes the OpenAPI document and leaves the Express routes at the root.
+ * Having those two disagree is a 404 that looks like a routing bug and is a
+ * configuration one.
+ *
+ * The generated spec therefore describes paths without the prefix, and the web
+ * client adds it to its base URL. See `apps/web/src/lib/apiClient.ts`.
+ */
+const v1 = Router();
+RegisterRoutes(v1);
+app.use("/v1", v1);
 app.get("/", (_req, res) => {
   res.status(200).json({ status: "ok" });
 });

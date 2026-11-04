@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-import { signIn } from "./auth.ts";
-import { adminUser, alice, resetDb, seedAdmin, seedAlice } from "./db.ts";
+import { API_URL } from "./config.ts";
+import { resetDb } from "./db.ts";
 
 test.beforeEach(async () => {
   await resetDb();
@@ -10,33 +10,17 @@ test.beforeEach(async () => {
 test("a guest is told what the platform is and how to get in", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
-  // By role and exact, because the navigation also carries a "Recruitment"
-  // link and a substring match resolves to both.
-  await expect(page.getByRole("link", { name: "Recruit", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Recruit" })).toBeVisible();
-  await expect(page.getByText(/not evaluated by any model/)).toBeVisible();
+  await expect(page.getByText("ScottyLabs Recruit")).toBeVisible();
+  await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
 });
 
-test("a signed-in user lands on recruitment rather than an empty page", async ({
-  page,
-  context,
-}) => {
-  await seedAlice();
-  await signIn(context, alice.sessionToken);
-  await page.goto("/");
+test("the API reports liveness", async ({ request }) => {
+  // Absolute, because Playwright's `baseURL` is the interface. A relative path
+  // here hits the web server, which answers every unknown path with index.html
+  // for client-side routing - so the failure is a JSON parse error rather than
+  // a 404, which is a confusing way to learn you asked the wrong host.
+  const res = await request.get(`${API_URL}/v1/health`);
 
-  await expect(page).toHaveURL(/\/recruitment$/);
-  await expect(page.getByRole("heading", { name: "Recruitment" })).toBeVisible();
-});
-
-test("an admin can open the dashboard and see users", async ({ page, context }) => {
-  await seedAlice();
-  await seedAdmin();
-  await signIn(context, adminUser.sessionToken);
-  await page.goto("/dashboard");
-
-  await expect(page.getByRole("heading", { name: "Admin Dashboard" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Alice", exact: true })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "alice", exact: true })).toBeVisible();
+  expect(res.status()).toBe(200);
+  expect(await res.json()).toMatchObject({ status: "ok" });
 });
