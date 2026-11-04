@@ -219,12 +219,20 @@ beats half-finishing a larger one you invented.
 
 ## 8. Working alongside other agents and developers
 
-The work is split into parallel workstreams in
-[`docs/workstreams.md`](docs/workstreams.md). Each has an owner, an explicit
-interface with its neighbours, and a definition of done.
+The work is split into **two tracks**, one per person, each running an agent
+against the same trunk. [`docs/collaboration.md`](docs/collaboration.md) is the
+coordination contract and the first thing to read. Your track's entry point is
+[#33 (Track A)](https://github.com/scottylabs-labrador/labrador-recruit/issues/33)
+or [#34 (Track B)](https://github.com/scottylabs-labrador/labrador-recruit/issues/34).
+[`docs/workstreams.md`](docs/workstreams.md) is the detail underneath.
 
-- **Claim your workstream before you start.** Two agents building the forms
-  module produce two incompatible schemas and a day of merge pain.
+- **You are not the only agent in this repository.** Before editing a file, check
+  which track owns it. If it belongs to the other track, comment on their issue
+  rather than changing it — an agent that "helpfully" fixes the other track's
+  code produces a conflict its human has to resolve without context.
+- **Read the issue before the code.** The issue has the decisions; the code has
+  only the result. Issue comments are the shared memory between two agents that
+  never talk to each other, so write back what you learn.
 - **Respect the interface boundary.** If you need something from a neighbouring
   workstream that does not exist yet, add the type or the stub in the shared
   package and leave it unimplemented with a `TODO(workstream-name)` marker.
@@ -292,6 +300,8 @@ migrate` from a firewalled laptop once exited 0 having applied nothing, and
 - [`docs/data-model.md`](docs/data-model.md) — tables and invariants
 - [`docs/api.md`](docs/api.md) — route table
 - [`docs/ui.md`](docs/ui.md) — pages, routes, components
+- [`docs/collaboration.md`](docs/collaboration.md) — the two tracks, the seams,
+  the merge protocol
 - [`docs/workstreams.md`](docs/workstreams.md) — who builds what
 - [`docs/local-development.md`](docs/local-development.md) — setup and
   troubleshooting

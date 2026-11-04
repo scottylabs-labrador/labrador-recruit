@@ -3,15 +3,19 @@
 How the work splits so that several developers and agents can build in parallel
 without colliding.
 
-Each workstream has an **owner**, the **files it owns**, the **interface** it
-exposes to its neighbours, and a **definition of done**. The rule is simple:
+Each workstream has an **owning track**, the **files it owns**, the **interface**
+it exposes to its neighbours, and a **definition of done**. The rule is simple:
 
-> You may freely change files your workstream owns. You may _read_ anything. To
-> change a file another workstream owns, propose it — do not just do it.
+> You may freely change files your track owns. You may _read_ anything. To change
+> a file the other track owns, propose it — do not just do it.
 
-**Claim your workstream before you start.** Put your name in the table in
-section 1 and open a tracking issue. Two people independently building the forms
-module produce two incompatible schemas and a day of merge pain.
+Every workstream below is one or more GitHub issues, listed in section 1. **The
+issue is the specification**: it carries the requirements, the traps, and the
+definition of done. Read it before the code.
+
+Track assignment and the merge protocol are in
+[`collaboration.md`](collaboration.md). Start at your track's entry point —
+[#33 (Track A)][33] or [#34 (Track B)][34].
 
 ---
 
@@ -21,10 +25,11 @@ Workstreams depend on each other, and they will not finish in order. When you
 need something from a neighbour that does not exist yet:
 
 1. Add the **type** to the shared package the neighbour owns, with a
-   `TODO(workstream-name)` marker.
+   `TODO(track-a)` or `TODO(track-b)` marker.
 2. Add a throwing or empty-returning implementation next to it.
 3. Build against the type.
-4. Tell the owner in their tracking issue that a stub is waiting for them.
+4. **Comment on their issue** saying a stub is waiting. That is the cheapest
+   possible handoff, and it is the only one the other person's agent will see.
 
 Do **not** implement the neighbour's logic in your own layer "temporarily". That
 is how two sources of truth appear, and the one that is wrong is never the one
@@ -38,27 +43,67 @@ any workstream.
 
 ## 1. The split
 
-| #   | Workstream                            | Owner       | Depends on | Blocks        |
-| --- | ------------------------------------- | ----------- | ---------- | ------------- |
-| A   | Schema and migrations                 | _unclaimed_ | —          | everything    |
-| B   | Authorization core                    | _unclaimed_ | A          | C, D, E, F, G |
-| C   | Identity, invitations, grants         | _unclaimed_ | A, B       | D, G          |
-| D   | Cycles, teams, openings               | _unclaimed_ | A, B       | E, F          |
-| E   | Forms: schema, versioning, publish    | _unclaimed_ | A, B, D    | F, H          |
-| F   | Applications: draft, submit, withdraw | _unclaimed_ | A, B, D, E | G, I          |
-| G   | Reviews, rubrics, decisions           | _unclaimed_ | A, B, C, F | J             |
-| H   | Form builder UI                       | _unclaimed_ | E          | —             |
-| I   | Student portal UI                     | _unclaimed_ | E, F       | —             |
-| J   | Staff dashboards UI                   | _unclaimed_ | C, D, G    | —             |
-| K   | Files and object storage              | _unclaimed_ | A, B       | F, I          |
-| L   | Notifications and worker              | _unclaimed_ | A          | C, F, G       |
-| M   | Infrastructure and deployment         | _unclaimed_ | —          | —             |
-| N   | Design system and shared components   | _unclaimed_ | —          | H, I, J       |
+The fourteen workstreams below are grouped into **two tracks**, one per person.
+[`collaboration.md`](collaboration.md) is the coordination contract — who owns
+what, where the tracks touch, and how work merges. Read it first; this document
+is the detail underneath it.
 
-A and B are the critical path. **Nothing else should start until A has landed a
-first migration and B has landed the ability builder**, because every other
-workstream builds against those types. Expect to spend the first week with a
-small group on A and B and everybody else reading [`design.md`](design.md).
+| #   | Workstream                            | Track  | Issue                           | Depends on | Blocks        |
+| --- | ------------------------------------- | ------ | ------------------------------- | ---------- | ------------- |
+| A   | Schema and migrations                 | A      | [#8][8], [#9][9]                | —          | everything    |
+| B   | Authorization core                    | B      | [#10][10]                       | A          | C, D, E, F, G |
+| C   | Identity, invitations, grants         | B      | [#15][15], [#16][16]            | A, B       | D, G          |
+| D   | Cycles, teams, openings               | B      | [#14][14]                       | A, B       | E, F          |
+| E   | Forms: schema, versioning, publish    | A      | [#17][17], [#18][18]            | A, B, D    | F, H          |
+| F   | Applications: draft, submit, withdraw | A      | [#19][19], [#20][20]            | A, B, D, E | G, I          |
+| G   | Reviews, rubrics, decisions           | B      | [#26][26], [#27][27]            | A, B, C, F | J             |
+| H   | Form builder UI                       | A      | [#25][25]                       | E          | —             |
+| I   | Student portal UI                     | A      | [#22][22], [#23][23]            | E, F       | —             |
+| J   | Staff dashboards UI                   | B      | [#24][24], [#28][28], [#30][30] | C, D, G    | —             |
+| K   | Files and object storage              | A      | [#21][21]                       | A, B       | F, I          |
+| L   | Notifications and worker              | B      | [#29][29]                       | A          | C, F, G       |
+| M   | Infrastructure and deployment         | B      | [#11][11]                       | —          | —             |
+| N   | Design system and shared components   | shared | [#13][13]                       | —          | H, I, J       |
+
+Plus three that belong to neither track alone: [#12][12] (agree the seam
+interfaces), [#31][31] (authorization security review), and [#32][32]
+(accessibility pass).
+
+Track entry points: **[#33][33] — Track A** and **[#34][34] — Track B**. Each
+lists its own issues in dependency order and the context its owner needs.
+
+A and B are the critical path. **Nothing else should start until A has landed the
+initial migration and B has landed the ability builder**, because every other
+workstream builds against those types. Track B does infrastructure ([#11][11])
+while waiting, since that needs nothing from anybody.
+
+[8]: https://github.com/scottylabs-labrador/labrador-recruit/issues/8
+[9]: https://github.com/scottylabs-labrador/labrador-recruit/issues/9
+[10]: https://github.com/scottylabs-labrador/labrador-recruit/issues/10
+[11]: https://github.com/scottylabs-labrador/labrador-recruit/issues/11
+[12]: https://github.com/scottylabs-labrador/labrador-recruit/issues/12
+[13]: https://github.com/scottylabs-labrador/labrador-recruit/issues/13
+[14]: https://github.com/scottylabs-labrador/labrador-recruit/issues/14
+[15]: https://github.com/scottylabs-labrador/labrador-recruit/issues/15
+[16]: https://github.com/scottylabs-labrador/labrador-recruit/issues/16
+[17]: https://github.com/scottylabs-labrador/labrador-recruit/issues/17
+[18]: https://github.com/scottylabs-labrador/labrador-recruit/issues/18
+[19]: https://github.com/scottylabs-labrador/labrador-recruit/issues/19
+[20]: https://github.com/scottylabs-labrador/labrador-recruit/issues/20
+[21]: https://github.com/scottylabs-labrador/labrador-recruit/issues/21
+[22]: https://github.com/scottylabs-labrador/labrador-recruit/issues/22
+[23]: https://github.com/scottylabs-labrador/labrador-recruit/issues/23
+[24]: https://github.com/scottylabs-labrador/labrador-recruit/issues/24
+[25]: https://github.com/scottylabs-labrador/labrador-recruit/issues/25
+[26]: https://github.com/scottylabs-labrador/labrador-recruit/issues/26
+[27]: https://github.com/scottylabs-labrador/labrador-recruit/issues/27
+[28]: https://github.com/scottylabs-labrador/labrador-recruit/issues/28
+[29]: https://github.com/scottylabs-labrador/labrador-recruit/issues/29
+[30]: https://github.com/scottylabs-labrador/labrador-recruit/issues/30
+[31]: https://github.com/scottylabs-labrador/labrador-recruit/issues/31
+[32]: https://github.com/scottylabs-labrador/labrador-recruit/issues/32
+[33]: https://github.com/scottylabs-labrador/labrador-recruit/issues/33
+[34]: https://github.com/scottylabs-labrador/labrador-recruit/issues/34
 
 ---
 

@@ -39,10 +39,14 @@ and a green claim that was never verified is worse than a red one that was. See
 
 ## Session workflow
 
-**Starting work.** Check [`docs/workstreams.md`](docs/workstreams.md), confirm
-which workstream the task belongs to, and stay inside its interface boundary.
-Several people and agents are working in parallel; reaching into a neighbouring
-layer is how merge conflicts and duplicate schemas happen.
+**Starting work.** Read [`docs/collaboration.md`](docs/collaboration.md) and your
+track's entry point —
+[#33 (Track A)](https://github.com/scottylabs-labrador/labrador-recruit/issues/33)
+or [#34 (Track B)](https://github.com/scottylabs-labrador/labrador-recruit/issues/34).
+Confirm which track owns the task and stay inside its boundary. **Another agent is
+working the other track against this same trunk**, so reaching into their layer
+produces a conflict their human resolves without context. Pull and
+`bun run build:api` first: your context is from last session, trunk is not.
 
 **Planning.** For anything larger than a single-file change, plan before editing
 and get the plan agreed. For anything that changes the schema, the authorization
@@ -56,7 +60,8 @@ code is wrong.
 
 **Finishing.** Run `bun run check`. Say explicitly what you verified and what you
 did not. If part of the task is blocked, finish everything else and state plainly
-what you left and why.
+what you left and why. Write what you learned back to the issue — a flaky test, a
+library surprise, an ambiguous spec. The other agent will hit the same thing.
 
 ## Specific to this repository
 

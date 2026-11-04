@@ -103,11 +103,12 @@ access, in [`docs/local-development.md`](docs/local-development.md).
 
 ## Documentation
 
-**Read these three before writing code.** They are short, and they state which of
+**Read these four before writing code.** They are short, and they state which of
 your defaults are wrong here.
 
 | Document                                         | Contents                                               |
 | ------------------------------------------------ | ------------------------------------------------------ |
+| [`docs/collaboration.md`](docs/collaboration.md) | who owns what, the two tracks, how we merge            |
 | [`AGENTS.md`](AGENTS.md)                         | the rules every contributor and agent follows          |
 | [`docs/design.md`](docs/design.md)               | what we are building, why, and what is already decided |
 | [`docs/product-rules.md`](docs/product-rules.md) | the constraints that override everything               |
@@ -134,12 +135,19 @@ accurate about that system and is being replaced as this branch lands.
 
 ## Contributing
 
-Pick an unclaimed workstream in [`docs/workstreams.md`](docs/workstreams.md),
-claim it, and read its interface contract before you start. Several people and
-agents are building in parallel, so staying inside your boundary matters more
-than it usually does.
+The work is split into **two tracks**, one per person, each with its own agent.
+Open your track's entry point first:
 
-Process, branch naming, and the review bar are in
+- **[Track A — Apply](https://github.com/scottylabs-labrador/labrador-recruit/issues/33)**: the form system and everything a student touches
+- **[Track B — Review](https://github.com/scottylabs-labrador/labrador-recruit/issues/34)**: who is allowed in, and everything after a submission arrives
+
+[`docs/collaboration.md`](docs/collaboration.md) is the coordination contract:
+file ownership, the three seams where the tracks touch, the merge protocol, and
+the milestone gates. Every work item is a GitHub issue carrying its own
+requirements and definition of done.
+
+Trunk is `scottylabs-recruit`. **Do not target `main` — that is the live v1
+deployment.** Process, branch naming, and the review bar are in
 [`.github/CONTRIBUTING.md`](.github/CONTRIBUTING.md).
 
 ## License
