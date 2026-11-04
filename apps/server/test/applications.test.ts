@@ -511,6 +511,36 @@ describe("deadlines and application state", () => {
     expect(JSON.stringify(res.body)).not.toMatch(/decision|decided/i);
   });
 
+  it("records the status the application actually moved from", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await startApplication(applicant.headers);
+
+    await request(app).post(`/v1/me/applications/${applicationId}/withdraw`).set(applicant.headers);
+
+    // Postgres `RETURNING` yields the *new* row, so reading `status` from it
+    // gives back "withdrawn" — the value just written. An audit row saying an
+    // application moved from withdrawn to withdrawn records nothing.
+    const [event] = await testDb.select().from(applicationStatusEvent);
+    expect(event!.oldStatus).toBe("draft");
+  });
+
+  it("records a decided application as moving from decided", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await startApplication(applicant.headers);
+    await testDb
+      .update(application)
+      .set({ status: "decided" })
+      .where(eq(application.id, applicationId));
+
+    await request(app).post(`/v1/me/applications/${applicationId}/withdraw`).set(applicant.headers);
+
+    const [event] = await testDb
+      .select()
+      .from(applicationStatusEvent)
+      .where(eq(applicationStatusEvent.event, "withdrawn"));
+    expect(event!.oldStatus).toBe("decided");
+  });
+
   it("keeps the decision in the history after an unreleased withdrawal", async () => {
     const applicant = await seedApplicant("aquinn");
     const applicationId = await startApplication(applicant.headers);

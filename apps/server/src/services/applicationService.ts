@@ -12,7 +12,7 @@ import {
   recruitmentOpening,
   team,
 } from "@recruit/db/schema";
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 
 import { currentCycleOrder, hasOpened, visibleCycleWhere } from "../lib/cycleVisibility.ts";
 import { db } from "../lib/db.ts";
@@ -786,40 +786,47 @@ export const applicationService = {
 
     await db.transaction(async (tx) => {
       /*
-       * A conditional update, and the event only if it changed anything.
+       * Lock, re-check, write — in that order, inside the transaction.
        *
-       * The `withdrawnAt IS NULL` check used to sit outside the transaction, so
-       * two requests in flight at once could both pass it and both write an
-       * event — making the history say it happened twice. Letting the database
-       * decide who wins is the fix, and it needs no lock.
+       * The obvious shortcut is a conditional `UPDATE` with `RETURNING`, and it
+       * is wrong twice over. Postgres `RETURNING` yields the **new** row, so
+       * reading `status` from it gives back "withdrawn" — the value just
+       * written — and the audit row then records an application moving from
+       * withdrawn to withdrawn, which records nothing at all. Locking first is
+       * what makes the prior status knowable *and* closes the window in which a
+       * committee could record a decision between the check and the write.
+       *
+       * `FOR UPDATE` on this one row, so two withdrawals in flight serialize
+       * against each other and the second finds the first already done.
        */
-      const updated = await tx
-        .update(application)
-        .set({ status: "withdrawn", withdrawnAt: now, updatedAt: now })
-        .where(
-          and(
-            eq(application.id, applicationId),
-            isNull(application.withdrawnAt),
-            // The status gate belongs in the predicate too, not only in the
-            // check above. A committee could record a decision between the read
-            // and this write, and without it the decision would be overwritten
-            // by a withdrawal that was authorized against stale state.
-            inArray(application.status, [...withdrawable]),
-          ),
-        )
-        .returning({ id: application.id, oldStatus: application.status });
+      const [locked] = await tx
+        .select({ status: application.status, withdrawnAt: application.withdrawnAt })
+        .from(application)
+        .where(eq(application.id, applicationId))
+        .for("update");
 
-      const changed = updated[0];
-      if (!changed) {
+      if (!locked || locked.withdrawnAt !== null) {
+        // Already withdrawn, by us a moment ago or by a concurrent request.
+        // Idempotent, so this is a no-op rather than an error — and crucially
+        // no second event, which would make the history say it happened twice.
         return;
       }
+      if (!withdrawable.includes(locked.status as (typeof WITHDRAWABLE_BEFORE_RELEASE)[number])) {
+        // A decision landed between the earlier read and this lock. Refusing
+        // here rather than overwriting it is the point of taking the lock.
+        throw new ConflictError("This application can no longer be withdrawn.");
+      }
+
+      await tx
+        .update(application)
+        .set({ status: "withdrawn", withdrawnAt: now, updatedAt: now })
+        .where(eq(application.id, applicationId));
 
       await tx.insert(applicationStatusEvent).values({
         applicationId,
-        // From the row the database actually changed, so the history records
-        // what it moved from rather than what we read a moment earlier. Those
-        // differ exactly when a committee wrote a decision in between.
-        oldStatus: changed.oldStatus,
+        // The status under the lock, which is what the application genuinely
+        // moved from.
+        oldStatus: locked.status,
         newStatus: "withdrawn",
         event: "withdrawn",
         // Null, because this is the applicant's own act. Naming a staff member
