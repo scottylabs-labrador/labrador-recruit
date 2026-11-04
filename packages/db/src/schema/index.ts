@@ -4,6 +4,7 @@ export * from "./auth.ts";
 export * from "./decisions.ts";
 export * from "./enums.ts";
 export * from "./imports.ts";
+export * from "./org.ts";
 export * from "./recruitment.ts";
 export * from "./reviews.ts";
 

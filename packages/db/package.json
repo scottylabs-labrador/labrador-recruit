@@ -6,9 +6,11 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.5",
     "@types/pg": "^8.21.0",
     "drizzle-kit": "^0.31.10",
-    "drizzle-seed": "^0.3.1"
+    "drizzle-seed": "^0.3.1",
+    "vitest": "^4.0.18"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -21,7 +23,8 @@
     "db:migrate": "secretspec run -P local -- bunx drizzle-kit migrate",
     "db:seed": "secretspec run -P local -- bun run src/seedCli.ts",
     "db:studio": "secretspec run -P local -- bunx drizzle-kit studio",
-    "migrate:deploy": "drizzle-kit migrate"
+    "migrate:deploy": "drizzle-kit migrate",
+    "test": "vitest run"
   },
   "type": "module"
 }

@@ -119,3 +119,26 @@ export const importRowStatus = pgEnum("import_row_status", [
   "skipped",
   "error",
 ]);
+
+/**
+ * A role a `permission_grant` confers.
+ *
+ * Layered on top of the global `admin | user | guest` role rather than
+ * replacing it. Holding the ScottyLabs admin group lets somebody create a cycle
+ * and issue grants; it does not let them read applicant data.
+ */
+export const grantRole = pgEnum("grant_role", [
+  "org_admin",
+  "committee_director",
+  "question_editor",
+  "reviewer",
+]);
+
+/**
+ * What a grant applies to.
+ *
+ * `organization` grants carry no team; `team` grants must name one. The database
+ * enforces that pairing with a CHECK, because a grant with the wrong shape is
+ * either authority nobody intended or authority that silently applies nowhere.
+ */
+export const grantScope = pgEnum("grant_scope", ["organization", "team"]);
