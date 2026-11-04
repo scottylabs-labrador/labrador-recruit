@@ -1,5 +1,7 @@
+import { account, user } from "@recruit/db/schema";
 import jwt from "jsonwebtoken";
 
+import { testDb } from "./harness.ts";
 import { privateKeyPem } from "./keys.ts";
 
 /**
@@ -22,4 +24,35 @@ export function authHeader(opts: { sub: string; groups?: string[] }) {
     expiresIn: "1h",
   });
   return { Authorization: `Bearer ${token}` };
+}
+
+/**
+ * A signed-in CMU account holding no authority at all.
+ *
+ * The `account` row is what links the identity provider's subject to our
+ * `user.id`, and `user.id` is the Andrew ID. Without it a perfectly valid token
+ * resolves to nobody — which is the shape of a real first sign-in, and worth
+ * being able to construct deliberately.
+ */
+export async function seedApplicant(
+  andrewId: string,
+): Promise<{ andrewId: string; headers: Record<string, string> }> {
+  const now = new Date();
+  await testDb.insert(user).values({
+    id: andrewId,
+    name: andrewId,
+    email: `${andrewId}@andrew.cmu.edu`,
+    emailVerified: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await testDb.insert(account).values({
+    id: `${andrewId}-account`,
+    accountId: `${andrewId}-sub`,
+    providerId: "keycloak",
+    userId: andrewId,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return { andrewId, headers: authHeader({ sub: `${andrewId}-sub` }) };
 }

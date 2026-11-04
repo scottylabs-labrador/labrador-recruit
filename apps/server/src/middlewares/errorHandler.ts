@@ -43,6 +43,24 @@ export class NotFoundError extends HttpError {
   }
 }
 
+/**
+ * The request was understood but conflicts with the current state.
+ *
+ * Carries `details` so a caller can act on it rather than just read it — a
+ * stale draft write returns the revision it should have used, which is what
+ * lets the client tell somebody their other tab is ahead instead of silently
+ * discarding one side.
+ */
+export class ConflictError extends HttpError {
+  details: Record<string, unknown> | undefined;
+
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(409, message);
+    this.name = "Conflict";
+    this.details = details;
+  }
+}
+
 export class InternalServerError extends HttpError {
   constructor(message: string) {
     super(500, message);
@@ -78,6 +96,10 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
   }
 
   // The HTTP errors take priority over unknown errors
+  if (err instanceof ConflictError) {
+    return res.status(err.status).json({ name: err.name, message: err.message, ...err.details });
+  }
+
   if (err instanceof HttpError) {
     return res.status(err.status).json({ name: err.name, message: err.message });
   }
