@@ -8,6 +8,11 @@ import {
 } from "@recruit/db/schema";
 import { and, asc, desc, eq } from "drizzle-orm";
 
+import {
+  APPLICANT_VISIBLE_CYCLE_STATUSES,
+  APPLICANT_VISIBLE_OPENING_STATUSES,
+  hasOpened,
+} from "../lib/cycleVisibility.ts";
 import { db } from "../lib/db.ts";
 
 /** A published form, as an applicant receives it. */
@@ -19,57 +24,6 @@ export interface PublishedForm {
   version: number;
   questions: QuestionDefinition[];
 }
-
-/**
- * Cycle statuses whose forms an applicant may read.
- *
- * `draft` and `scheduled` are excluded: the form may be finished, but the cycle
- * has not been announced, and serving it would let somebody discover next
- * season's questions early.
- *
- * `archived` **is** included, so a past application stays readable alongside the
- * questions it was actually answering. Hiding it would make last season's
- * answers meaningless.
- */
-const READABLE_CYCLE_STATUSES = [
-  "open",
-  "closed",
-  "reviewing",
-  "decisions_released",
-  "archived",
-] as const;
-
-/**
- * Whether a window has started.
- *
- * An unset `opensAt` means "no later gate than the status", which is the common
- * case. A set one is authoritative: a director who marks an opening `open` and
- * dates it next week means next week, and trusting the status alone would
- * publish the questions early.
- *
- * `closesAt` deliberately does **not** appear here. A passed deadline stops
- * submissions, not reading — an applicant who submitted needs the questions to
- * stay legible beside their answers.
- *
- * The comparison is direct because these columns are `timestamptz`. The cycle's
- * `time_zone` is for displaying a deadline and for interpreting one a director
- * typed, not for deciding whether it has passed.
- */
-function hasOpened(opensAt: Date | null, now: Date): boolean {
-  return opensAt === null || opensAt <= now;
-}
-
-/**
- * Opening statuses whose committee form an applicant may read.
- *
- * The cycle status is not enough, and that is the whole point of these two
- * being independent: a cycle can be `open` while a committee has not opened,
- * and checking only the cycle would serve a form nobody is supposed to see yet.
- *
- * `closed` is readable so a submitted application stays legible alongside the
- * questions it was answering.
- */
-const READABLE_OPENING_STATUSES = ["open", "closed"] as const;
 
 /**
  * Whether an id is shaped like one we issued.
@@ -130,8 +84,8 @@ export const formService = {
     const now = new Date();
 
     const cycleReadable =
-      READABLE_CYCLE_STATUSES.includes(
-        row.cycleStatus as (typeof READABLE_CYCLE_STATUSES)[number],
+      APPLICANT_VISIBLE_CYCLE_STATUSES.includes(
+        row.cycleStatus as (typeof APPLICANT_VISIBLE_CYCLE_STATUSES)[number],
       ) && hasOpened(row.cycleOpensAt, now);
     if (!cycleReadable) {
       return null;
@@ -139,8 +93,8 @@ export const formService = {
 
     if (row.kind === "committee") {
       const openingReadable =
-        READABLE_OPENING_STATUSES.includes(
-          row.openingStatus as (typeof READABLE_OPENING_STATUSES)[number],
+        APPLICANT_VISIBLE_OPENING_STATUSES.includes(
+          row.openingStatus as (typeof APPLICANT_VISIBLE_OPENING_STATUSES)[number],
         ) && hasOpened(row.openingOpensAt, now);
       if (!openingReadable) {
         return null;

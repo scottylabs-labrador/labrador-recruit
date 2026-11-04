@@ -14,6 +14,7 @@ import {
 } from "@recruit/db/schema";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 
+import { currentCycleOrder, hasOpened, visibleCycleWhere } from "../lib/cycleVisibility.ts";
 import { db } from "../lib/db.ts";
 import { ConflictError, NotFoundError } from "../middlewares/errorHandler.ts";
 
@@ -83,17 +84,74 @@ function projectStatus(status: string, decisionsReleasedAt: Date | null): Applic
   }
 }
 
-/** Cycle statuses in which an applicant may still change their own work. */
+/**
+ * Cycle statuses in which an applicant may still change their own work.
+ *
+ * Narrower than `APPLICANT_VISIBLE_CYCLE_STATUSES` in `cycleVisibility.ts`: a
+ * closed or archived cycle
+ * is readable but not writable, which is the asymmetry that lets somebody read
+ * back what they submitted without being able to alter it afterwards.
+ */
 const WRITABLE_CYCLE_STATUSES = ["open"] as const;
 
-function assertWritable(cycle: { status: string; opensAt: Date | null }, now: Date): void {
+/**
+ * Whether a window is open for writing *right now*.
+ *
+ * Note the asymmetry with reading, which is deliberate and documented in
+ * `cycleVisibility.ts`: a read ignores `closesAt` so a submitted application
+ * stays legible beside its questions, and a **write** enforces it. Collapsing
+ * the two would either lock people out of their own history or let them edit
+ * after the deadline.
+ *
+ * The status is not sufficient on its own. A transition job may not have run,
+ * or nobody flipped it — the deadline is the authority, which is the entire
+ * point of evaluating it server-side.
+ */
+function isWritableWindow(
+  window: { opensAt: Date | null; closesAt: Date | null },
+  now: Date,
+): boolean {
+  return hasOpened(window.opensAt, now) && (window.closesAt === null || window.closesAt > now);
+}
+
+function assertWritable(
+  cycle: { status: string; opensAt: Date | null; closesAt: Date | null },
+  now: Date,
+): void {
   if (!WRITABLE_CYCLE_STATUSES.includes(cycle.status as (typeof WRITABLE_CYCLE_STATUSES)[number])) {
     throw new ConflictError("This recruitment cycle is not accepting changes.");
   }
-  if (cycle.opensAt !== null && cycle.opensAt > now) {
+  if (!hasOpened(cycle.opensAt, now)) {
     throw new ConflictError("This recruitment cycle has not opened yet.");
   }
+  if (cycle.closesAt !== null && cycle.closesAt <= now) {
+    throw new ConflictError("The deadline for this recruitment cycle has passed.");
+  }
 }
+
+/**
+ * Application statuses an applicant may still edit.
+ *
+ * Only `draft`. Once submitted, a committee may already have read it, and a
+ * silent edit afterwards would change what they were looking at.
+ */
+const EDITABLE_APPLICATION_STATUSES = ["draft"] as const;
+
+/**
+ * Application statuses an applicant may withdraw from.
+ *
+ * Everything live. Not `decided`: withdrawing after a committee has concluded is
+ * a different act — declining an offer — with its own event and its own
+ * consequences, and overwriting the status with `withdrawn` would erase what
+ * the committee decided. Not `withdrawn`, which is the idempotent no-op.
+ */
+const WITHDRAWABLE_APPLICATION_STATUSES = [
+  "draft",
+  "submitted",
+  "under_review",
+  "shortlisted",
+  "interview",
+] as const;
 
 /**
  * The caller's profile for the current cycle, created if this is their first visit.
@@ -103,16 +161,26 @@ function assertWritable(cycle: { status: string; opensAt: Date | null }, now: Da
  * cycle", so it appears when they first look.
  */
 async function ensureProfile(userId: string) {
+  const now = new Date();
   const [cycle] = await db
     .select()
     .from(recruitmentCycle)
+    /*
+     * Only cycles an applicant may see, and only ones that have opened.
+     *
+     * Without the filter, a draft cycle somebody is setting up for next season
+     * became "the current cycle" — disclosing its name and dates, and detaching
+     * every applicant from the cycle they were actually applying to.
+     */
+    .where(visibleCycleWhere(now))
     // The current cycle is the most recently opened one. There is deliberately
     // no "is current" flag: two rows could both claim it, and the question
     // "which cycle am I applying to" would have two answers.
-    .orderBy(desc(recruitmentCycle.opensAt))
+    .orderBy(currentCycleOrder)
     .limit(1);
 
   if (!cycle) {
+    // Deliberately says nothing about a cycle that exists but is hidden.
     throw new NotFoundError("There is no recruitment cycle at the moment.");
   }
 
@@ -124,7 +192,6 @@ async function ensureProfile(userId: string) {
     return { profile: existing, cycle };
   }
 
-  const now = new Date();
   const [created] = await db
     .insert(candidateProfile)
     .values({ userId, cycleId: cycle.id, createdAt: now, updatedAt: now })
@@ -263,6 +330,9 @@ async function ownedApplication(profileId: string, applicationId: string) {
       openingId: application.openingId,
       committeeName: team.name,
       committeeSlug: team.slug,
+      openingStatus: recruitmentOpening.status,
+      openingOpensAt: recruitmentOpening.opensAt,
+      openingClosesAt: recruitmentOpening.closesAt,
       cycleStatus: recruitmentCycle.status,
       cycleOpensAt: recruitmentCycle.opensAt,
       decisionsReleasedAt: recruitmentCycle.decisionsReleasedAt,
@@ -341,6 +411,7 @@ export const applicationService = {
         id: recruitmentOpening.id,
         status: recruitmentOpening.status,
         opensAt: recruitmentOpening.opensAt,
+        closesAt: recruitmentOpening.closesAt,
         committeeName: team.name,
         committeeSlug: team.slug,
       })
@@ -353,8 +424,12 @@ export const applicationService = {
     if (opening.status !== "open") {
       throw new ConflictError("This committee is not accepting applications.");
     }
-    if (opening.opensAt !== null && opening.opensAt > now) {
-      throw new ConflictError("This committee has not opened yet.");
+    if (!isWritableWindow(opening, now)) {
+      throw new ConflictError(
+        hasOpened(opening.opensAt, now)
+          ? "The deadline for this committee has passed."
+          : "This committee has not opened yet.",
+      );
     }
 
     /*
@@ -395,31 +470,48 @@ export const applicationService = {
       };
     }
 
-    if (cycle.maxCommitteesPerApplicant !== null) {
-      const held = await db
-        .select({ id: application.id })
-        .from(application)
-        .where(
-          and(eq(application.candidateProfileId, profile.id), isNull(application.withdrawnAt)),
-        );
-      if (held.length >= cycle.maxCommitteesPerApplicant) {
-        throw new ConflictError(
-          `This cycle allows ${cycle.maxCommitteesPerApplicant} committee${
-            cycle.maxCommitteesPerApplicant === 1 ? "" : "s"
-          } per applicant. Withdraw one to apply elsewhere.`,
-        );
-      }
-    }
+    /*
+     * Counting and inserting in one transaction, behind a lock on the profile.
+     *
+     * Two tabs submitting at once would otherwise both pass the count and both
+     * insert — the classic check-then-act race, and here it quietly breaks a
+     * limit the organization set. Locking the profile serializes one
+     * applicant's creations without contending with anybody else's.
+     */
+    const created = await db.transaction(async (tx) => {
+      await tx
+        .select({ id: candidateProfile.id })
+        .from(candidateProfile)
+        .where(eq(candidateProfile.id, profile.id))
+        .for("update");
 
-    const [created] = await db
-      .insert(application)
-      .values({
-        candidateProfileId: profile.id,
-        openingId,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning({ id: application.id });
+      if (cycle.maxCommitteesPerApplicant !== null) {
+        const held = await tx
+          .select({ id: application.id })
+          .from(application)
+          .where(
+            and(eq(application.candidateProfileId, profile.id), isNull(application.withdrawnAt)),
+          );
+        if (held.length >= cycle.maxCommitteesPerApplicant) {
+          throw new ConflictError(
+            `This cycle allows ${cycle.maxCommitteesPerApplicant} committee${
+              cycle.maxCommitteesPerApplicant === 1 ? "" : "s"
+            } per applicant. Withdraw one to apply elsewhere.`,
+          );
+        }
+      }
+
+      const [row] = await tx
+        .insert(application)
+        .values({
+          candidateProfileId: profile.id,
+          openingId,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning({ id: application.id });
+      return row;
+    });
 
     return {
       created: true,
@@ -471,8 +563,30 @@ export const applicationService = {
   ): Promise<DraftSaved> => {
     const now = new Date();
     const { profile, cycle } = await ensureProfile(userId);
-    await ownedApplication(profile.id, applicationId);
+    const row = await ownedApplication(profile.id, applicationId);
     assertWritable(cycle, now);
+
+    // Withdrawing means "do not consider me". Editing afterwards would put work
+    // in front of a committee for an application the applicant had retracted.
+    if (row.withdrawnAt !== null) {
+      throw new ConflictError("This application has been withdrawn.");
+    }
+    if (
+      !EDITABLE_APPLICATION_STATUSES.includes(
+        row.status as (typeof EDITABLE_APPLICATION_STATUSES)[number],
+      )
+    ) {
+      throw new ConflictError("This application has already been submitted.");
+    }
+
+    // A committee may close earlier than its cycle. Checking only the cycle
+    // would let somebody keep editing after their committee had stopped.
+    if (
+      row.openingStatus !== "open" ||
+      !isWritableWindow({ opensAt: row.openingOpensAt, closesAt: row.openingClosesAt }, now)
+    ) {
+      throw new ConflictError("This committee is no longer accepting changes.");
+    }
 
     const [committeeForm] = await db
       .select({ id: form.id })
@@ -596,6 +710,28 @@ export const applicationService = {
     const { profile, cycle } = await ensureProfile(userId);
     const row = await ownedApplication(profile.id, applicationId);
 
+    /*
+     * Deliberately more permissive than editing.
+     *
+     * "Please do not consider me" is reasonable after a deadline, and even
+     * while a committee is reviewing. Changing your answers then is not. So
+     * this checks the cycle is not archived rather than calling
+     * `assertWritable`.
+     */
+    if (cycle.status === "archived") {
+      throw new ConflictError("This recruitment cycle is closed.");
+    }
+    if (
+      row.withdrawnAt === null &&
+      !WITHDRAWABLE_APPLICATION_STATUSES.includes(
+        row.status as (typeof WITHDRAWABLE_APPLICATION_STATUSES)[number],
+      )
+    ) {
+      throw new ConflictError(
+        "A decision has been recorded for this application, so it can no longer be withdrawn.",
+      );
+    }
+
     if (row.withdrawnAt !== null) {
       return {
         applicationId: row.id,
@@ -609,10 +745,24 @@ export const applicationService = {
     }
 
     await db.transaction(async (tx) => {
-      await tx
+      /*
+       * A conditional update, and the event only if it changed anything.
+       *
+       * The `withdrawnAt IS NULL` check used to sit outside the transaction, so
+       * two requests in flight at once could both pass it and both write an
+       * event — making the history say it happened twice. Letting the database
+       * decide who wins is the fix, and it needs no lock.
+       */
+      const updated = await tx
         .update(application)
         .set({ status: "withdrawn", withdrawnAt: now, updatedAt: now })
-        .where(eq(application.id, applicationId));
+        .where(and(eq(application.id, applicationId), isNull(application.withdrawnAt)))
+        .returning({ id: application.id });
+
+      if (updated.length === 0) {
+        return;
+      }
+
       await tx.insert(applicationStatusEvent).values({
         applicationId,
         oldStatus: row.status,
@@ -624,8 +774,6 @@ export const applicationService = {
         createdAt: now,
       });
     });
-
-    void cycle;
     return {
       applicationId: row.id,
       openingId: row.openingId,

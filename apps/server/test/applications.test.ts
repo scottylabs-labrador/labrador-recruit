@@ -28,7 +28,14 @@ import { seedApplicant } from "./fixtures.ts";
 import { testDb } from "./harness.ts";
 
 const now = new Date();
-const past = new Date(Date.now() - 24 * 60 * 60 * 1000);
+const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+/**
+ * A deadline that has passed but is still after `past`.
+ *
+ * `recruitment_cycle_window_ck` requires `closes_at > opens_at`, so a test
+ * cannot simply reuse `past` for both — the constraint refuses it, correctly.
+ */
+const passedDeadline = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
 let cycleId: string;
 let labradorOpening: string;
@@ -194,6 +201,76 @@ describe("GET /v1/me/profile", () => {
     expect(res.status).toBe(401);
   });
 
+  it("does not treat a cycle with no opening date as the current one", async () => {
+    const applicant = await seedApplicant("aquinn");
+    // The state a freshly created draft cycle is in: no dates yet.
+    await testDb.insert(recruitmentCycle).values({
+      slug: "fall-2027",
+      name: "Fall 2027",
+      status: "draft",
+      createdBy: "dchen",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await request(app).get("/v1/me/profile").set(applicant.headers);
+
+    // `ORDER BY opens_at DESC` puts NULLs first in Postgres, so without an
+    // explicit filter an org admin creating next season would silently move
+    // every current applicant onto it.
+    expect(res.body.cycleSlug).toBe("spring-2027");
+  });
+
+  it("does not treat a later draft cycle as the current one", async () => {
+    const applicant = await seedApplicant("aquinn");
+    await testDb.insert(recruitmentCycle).values({
+      slug: "fall-2027",
+      name: "Fall 2027",
+      status: "draft",
+      opensAt: new Date(Date.now() + 90 * 86_400_000),
+      createdBy: "dchen",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // A draft cycle is not announced. Its name and dates are not an applicant's
+    // to know, and naming it as current would also detach them from the cycle
+    // they are actually applying to.
+    const res = await request(app).get("/v1/me/profile").set(applicant.headers);
+
+    expect(res.body.cycleSlug).toBe("spring-2027");
+    expect(JSON.stringify(res.body)).not.toContain("Fall 2027");
+  });
+
+  it("does not treat an announced but unopened cycle as the current one", async () => {
+    const applicant = await seedApplicant("aquinn");
+    await testDb.insert(recruitmentCycle).values({
+      slug: "fall-2027",
+      name: "Fall 2027",
+      status: "scheduled",
+      opensAt: new Date(Date.now() + 90 * 86_400_000),
+      createdBy: "dchen",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await request(app).get("/v1/me/profile").set(applicant.headers);
+
+    expect(res.body.cycleSlug).toBe("spring-2027");
+  });
+
+  it("reports that there is no cycle rather than naming a hidden one", async () => {
+    const applicant = await seedApplicant("aquinn");
+    await testDb.update(recruitmentCycle).set({ status: "draft" });
+
+    // Every cycle is hidden. 404 is the honest answer; naming the draft would
+    // disclose it, and a 500 would blame the server for a correct request.
+    const res = await request(app).get("/v1/me/profile").set(applicant.headers);
+
+    expect(res.status).toBe(404);
+    expect(JSON.stringify(res.body)).not.toContain("spring-2027");
+  });
+
   it("refuses a token whose subject matches no account", async () => {
     // A perfectly valid token for somebody we have never seen. This is the
     // shape of a first sign-in before the auth callback has written the row.
@@ -324,6 +401,177 @@ describe("POST /v1/me/applications", () => {
 
     expect(res.status).toBe(409);
     expect(res.body.message).toMatch(/1 committee/i);
+  });
+});
+
+describe("deadlines and application state", () => {
+  async function startApplication(headers: Record<string, string>) {
+    const res = await request(app)
+      .post("/v1/me/applications")
+      .set(headers)
+      .send({ openingId: labradorOpening });
+    return res.body.applicationId as string;
+  }
+
+  it("refuses a new application once the cycle deadline has passed", async () => {
+    const applicant = await seedApplicant("aquinn");
+    await testDb.update(recruitmentCycle).set({ closesAt: passedDeadline });
+
+    // The status still says open — a transition job may not have run yet, or
+    // nobody flipped it. The deadline is the authority, which is the whole
+    // point of evaluating it server-side.
+    const res = await request(app)
+      .post("/v1/me/applications")
+      .set(applicant.headers)
+      .send({ openingId: labradorOpening });
+
+    expect(res.status).toBe(409);
+  });
+
+  it("refuses a draft save once the cycle deadline has passed", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await startApplication(applicant.headers);
+    await testDb.update(recruitmentCycle).set({ closesAt: passedDeadline });
+
+    const res = await request(app)
+      .patch(`/v1/me/applications/${applicationId}/draft`)
+      .set(applicant.headers)
+      .send({ revision: 0, answers: [{ questionKey: "major", value: "Too late" }] });
+
+    expect(res.status).toBe(409);
+  });
+
+  it("refuses a draft save once the committee's own deadline has passed", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await startApplication(applicant.headers);
+    await testDb
+      .update(recruitmentOpening)
+      .set({ closesAt: passedDeadline })
+      .where(eq(recruitmentOpening.id, labradorOpening));
+
+    // A committee may close earlier than the cycle. Checking only the cycle
+    // would let somebody keep editing after their committee had stopped.
+    const res = await request(app)
+      .patch(`/v1/me/applications/${applicationId}/draft`)
+      .set(applicant.headers)
+      .send({ revision: 0, answers: [{ questionKey: "major", value: "Too late" }] });
+
+    expect(res.status).toBe(409);
+  });
+
+  it("refuses a draft save on a withdrawn application", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await startApplication(applicant.headers);
+    await request(app).post(`/v1/me/applications/${applicationId}/withdraw`).set(applicant.headers);
+
+    // Withdrawing means "do not consider me". Editing afterwards would put work
+    // in front of a committee for an application the applicant had retracted.
+    const res = await request(app)
+      .patch(`/v1/me/applications/${applicationId}/draft`)
+      .set(applicant.headers)
+      .send({ revision: 0, answers: [{ questionKey: "major", value: "Back again" }] });
+
+    expect(res.status).toBe(409);
+  });
+
+  it("refuses a draft save once the application has been submitted", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await startApplication(applicant.headers);
+    await testDb
+      .update(application)
+      .set({ status: "submitted", submittedAt: now })
+      .where(eq(application.id, applicationId));
+
+    const res = await request(app)
+      .patch(`/v1/me/applications/${applicationId}/draft`)
+      .set(applicant.headers)
+      .send({ revision: 0, answers: [{ questionKey: "major", value: "Edited after" }] });
+
+    expect(res.status).toBe(409);
+  });
+
+  it("refuses to withdraw once a decision has been recorded", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await startApplication(applicant.headers);
+    await testDb
+      .update(application)
+      .set({ status: "decided" })
+      .where(eq(application.id, applicationId));
+
+    // Withdrawing after a committee has decided is a different act — declining
+    // an offer — with its own event and its own consequences. Silently
+    // overwriting the decision as "withdrawn" would erase what the committee
+    // concluded.
+    const res = await request(app)
+      .post(`/v1/me/applications/${applicationId}/withdraw`)
+      .set(applicant.headers);
+
+    expect(res.status).toBe(409);
+  });
+
+  it("refuses to withdraw in an archived cycle", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await startApplication(applicant.headers);
+    await testDb.update(recruitmentCycle).set({ status: "archived" });
+
+    const res = await request(app)
+      .post(`/v1/me/applications/${applicationId}/withdraw`)
+      .set(applicant.headers);
+
+    expect(res.status).toBe(409);
+  });
+
+  it("allows withdrawing after the deadline, because that is removing yourself", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await startApplication(applicant.headers);
+    await testDb.update(recruitmentCycle).set({ status: "reviewing" });
+
+    // Deliberately more permissive than editing. "Please do not consider me" is
+    // reasonable after a deadline; changing your answers is not.
+    const res = await request(app)
+      .post(`/v1/me/applications/${applicationId}/withdraw`)
+      .set(applicant.headers);
+
+    expect(res.status).toBe(200);
+  });
+
+  it("records one event when two withdrawals arrive together", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await startApplication(applicant.headers);
+
+    // The check was outside the transaction, so two in flight at once could
+    // both pass it and both write an event — making the history say it happened
+    // twice.
+    await Promise.all([
+      request(app).post(`/v1/me/applications/${applicationId}/withdraw`).set(applicant.headers),
+      request(app).post(`/v1/me/applications/${applicationId}/withdraw`).set(applicant.headers),
+    ]);
+
+    const events = await testDb.select().from(applicationStatusEvent);
+    expect(events).toHaveLength(1);
+  });
+
+  it("holds the committee cap when two applications are created together", async () => {
+    const applicant = await seedApplicant("aquinn");
+    await testDb.update(recruitmentCycle).set({ maxCommitteesPerApplicant: 1 });
+    // Make the profile exist first, so both requests race the cap rather than
+    // the profile's own unique index.
+    await request(app).get("/v1/me/profile").set(applicant.headers);
+
+    await Promise.all([
+      request(app)
+        .post("/v1/me/applications")
+        .set(applicant.headers)
+        .send({ openingId: labradorOpening }),
+      request(app)
+        .post("/v1/me/applications")
+        .set(applicant.headers)
+        .send({ openingId: designOpening }),
+    ]);
+
+    // Counting and then inserting is two steps. Both could pass the count.
+    const rows = await testDb.select().from(application);
+    expect(rows).toHaveLength(1);
   });
 });
 
