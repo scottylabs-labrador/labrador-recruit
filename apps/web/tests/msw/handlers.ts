@@ -167,10 +167,162 @@ export const applyCalls: string[] = [];
  */
 export const preferenceCalls: string[][] = [];
 
+/**
+ * Mirrors `QuestionDefinition` from `@recruit/common`, field for field.
+ *
+ * The first version of this fixture invented its own names - `id`,
+ * `helpText`, `visibleWhen` - and the form rendered nothing at all, because a
+ * fixture that does not match the contract tests a product that does not
+ * exist. These names are the contract.
+ */
+export interface QuestionDefinitionFixture {
+  questionKey: string;
+  type: string;
+  label: string;
+  description?: string | null;
+  required: boolean;
+  position: number;
+  config: Record<string, unknown> | null;
+  visibilityRule: Record<string, unknown> | null;
+}
+
+export interface PublishedFormFixture {
+  formId: string;
+  kind: "common" | "committee";
+  title: string;
+  description: string | null;
+  version: number;
+  questions: QuestionDefinitionFixture[];
+}
+
+export const COMMON_FORM: PublishedFormFixture = {
+  formId: "form-common",
+  kind: "common",
+  title: "Shared questions",
+  description: "Answered once and reused for every committee.",
+  version: 1,
+  questions: [
+    {
+      questionKey: "major",
+      type: "short_text",
+      label: "Your major",
+      required: true,
+      position: 1,
+      config: null,
+      visibilityRule: null,
+    },
+    {
+      questionKey: "year",
+      type: "single_select",
+      label: "Year",
+      required: true,
+      position: 2,
+      config: { choices: ["First year", "Sophomore", "Junior", "Senior"] },
+      visibilityRule: null,
+    },
+    {
+      questionKey: "transferFrom",
+      type: "short_text",
+      label: "Which school did you transfer from?",
+      required: false,
+      position: 3,
+      config: null,
+      visibilityRule: { equals: { questionKey: "year", value: "Junior" } },
+    },
+  ],
+};
+
+export const COMMITTEE_FORM: PublishedFormFixture = {
+  formId: "form-labrador",
+  kind: "committee",
+  title: "Labrador application",
+  description: null,
+  version: 1,
+  questions: [
+    {
+      questionKey: "why",
+      type: "long_text",
+      label: "Why Labrador?",
+      required: true,
+      position: 1,
+      config: null,
+      visibilityRule: null,
+    },
+  ],
+};
+
+let forms: PublishedFormFixture[] = [COMMON_FORM, COMMITTEE_FORM];
+
+export function setForms(next: PublishedFormFixture[]) {
+  forms = next;
+}
+
+export interface CommonResponseFixture {
+  formId: string;
+  title: string;
+  description: string | null;
+  revision: number;
+  answers: Record<string, unknown>;
+  locked: boolean;
+}
+
+export const DEFAULT_COMMON_RESPONSE: CommonResponseFixture = {
+  formId: "form-common",
+  title: "Shared questions",
+  description: "Answered once and reused for every committee.",
+  revision: 0,
+  answers: {},
+  locked: false,
+};
+
+let commonResponse: CommonResponseFixture = DEFAULT_COMMON_RESPONSE;
+
+export function setCommonResponse(next: CommonResponseFixture) {
+  commonResponse = { ...next };
+}
+
+/** Answers and revisions per application, for the committee draft routes. */
+const applicationDrafts = new Map<
+  string,
+  { formId: string | null; revision: number; answers: Record<string, unknown> }
+>();
+
+export function setApplicationDraft(
+  applicationId: string,
+  draft: { formId: string | null; revision: number; answers: Record<string, unknown> },
+) {
+  applicationDrafts.set(applicationId, { ...draft });
+}
+
+/**
+ * Forces the next draft save to be refused as stale.
+ *
+ * A laptop and a phone both autosaving is the ordinary case rather than an
+ * edge case, so the page's behaviour on a 409 is a first-class thing to test:
+ * it must say the other tab is ahead and must not discard what was typed.
+ */
+let nextSaveConflicts = false;
+
+export function failNextDraftSaveWithConflict() {
+  nextSaveConflicts = true;
+}
+
+/** Every draft save the page sent, in order, with what it carried. */
+export const draftSaves: {
+  target: string;
+  revision: number;
+  answers: { questionKey: string; value: unknown }[];
+}[] = [];
+
 export function resetCatalogue() {
   withdrawCalls.length = 0;
   applyCalls.length = 0;
   preferenceCalls.length = 0;
+  draftSaves.length = 0;
+  forms = [COMMON_FORM, COMMITTEE_FORM];
+  commonResponse = { ...DEFAULT_COMMON_RESPONSE, answers: {} };
+  applicationDrafts.clear();
+  nextSaveConflicts = false;
   currentCycle = DEFAULT_CYCLE;
   openings = DEFAULT_OPENINGS;
   profile = DEFAULT_PROFILE;
@@ -207,6 +359,93 @@ export const handlers = [
   ),
 
   http.get(`${API}/v1/me/applications`, () => HttpResponse.json(applications)),
+
+  http.get(`${API}/v1/forms/:formId/published`, ({ params }) => {
+    const row = forms.find((candidate) => candidate.formId === String(params["formId"]));
+    return row === undefined
+      ? HttpResponse.json({ message: "Not found" }, { status: 404 })
+      : HttpResponse.json(row);
+  }),
+
+  http.get(`${API}/v1/me/common-response`, () => HttpResponse.json(commonResponse)),
+
+  http.patch(`${API}/v1/me/common-response/draft`, async ({ request }) => {
+    const body = (await request.json()) as {
+      revision: number;
+      answers: { questionKey: string; value: unknown }[];
+    };
+    draftSaves.push({ target: "common", revision: body.revision, answers: body.answers });
+
+    if (nextSaveConflicts) {
+      nextSaveConflicts = false;
+      return HttpResponse.json(
+        {
+          name: "ConflictError",
+          message: "Your answers changed somewhere else. Reload to see the newer version.",
+          revision: 9,
+        },
+        { status: 409 },
+      );
+    }
+    for (const answer of body.answers) {
+      commonResponse.answers[answer.questionKey] = answer.value;
+    }
+    commonResponse.revision += 1;
+    return HttpResponse.json({
+      revision: commonResponse.revision,
+      savedAt: "2027-01-20T15:04:00.000Z",
+    });
+  }),
+
+  http.get(`${API}/v1/me/applications/:applicationId`, ({ params }) => {
+    const id = String(params["applicationId"]);
+    const summary = applications.find((row) => row.applicationId === id);
+    const draft = applicationDrafts.get(id);
+    if (summary === undefined) {
+      return HttpResponse.json({ message: "Not found" }, { status: 404 });
+    }
+    return HttpResponse.json({
+      ...summary,
+      formId: draft?.formId ?? COMMITTEE_FORM.formId,
+      revision: draft?.revision ?? 0,
+      answers: draft?.answers ?? {},
+    });
+  }),
+
+  http.patch(`${API}/v1/me/applications/:applicationId/draft`, async ({ params, request }) => {
+    const id = String(params["applicationId"]);
+    const body = (await request.json()) as {
+      revision: number;
+      answers: { questionKey: string; value: unknown }[];
+    };
+    draftSaves.push({ target: id, revision: body.revision, answers: body.answers });
+
+    if (nextSaveConflicts) {
+      nextSaveConflicts = false;
+      return HttpResponse.json(
+        {
+          name: "ConflictError",
+          message: "Your answers changed somewhere else. Reload to see the newer version.",
+          revision: 9,
+        },
+        { status: 409 },
+      );
+    }
+    const current = applicationDrafts.get(id) ?? {
+      formId: COMMITTEE_FORM.formId,
+      revision: 0,
+      answers: {},
+    };
+    for (const answer of body.answers) {
+      current.answers[answer.questionKey] = answer.value;
+    }
+    current.revision += 1;
+    applicationDrafts.set(id, current);
+    return HttpResponse.json({
+      revision: current.revision,
+      savedAt: "2027-01-20T15:04:00.000Z",
+    });
+  }),
 
   http.patch(`${API}/v1/me/applications/preferences`, async ({ request }) => {
     const body = (await request.json()) as { applicationIds: string[] };

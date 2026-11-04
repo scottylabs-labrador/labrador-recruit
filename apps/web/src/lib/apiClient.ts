@@ -18,4 +18,14 @@ const fetchClient = createFetchClient<paths>({
 
 const $api = createClient(fetchClient);
 
+/**
+ * The raw client, for calls that need the status code.
+ *
+ * `openapi-react-query` throws the parsed error *body*, which loses the
+ * status, and a draft save has to tell a 409 from a 500: one means another tab
+ * is ahead and reloading is the fix, the other means retrying might work.
+ * Reporting either as the other sends somebody looking for a fault that is not
+ * there, or tells them to retry something that will never succeed.
+ */
+export { fetchClient as apiFetch };
 export { $api };

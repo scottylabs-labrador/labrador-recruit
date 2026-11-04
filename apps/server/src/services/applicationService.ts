@@ -809,59 +809,81 @@ export const applicationService = {
     }
 
     /*
-     * Withdrawn applications are excluded from what must be ranked.
+     * Read, check and write all inside one transaction, rows locked first.
      *
-     * Withdrawing is the applicant saying "not this one". Requiring them to
-     * then rank it would be asking how much they prefer something they have
-     * just declined.
-     */
-    const rankable = await db
-      .select({ id: application.id, status: application.status })
-      .from(application)
-      .where(
-        and(
-          eq(application.candidateProfileId, profile.id),
-          isNull(application.withdrawnAt),
-          ne(application.status, "withdrawn"),
-        ),
-      );
-
-    const owned = new Set(rankable.map((row) => row.id));
-    /*
-     * An id we do not own is 404, not 403, and nothing is written.
+     * The first version read the statuses outside the transaction and relied
+     * on `status = 'draft'` in each write predicate to catch a submit that
+     * landed in between. That is not a guard, it is a silent partial write: a
+     * submit arriving mid-loop makes the remaining updates match zero rows, so
+     * one committee keeps its rank and the next has none — which is exactly
+     * the half-applied ranking this endpoint refuses a partial list in order
+     * to prevent. Worse, it fails with a 200.
      *
-     * A 403 would confirm that somebody else's application exists, which is
-     * the one thing an applicant must not be able to learn by guessing ids.
-     */
-    if (applicationIds.some((id) => !owned.has(id))) {
-      throw new NotFoundError();
-    }
-    if (applicationIds.length !== rankable.length) {
-      throw new ConflictError(
-        "Rank every committee you have applied to, so none is left without a position.",
-      );
-    }
-    /*
-     * Submitting is final, and the ranking is part of what was submitted.
+     * So the lock comes first, every check reads locked rows, and every write
+     * must affect exactly one row or the whole transaction rolls back.
      *
-     * A committee that has already read "first choice" must not find that it
-     * has quietly become second.
+     * Not reproducible in this test harness: PGlite runs in-process and
+     * serializes, so there is no second connection to race with. The guard is
+     * here because the window is real in Postgres, not because a test drove
+     * it.
      */
-    if (rankable.some((row) => row.status !== "draft")) {
-      throw new ConflictError(
-        "You have already submitted an application, so your order of preference is fixed.",
-      );
-    }
-
-    if (applicationIds.length === 0) {
-      // Nothing to rank is not an error. The page sends whatever it is
-      // showing, and refusing would make an ordinary first visit look broken.
-      return;
-    }
-
     await db.transaction(async (tx) => {
+      /*
+       * Withdrawn applications are excluded from what must be ranked.
+       *
+       * Withdrawing is the applicant saying "not this one". Requiring them to
+       * then rank it would be asking how much they prefer something they have
+       * just declined.
+       */
+      const rankable = await tx
+        .select({ id: application.id, status: application.status })
+        .from(application)
+        .where(
+          and(
+            eq(application.candidateProfileId, profile.id),
+            isNull(application.withdrawnAt),
+            ne(application.status, "withdrawn"),
+          ),
+        )
+        // Locks every row this ordering is a statement about, so a concurrent
+        // submit on any of them waits rather than interleaving.
+        .for("update");
+
+      const owned = new Set(rankable.map((row) => row.id));
+      /*
+       * An id we do not own is 404, not 403, and nothing is written.
+       *
+       * A 403 would confirm that somebody else's application exists, which is
+       * the one thing an applicant must not be able to learn by guessing ids.
+       */
+      if (applicationIds.some((id) => !owned.has(id))) {
+        throw new NotFoundError();
+      }
+      if (applicationIds.length !== rankable.length) {
+        throw new ConflictError(
+          "Rank every committee you have applied to, so none is left without a position.",
+        );
+      }
+      /*
+       * Submitting is final, and the ranking is part of what was submitted.
+       *
+       * A committee that has already read "first choice" must not find that it
+       * has quietly become second.
+       */
+      if (rankable.some((row) => row.status !== "draft")) {
+        throw new ConflictError(
+          "You have already submitted an application, so your order of preference is fixed.",
+        );
+      }
+
+      if (applicationIds.length === 0) {
+        // Nothing to rank is not an error. The page sends whatever it is
+        // showing, and refusing would make an ordinary first visit look broken.
+        return;
+      }
+
       for (const [index, applicationId] of applicationIds.entries()) {
-        await tx
+        const ranked = await tx
           .update(application)
           .set({ preferenceRank: index + 1, updatedAt: now })
           /*
@@ -877,7 +899,22 @@ export const applicationService = {
               eq(application.candidateProfileId, profile.id),
               eq(application.status, "draft"),
             ),
+          )
+          .returning({ id: application.id });
+
+        /*
+         * Zero rows is a failure, not a no-op.
+         *
+         * This is the line whose absence made the predicate decorative. If
+         * anything moved the row out from under the lock, the ordering as a
+         * whole is no longer applicable, and rolling back is the only outcome
+         * that leaves the applicant's stated preference intact.
+         */
+        if (ranked.length !== 1) {
+          throw new ConflictError(
+            "Your applications changed while this was being saved. Reload and try again.",
           );
+        }
       }
     });
   },
