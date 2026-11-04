@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { user } from "./auth.ts";
+import { recruitmentCycle } from "./cycles.ts";
 import { grantRole, grantScope } from "./enums.ts";
 
 /**
@@ -79,11 +80,13 @@ export const permissionGrant = pgTable(
     /**
      * Null for a grant that is not tied to one cycle.
      *
-     * References `recruitment_cycle` once that table exists; left unconstrained
-     * here so the organization tables can land before the cycle tables.
-     * TODO(track-a): add the foreign key with the cycles module.
+     * Reviewer grants normally name one and expire with it, so somebody who
+     * reviewed for Spring 2027 gains nothing in Fall 2027 by default. Cascading
+     * on delete is deliberate: a grant scoped to a cycle that no longer exists
+     * is authority with no window, which reads as nothing or everything
+     * depending on which service asks.
      */
-    cycleId: uuid("cycle_id"),
+    cycleId: uuid("cycle_id").references(() => recruitmentCycle.id, { onDelete: "cascade" }),
 
     /**
      * Who issued it.
@@ -164,8 +167,7 @@ export const invitation = pgTable(
       .references(() => user.id, { onDelete: "restrict" }),
     teamId: uuid("team_id").references(() => team.id, { onDelete: "cascade" }),
 
-    /** TODO(track-a): add the foreign key with the cycles module. */
-    cycleId: uuid("cycle_id"),
+    cycleId: uuid("cycle_id").references(() => recruitmentCycle.id, { onDelete: "cascade" }),
 
     /**
      * A hash of the token. **The token itself is never stored.**

@@ -7,7 +7,7 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { permissionGrant, team, user } from "../src/schema/index.ts";
+import { permissionGrant, recruitmentCycle, team, user } from "../src/schema/index.ts";
 import { db, expectRejection, resetDb } from "./harness.ts";
 
 beforeEach(resetDb);
@@ -105,6 +105,56 @@ describe("permission_grant", () => {
     await db.insert(permissionGrant).values(grant);
 
     await expectRejection(() => db.insert(permissionGrant).values(grant), "23505");
+  });
+
+  it("rejects a grant naming a cycle that does not exist", async () => {
+    await insertUser("semathew");
+    const teamId = await insertTeam("labrador");
+
+    // A grant scoped to a cycle that was deleted would be authority with no
+    // window, which is either nothing or everything depending on who reads it.
+    await expectRejection(
+      () =>
+        db.insert(permissionGrant).values({
+          userId: "semathew",
+          role: "reviewer",
+          scope: "team",
+          teamId,
+          cycleId: "00000000-0000-0000-0000-000000000000",
+          grantedBy: "semathew",
+          createdAt: now,
+        }),
+      "23503",
+    );
+  });
+
+  it("disappears with the cycle it is scoped to", async () => {
+    await insertUser("semathew");
+    const teamId = await insertTeam("labrador");
+    const [cycle] = await db
+      .insert(recruitmentCycle)
+      .values({
+        slug: "spring-2027",
+        name: "Spring 2027",
+        createdBy: "semathew",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: recruitmentCycle.id });
+    await db.insert(permissionGrant).values({
+      userId: "semathew",
+      role: "reviewer",
+      scope: "team",
+      teamId,
+      cycleId: cycle!.id,
+      grantedBy: "semathew",
+      createdAt: now,
+    });
+
+    await db.delete(recruitmentCycle);
+
+    const rows = await db.select().from(permissionGrant);
+    expect(rows).toHaveLength(0);
   });
 
   it("allows the same grant again once the first is revoked", async () => {
