@@ -11,7 +11,18 @@ test("a guest is told what the platform is and how to get in", async ({ page }) 
   await page.goto("/");
 
   await expect(page.getByText("ScottyLabs Recruit")).toBeVisible();
-  await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
+
+  /*
+   * Both buttons, by exact name.
+   *
+   * There are deliberately two ways in - the header control and the hero call
+   * to action - and `/sign in/i` matched both, so this test failed on a strict
+   * mode violation whenever both had rendered and passed when the header had
+   * not yet. The passes were the accident. Naming each one exactly asserts the
+   * page we actually intend and fails for a reason that means something.
+   */
+  await expect(page.getByRole("button", { name: "Sign In", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in with your Andrew ID" })).toBeVisible();
 });
 
 test("the API reports liveness", async ({ request }) => {

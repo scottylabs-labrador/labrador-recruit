@@ -50,6 +50,22 @@ export interface ApplicationDetail extends ApplicationSummary {
   answers: AnswerMap;
 }
 
+/** The shared questions, their current answers, and whether they can still change. */
+export interface CommonResponseView {
+  formId: string;
+  title: string;
+  description: string | null;
+  revision: number;
+  answers: AnswerMap;
+  /**
+   * True once a submission has happened.
+   *
+   * Locked means unchangeable, not invisible — the page renders read-only and
+   * has to be told which.
+   */
+  locked: boolean;
+}
+
 export interface DraftSaved {
   revision: number;
   savedAt: string;
@@ -649,6 +665,48 @@ export const applicationService = {
       answers,
       questionIds: new Map(version.questions.map((q) => [q.questionKey, q.id])),
     });
+  },
+
+  /**
+   * The caller's shared answers, with the revision to send back.
+   *
+   * An applicant who has not started yet is the ordinary first case, so this
+   * returns an empty answer set at revision 0 rather than a 404.
+   */
+  getCommonResponse: async (userId: string): Promise<CommonResponseView> => {
+    const { profile, cycle } = await ensureProfile(userId);
+
+    const [commonForm] = await db
+      .select({ id: form.id, title: form.title, description: form.description })
+      .from(form)
+      .where(and(eq(form.cycleId, cycle.id), eq(form.kind, "common")));
+    if (!commonForm) {
+      throw new NotFoundError("This cycle has no shared questions.");
+    }
+
+    const version = await publishedVersion(commonForm.id);
+    if (!version) {
+      throw new NotFoundError("This cycle's shared questions are not published yet.");
+    }
+
+    const [response] = await db
+      .select({ id: formResponse.id, revision: formResponse.revision })
+      .from(formResponse)
+      .where(
+        and(
+          eq(formResponse.candidateProfileId, profile.id),
+          eq(formResponse.formVersionId, version.versionId),
+        ),
+      );
+
+    return {
+      formId: commonForm.id,
+      title: commonForm.title,
+      description: commonForm.description,
+      revision: response?.revision ?? 0,
+      answers: response ? await readAnswers(response.id) : {},
+      locked: profile.commonLockedAt !== null,
+    };
   },
 
   saveCommonDraft: async (

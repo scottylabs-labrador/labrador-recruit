@@ -65,7 +65,25 @@ export function visibleCycleWhere(now: Date): SQL | undefined {
   );
 }
 
-/** Predicate selecting openings an applicant may see, for use in a query. */
+/**
+ * Predicate selecting openings that belong in the public catalogue.
+ *
+ * Deliberately **not** the same as `visibleOpeningWhere`, and the difference
+ * matters. Reading a committee's *form* before it opens would disclose its
+ * questions early, so that is gated on the window. Appearing in the catalogue
+ * is the opposite: a committee opening next week should be listed with its
+ * date, because omitting it makes somebody think it is not recruiting at all,
+ * and showing an Apply button that leads to a closed form is worse than showing
+ * neither.
+ *
+ * So this gates on status only, and the caller reports whether applications are
+ * actually open as a separate flag.
+ */
+export function catalogueOpeningWhere(): SQL | undefined {
+  return inArray(recruitmentOpening.status, [...APPLICANT_VISIBLE_OPENING_STATUSES]);
+}
+
+/** Predicate selecting openings whose form an applicant may read. */
 export function visibleOpeningWhere(now: Date): SQL | undefined {
   return and(
     inArray(recruitmentOpening.status, [...APPLICANT_VISIBLE_OPENING_STATUSES]),

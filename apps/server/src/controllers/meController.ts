@@ -19,6 +19,7 @@ import { AuthenticationError } from "../middlewares/errorHandler.ts";
 import type {
   ApplicationDetail,
   ApplicationSummary,
+  CommonResponseView,
   DraftSaved,
 } from "../services/applicationService.ts";
 import { applicationService } from "../services/applicationService.ts";
@@ -134,6 +135,14 @@ export class MeController extends Controller {
       body.revision,
       body.answers,
     );
+  }
+
+  @Get("common-response")
+  @Security(OIDC_AUTH)
+  @Security(BEARER_AUTH)
+  @SuccessResponse(200)
+  async getCommonResponse(@Request() req: ExpressRequest): Promise<CommonResponseView> {
+    return await applicationService.getCommonResponse(await callerId(req));
   }
 
   @Patch("common-response/draft")
