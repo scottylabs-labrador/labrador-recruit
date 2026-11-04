@@ -12,7 +12,7 @@ import {
   recruitmentOpening,
   team,
 } from "@recruit/db/schema";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import { currentCycleOrder, hasOpened, visibleCycleWhere } from "../lib/cycleVisibility.ts";
 import { db } from "../lib/db.ts";
@@ -138,14 +138,34 @@ function assertWritable(
 const EDITABLE_APPLICATION_STATUSES = ["draft"] as const;
 
 /**
- * Application statuses an applicant may withdraw from.
+ * Application statuses an applicant may withdraw from **before** a decision is released.
  *
- * Everything live. Not `decided`: withdrawing after a committee has concluded is
- * a different act — declining an offer — with its own event and its own
- * consequences, and overwriting the status with `withdrawn` would erase what
- * the committee decided. Not `withdrawn`, which is the idempotent no-op.
+ * Includes `decided`, and that is the whole point. `projectStatus` hides
+ * `decided` as "Under Review" until release; refusing a withdrawal with a
+ * message about a decision would tell the applicant precisely what that hiding
+ * is for, turning this endpoint into an oracle for unreleased outcomes.
+ *
+ * Nothing is erased by allowing it. The committee's decision is an append-only
+ * `application_status_event`, so moving the status column to `withdrawn` leaves
+ * the record of what they concluded intact.
  */
-const WITHDRAWABLE_APPLICATION_STATUSES = [
+const WITHDRAWABLE_BEFORE_RELEASE = [
+  "draft",
+  "submitted",
+  "under_review",
+  "shortlisted",
+  "interview",
+  "decided",
+] as const;
+
+/**
+ * Application statuses an applicant may withdraw from **after** release.
+ *
+ * `decided` drops out. The applicant can now see the decision, so saying so
+ * reveals nothing — and withdrawing is the wrong act: declining an offer is its
+ * own event, with its own meaning for a committee's headcount.
+ */
+const WITHDRAWABLE_AFTER_RELEASE = [
   "draft",
   "submitted",
   "under_review",
@@ -721,14 +741,34 @@ export const applicationService = {
     if (cycle.status === "archived") {
       throw new ConflictError("This recruitment cycle is closed.");
     }
+    /*
+     * What may be withdrawn depends on whether decisions are out.
+     *
+     * Before release the set is wider and the refusal message says nothing
+     * about decisions, so an applicant cannot learn their outcome early by
+     * trying to withdraw. After release it narrows, and the message can be
+     * specific because the applicant already knows.
+     */
+    const released = cycle.decisionsReleasedAt !== null;
+    /*
+     * Typed to the enum rather than `string[]`.
+     *
+     * The widened type compiles everywhere except the one place it matters —
+     * `inArray` against the status column — and losing it there would mean
+     * dropping the gate from the write predicate to satisfy the compiler.
+     */
+    const withdrawable: readonly (typeof WITHDRAWABLE_BEFORE_RELEASE)[number][] = released
+      ? WITHDRAWABLE_AFTER_RELEASE
+      : WITHDRAWABLE_BEFORE_RELEASE;
+
     if (
       row.withdrawnAt === null &&
-      !WITHDRAWABLE_APPLICATION_STATUSES.includes(
-        row.status as (typeof WITHDRAWABLE_APPLICATION_STATUSES)[number],
-      )
+      !withdrawable.includes(row.status as (typeof WITHDRAWABLE_BEFORE_RELEASE)[number])
     ) {
       throw new ConflictError(
-        "A decision has been recorded for this application, so it can no longer be withdrawn.",
+        released
+          ? "Your decision has been released, so this application can no longer be withdrawn."
+          : "This application can no longer be withdrawn.",
       );
     }
 
@@ -756,16 +796,30 @@ export const applicationService = {
       const updated = await tx
         .update(application)
         .set({ status: "withdrawn", withdrawnAt: now, updatedAt: now })
-        .where(and(eq(application.id, applicationId), isNull(application.withdrawnAt)))
-        .returning({ id: application.id });
+        .where(
+          and(
+            eq(application.id, applicationId),
+            isNull(application.withdrawnAt),
+            // The status gate belongs in the predicate too, not only in the
+            // check above. A committee could record a decision between the read
+            // and this write, and without it the decision would be overwritten
+            // by a withdrawal that was authorized against stale state.
+            inArray(application.status, [...withdrawable]),
+          ),
+        )
+        .returning({ id: application.id, oldStatus: application.status });
 
-      if (updated.length === 0) {
+      const changed = updated[0];
+      if (!changed) {
         return;
       }
 
       await tx.insert(applicationStatusEvent).values({
         applicationId,
-        oldStatus: row.status,
+        // From the row the database actually changed, so the history records
+        // what it moved from rather than what we read a moment earlier. Those
+        // differ exactly when a committee wrote a decision in between.
+        oldStatus: changed.oldStatus,
         newStatus: "withdrawn",
         event: "withdrawn",
         // Null, because this is the applicant's own act. Naming a staff member

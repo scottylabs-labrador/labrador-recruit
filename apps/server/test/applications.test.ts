@@ -490,7 +490,7 @@ describe("deadlines and application state", () => {
     expect(res.status).toBe(409);
   });
 
-  it("refuses to withdraw once a decision has been recorded", async () => {
+  it("allows withdrawing while a decision is unreleased, and says nothing about it", async () => {
     const applicant = await seedApplicant("aquinn");
     const applicationId = await startApplication(applicant.headers);
     await testDb
@@ -498,10 +498,57 @@ describe("deadlines and application state", () => {
       .set({ status: "decided" })
       .where(eq(application.id, applicationId));
 
-    // Withdrawing after a committee has decided is a different act — declining
-    // an offer — with its own event and its own consequences. Silently
-    // overwriting the decision as "withdrawn" would erase what the committee
-    // concluded.
+    const res = await request(app)
+      .post(`/v1/me/applications/${applicationId}/withdraw`)
+      .set(applicant.headers);
+
+    // Refusing here would be an oracle: `projectStatus` hides `decided` as
+    // "Under Review" until release, and a refusal saying a decision exists
+    // would tell the applicant exactly what that hiding is for. Before release
+    // their application reads as under review, so withdrawing from
+    // consideration is a legitimate act and is simply accepted.
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toMatch(/decision|decided/i);
+  });
+
+  it("keeps the decision in the history after an unreleased withdrawal", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await startApplication(applicant.headers);
+    await testDb.insert(applicationStatusEvent).values({
+      applicationId,
+      oldStatus: "shortlisted",
+      newStatus: "decided",
+      event: "offered",
+      changedBy: "dchen",
+      createdAt: now,
+    });
+    await testDb
+      .update(application)
+      .set({ status: "decided" })
+      .where(eq(application.id, applicationId));
+
+    await request(app).post(`/v1/me/applications/${applicationId}/withdraw`).set(applicant.headers);
+
+    // The status column moves to `withdrawn`, but the committee's decision is
+    // an append-only event and stays. Nothing a committee concluded is erased.
+    const events = await testDb.select().from(applicationStatusEvent);
+    expect(events.map((e) => e.event).sort()).toEqual(["offered", "withdrawn"]);
+  });
+
+  it("refuses to withdraw once the decision has been released", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const applicationId = await startApplication(applicant.headers);
+    await testDb
+      .update(application)
+      .set({ status: "decided" })
+      .where(eq(application.id, applicationId));
+    await testDb
+      .update(recruitmentCycle)
+      .set({ status: "decisions_released", decisionsReleasedAt: now });
+
+    // Now the applicant can see the decision, so saying so reveals nothing —
+    // and withdrawing is the wrong act. Declining an offer is its own event
+    // with its own meaning for the committee's headcount.
     const res = await request(app)
       .post(`/v1/me/applications/${applicationId}/withdraw`)
       .set(applicant.headers);
