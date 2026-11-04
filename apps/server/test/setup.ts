@@ -30,6 +30,28 @@ vi.mock("../src/lib/db.ts", async () => {
   return { db: testDb };
 });
 
+/**
+ * Serves the suite's own public key instead of reaching the identity provider.
+ *
+ * `AUTH_JWKS_URI` points at a host that does not resolve, so without this every
+ * authenticated request would hang until the HTTP client gave up. The tokens the
+ * suite mints are genuinely signed and genuinely verified — only the key
+ * delivery is local.
+ */
+vi.mock("jwks-rsa", async () => {
+  const { publicKeyPem } = await import("./keys.ts");
+  return {
+    default: () => ({
+      getSigningKey: (
+        _kid: string | undefined,
+        cb: (err: Error | null, key?: { getPublicKey: () => string }) => void,
+      ) => {
+        cb(null, { getPublicKey: () => publicKeyPem });
+      },
+    }),
+  };
+});
+
 beforeEach(async () => {
   const { resetDb } = await import("./harness.ts");
   await resetDb();

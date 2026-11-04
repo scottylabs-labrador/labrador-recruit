@@ -18,10 +18,16 @@ import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../src/app.ts";
+import { authHeader } from "./fixtures.ts";
 import { testDb } from "./harness.ts";
 
 const now = new Date();
 let cycleId: string;
+let teamId: string;
+let openingId: string;
+
+/** Any authenticated CMU account, holding no authority whatsoever. */
+const applicant = () => authHeader({ sub: "aquinn-sub" });
 
 beforeEach(async () => {
   await testDb.insert(user).values({
@@ -47,10 +53,50 @@ beforeEach(async () => {
     .insert(team)
     .values({ slug: "labrador", name: "Labrador", createdAt: now, updatedAt: now })
     .returning({ id: team.id });
-  await testDb
+  teamId = t!.id;
+  const [opening] = await testDb
     .insert(recruitmentOpening)
-    .values({ cycleId, teamId: t!.id, status: "open", createdAt: now, updatedAt: now });
+    .values({ cycleId, teamId, status: "open", createdAt: now, updatedAt: now })
+    .returning({ id: recruitmentOpening.id });
+  openingId = opening!.id;
 });
+
+/** A published committee form, which hangs off an opening rather than the cycle. */
+async function seedCommitteeForm(openingStatus: "draft" | "open" | "closed") {
+  await testDb.update(recruitmentOpening).set({ status: openingStatus });
+  const [row] = await testDb
+    .insert(form)
+    .values({
+      cycleId,
+      teamId,
+      openingId,
+      kind: "committee",
+      title: "Labrador Application",
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: form.id });
+  const [version] = await testDb
+    .insert(formVersion)
+    .values({
+      formId: row!.id,
+      version: 1,
+      status: "published",
+      publishedAt: now,
+      createdBy: "dchen",
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: formVersion.id });
+  await testDb.insert(question).values({
+    formVersionId: version!.id,
+    questionKey: "why-labrador",
+    type: "long_text",
+    label: "Why Labrador",
+    position: 1,
+  });
+  return row!.id;
+}
 
 async function seedForm(opts: { publish: boolean; cycleStatus?: "draft" | "open" | "archived" }) {
   if (opts.cycleStatus) {
@@ -96,7 +142,7 @@ describe("GET /v1/forms/:formId/published", () => {
   it("returns the published version with its questions in order", async () => {
     const formId = await seedForm({ publish: true });
 
-    const res = await request(app).get(`/v1/forms/${formId}/published`);
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
 
     expect(res.status).toBe(200);
     expect(res.body.title).toBe("Common");
@@ -111,13 +157,15 @@ describe("GET /v1/forms/:formId/published", () => {
 
     // Not 403. A draft is a director's work in progress, and telling an
     // applicant one exists leaks that a committee is preparing to recruit.
-    const res = await request(app).get(`/v1/forms/${formId}/published`);
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
 
     expect(res.status).toBe(404);
   });
 
   it("returns 404 for a form that does not exist", async () => {
-    const res = await request(app).get("/v1/forms/00000000-0000-0000-0000-000000000000/published");
+    const res = await request(app)
+      .get("/v1/forms/00000000-0000-0000-0000-000000000000/published")
+      .set(applicant());
 
     expect(res.status).toBe(404);
   });
@@ -127,7 +175,7 @@ describe("GET /v1/forms/:formId/published", () => {
 
     // The form is ready but the cycle is not announced. Serving it would let
     // somebody discover next season's questions early.
-    const res = await request(app).get(`/v1/forms/${formId}/published`);
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
 
     expect(res.status).toBe(404);
   });
@@ -135,7 +183,7 @@ describe("GET /v1/forms/:formId/published", () => {
   it("serves an archived cycle's form, so a past application stays readable", async () => {
     const formId = await seedForm({ publish: true, cycleStatus: "archived" });
 
-    const res = await request(app).get(`/v1/forms/${formId}/published`);
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
 
     expect(res.status).toBe(200);
   });
@@ -162,7 +210,7 @@ describe("GET /v1/forms/:formId/published", () => {
       position: 1,
     });
 
-    const res = await request(app).get(`/v1/forms/${formId}/published`);
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
 
     expect(res.body.version).toBe(2);
     expect(res.body.questions).toHaveLength(1);
@@ -171,7 +219,7 @@ describe("GET /v1/forms/:formId/published", () => {
   it("does not return internal row identifiers", async () => {
     const formId = await seedForm({ publish: true });
 
-    const res = await request(app).get(`/v1/forms/${formId}/published`);
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
 
     // A row id is no use to a browser and is one more thing to reason about if
     // it ever reaches a URL or a log line.
@@ -191,7 +239,7 @@ describe("GET /v1/forms/:formId/published", () => {
       visibilityRuleJson: { equals: { questionKey: "major", value: "CS" } },
     });
 
-    const res = await request(app).get(`/v1/forms/${formId}/published`);
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
 
     const conditional = res.body.questions.find(
       (q: { questionKey: string }) => q.questionKey === "ai",
@@ -199,14 +247,53 @@ describe("GET /v1/forms/:formId/published", () => {
     expect(conditional.visibilityRule).toEqual({ equals: { questionKey: "major", value: "CS" } });
   });
 
-  it("is public, because the landing page shows a form before anybody signs in", async () => {
+  it("refuses an unauthenticated caller", async () => {
     const formId = await seedForm({ publish: true });
 
-    // No session, no bearer token. A published form is what a poster on a wall
-    // could say, and requiring sign-in to read the questions would turn away
-    // applicants deciding whether to apply at all.
+    // `docs/api.md` section 3 puts this among the applicant routes. The landing
+    // page needs committee names and descriptions, which `/v1/openings` serves
+    // publicly — it does not need the whole question set, and publishing that
+    // anonymously would expose every committee's question design, including
+    // archived cycles, permanently.
     const res = await request(app).get(`/v1/forms/${formId}/published`);
 
+    expect(res.status).toBe(401);
+  });
+
+  it("refuses a committee form whose opening is still a draft", async () => {
+    const formId = await seedCommitteeForm("draft");
+
+    // The cycle is open and the form is published, but this committee has not
+    // opened. Those two states are independent on purpose, and checking only
+    // the cycle would serve a form nobody is supposed to see yet.
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
+
+    expect(res.status).toBe(404);
+  });
+
+  it("serves a committee form once its opening is open", async () => {
+    const formId = await seedCommitteeForm("open");
+
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
+
     expect(res.status).toBe(200);
+    expect(res.body.kind).toBe("committee");
+  });
+
+  it("serves a committee form whose opening has closed, so a submitted application stays readable", async () => {
+    const formId = await seedCommitteeForm("closed");
+
+    const res = await request(app).get(`/v1/forms/${formId}/published`).set(applicant());
+
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 404 for an identifier that is not a uuid, rather than a 500", async () => {
+    // An unvalidated id reaches Postgres, which errors on the cast — turning a
+    // malformed request into a server fault, and into a 500 body describing the
+    // query that failed.
+    const res = await request(app).get("/v1/forms/not-a-uuid/published").set(applicant());
+
+    expect(res.status).toBe(404);
   });
 });

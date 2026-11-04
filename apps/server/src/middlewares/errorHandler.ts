@@ -108,8 +108,11 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
   }
 
   if (err instanceof Error) {
+    // The detail goes to Sentry or the console, never to the client. A driver
+    // error echoed back describes the query that failed, and on a database
+    // holding applicant essays that is a map somebody did not have before.
     captureUnexpectedError(`Unexpected error in ${req.path}: ${err}`);
-    return res.status(500).json({ message: `Internal Server Error: ${err.message}` });
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 
   return next();
