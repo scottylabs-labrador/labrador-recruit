@@ -6,6 +6,7 @@
     "@fontsource-variable/geist": "^5.3.0",
     "@posthog/react": "^1.8.2",
     "@recruit/access-control": "workspace:*",
+    "@recruit/common": "workspace:*",
     "@recruit/server": "workspace:*",
     "@tailwindcss/vite": "^4.0.6",
     "@tanstack/react-query": "^5.90.20",
