@@ -55,6 +55,15 @@ export interface FileStorage {
    * upload url stays valid for the rest of its lifetime *after* commit, so an
    * applicant could pass the magic-byte check with a real PDF and then
    * overwrite the object with anything while the row still read `committed`.
+   *
+   * **For the R2 implementer:** the caller copies *first* and validates the
+   * destination afterwards, deliberately. A `CopySourceIfMatch` on the ETag
+   * observed at validation time looks like a tidier answer and is a weaker
+   * one — it still leaves validation reading the mutable source, and it makes
+   * the guarantee depend on getting a conditional header right rather than on
+   * the destination being unwritable. Implement this as a plain server-side
+   * copy; `fileService` owns the ordering, and there is a test for the race
+   * it closes.
    */
   copy(fromKey: string, toKey: string): Promise<void>;
 
