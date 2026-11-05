@@ -79,11 +79,25 @@ const envSchema = z.object({
   /**
    * Signs the local adapter's presigned URLs.
    *
-   * The default is deliberately not a secret, because the adapter it signs for
-   * must never run in production - `lib/storage.ts` throws at boot rather than
-   * letting it. A real secret here would imply this path is production-safe.
+   * No default. The first version shipped a published placeholder, reasoning
+   * that the adapter could never run in production - and the guard that was
+   * supposed to guarantee that was itself fail-open. Two mistakes that only
+   * bite together are still two mistakes, so this is optional and
+   * `lib/storage.ts` generates a random per-boot value when it is unset. A
+   * secret in the repository is a secret.
    */
-  FILE_STORAGE_SECRET: z.string().default("local-development-only-not-a-secret"),
+  FILE_STORAGE_SECRET: z.string().optional(),
+  /**
+   * Opt in to the filesystem storage adapter.
+   *
+   * Required for it to be used at all, rather than inferred from `NODE_ENV`
+   * not being "production". An unset or misspelled `NODE_ENV` is an ordinary
+   * deployment mistake - `#11` records two variables that have already gone
+   * wrong that way on Railway - and inferring from its absence means the
+   * failure mode is "silently store applicant resumes on a container disk",
+   * which nobody notices until somebody asks for a file back.
+   */
+  ALLOW_LOCAL_FILE_STORAGE: z.enum(["on", "off"]).default("off"),
   SENTRY_DSN: z.string().optional(),
   SERVER_URL: z.url(),
   SERVER_PORT: z.coerce.number().default(80),

@@ -13,7 +13,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { FileUploader } from "@/components/forms/FileUploader";
+import { FileUploader, ReadonlyFileAnswer } from "@/components/forms/FileUploader";
 
 import {
   commitCalls,
@@ -160,5 +160,35 @@ describe("uploading a file", () => {
     // has to be fetched - otherwise a returning applicant sees a bare uuid and
     // cannot tell which file is attached.
     expect(await screen.findByText("saved-resume.pdf")).toBeDefined();
+  });
+});
+
+describe("a file in a read-only answer", () => {
+  it("shows the filename and a way to open it, never a bare id", async () => {
+    setCommittedFile("file-saved", {
+      originalFilename: "my-resume.pdf",
+      mimeType: "application/pdf",
+    });
+
+    render(<ReadonlyFileAnswer fileId="file-saved" />);
+
+    /*
+     * The applicant's own submission detail page renders read-only, and a
+     * `file_upload` answer stores an opaque id. Rendering it through the
+     * generic answer path showed somebody a uuid where their resume should be
+     * - on the page whose entire job is reading back what they sent.
+     */
+    expect(await screen.findByText("my-resume.pdf")).toBeDefined();
+    expect(await screen.findByRole("link", { name: /download/i })).toBeDefined();
+    expect(screen.queryByText("file-saved")).toBeNull();
+  });
+
+  it("says a file is attached when its name cannot be resolved", async () => {
+    render(<ReadonlyFileAnswer fileId="file-gone" />);
+
+    // The endpoint 404s for a file that is not the caller's or never
+    // committed. Saying "a file is attached" is honest; showing the id is not
+    // useful to anybody.
+    expect(await screen.findByText(/a file is attached/i)).toBeDefined();
   });
 });

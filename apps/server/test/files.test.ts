@@ -332,6 +332,64 @@ describe("downloading a file", () => {
   });
 });
 
+describe("the upload url cannot be reused after commit", () => {
+  it("leaves the committed bytes untouched when the same url is PUT again", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const created = await request(app).post("/v1/files").set(applicant.headers).send({
+      originalFilename: "resume.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: PDF_BYTES.byteLength,
+    });
+
+    const [staged] = await testDb.select({ objectKey: file.objectKey }).from(file);
+    await localStorage!.put(staged!.objectKey, PDF_BYTES);
+    await request(app)
+      .post(`/v1/files/${created.body.fileId}/commit`)
+      .set(applicant.headers)
+      .send({});
+
+    /*
+     * The bypass this closes.
+     *
+     * A presigned PUT is valid for fifteen minutes, and commit happens within
+     * seconds of it. So the obvious attack is: upload a genuine PDF, let the
+     * magic-byte check pass, then PUT a payload to the *same still-valid url*.
+     * The row would still say `committed` with a validated MIME type, and a
+     * reviewer would download whatever arrived second.
+     *
+     * The fix is that the presigned url only ever covered a **staging** key,
+     * and commit copies the validated bytes to a final key the url does not
+     * cover. Writing to staging afterwards changes nothing anybody reads.
+     */
+    await localStorage!.put(staged!.objectKey, EXECUTABLE_BYTES);
+
+    const [row] = await testDb.select().from(file);
+    expect(row!.status).toBe("committed");
+    // The committed object is at a different key than the one the browser
+    // could write to.
+    expect(row!.objectKey).not.toBe(staged!.objectKey);
+
+    const prefix = await localStorage!.readPrefix(row!.objectKey, 5);
+    // Still the PDF that was validated, not the executable PUT afterwards.
+    expect(Array.from(prefix!)).toEqual([0x25, 0x50, 0x44, 0x46, 0x2d]);
+  });
+
+  it("presigns the upload against a staging key, never the final one", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const created = await upload(applicant.headers);
+    const [staged] = await testDb.select({ objectKey: file.objectKey }).from(file);
+    expect(staged!.objectKey).toContain("staging/");
+
+    await request(app)
+      .post(`/v1/files/${created.body.fileId}/commit`)
+      .set(applicant.headers)
+      .send({});
+
+    const [row] = await testDb.select({ objectKey: file.objectKey }).from(file);
+    expect(row!.objectKey).not.toContain("staging/");
+  });
+});
+
 describe("the object key is not a capability", () => {
   it("refuses a storage request with no signature", async () => {
     const applicant = await seedApplicant("aquinn");

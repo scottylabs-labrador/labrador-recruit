@@ -7,6 +7,9 @@ import { beforeEach, vi } from "vitest";
  * variable, so a suite that imports the app transitively needs these present
  * before the first import rather than before the first test.
  */
+// The filesystem storage adapter needs an explicit opt-in, so that an
+// unset `NODE_ENV` in a real deployment cannot quietly select it.
+process.env["ALLOW_LOCAL_FILE_STORAGE"] ??= "on";
 process.env["ADMIN_GROUP"] ??= "test-admins";
 process.env["ALLOWED_ORIGINS_REGEX"] ??= ".*";
 process.env["AUTH_ISSUER"] ??= "https://auth.example.com";

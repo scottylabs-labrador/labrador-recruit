@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 
 /**
@@ -45,6 +45,21 @@ export interface FileStorage {
 
   /** The first `byteCount` bytes, for magic-byte validation at commit. */
   readPrefix(key: string, byteCount: number): Promise<Uint8Array | null>;
+
+  /**
+   * Copies an object, server-side.
+   *
+   * This is what makes a validated upload immutable. The presigned PUT covers
+   * only a **staging** key; commit validates those bytes and copies them to a
+   * final key the browser was never given a signature for. Without it, an
+   * upload url stays valid for the rest of its lifetime *after* commit, so an
+   * applicant could pass the magic-byte check with a real PDF and then
+   * overwrite the object with anything while the row still read `committed`.
+   */
+  copy(fromKey: string, toKey: string): Promise<void>;
+
+  /** Removes an object. Used to clear staging after a successful copy. */
+  delete(key: string): Promise<void>;
 }
 
 export interface LocalFileStorageOptions {
@@ -169,6 +184,17 @@ export class LocalFileStorage implements FileStorage {
       // ordinary state to report rather than an error to throw.
       return null;
     }
+  }
+
+  async copy(fromKey: string, toKey: string): Promise<void> {
+    const from = this.pathFor(fromKey);
+    const to = this.pathFor(toKey);
+    await mkdir(dirname(to), { recursive: true });
+    await copyFile(from, to);
+  }
+
+  async delete(key: string): Promise<void> {
+    await rm(this.pathFor(key), { force: true });
   }
 
   async readPrefix(key: string, byteCount: number): Promise<Uint8Array | null> {

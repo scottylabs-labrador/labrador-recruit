@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -34,9 +35,24 @@ function build(): FileStorage {
     );
   }
 
-  if (process.env["NODE_ENV"] === "production") {
+  /*
+   * Fail closed: the local adapter needs an explicit opt-in.
+   *
+   * The first version of this guard threw only when `NODE_ENV === "production"`,
+   * which is backwards. An unset or misspelled `NODE_ENV` is an ordinary
+   * deployment mistake - `#11` records two variables that have already gone
+   * wrong exactly that way on Railway - and inferring "not production" from
+   * its absence means a real deployment silently stores applicant resumes on a
+   * container disk, signed with whatever secret was lying around, and loses
+   * them on the next deploy. Nobody notices until somebody asks for a file
+   * back.
+   *
+   * So the question is no longer "is this production" but "did somebody say
+   * this is allowed".
+   */
+  if (env.ALLOW_LOCAL_FILE_STORAGE !== "on") {
     throw new Error(
-      "No object storage is configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET — the local filesystem adapter is for development only and loses every upload on redeploy.",
+      "No object storage is configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET — or set ALLOW_LOCAL_FILE_STORAGE=on to use the filesystem adapter, which is for development only and loses every upload on redeploy.",
     );
   }
 
@@ -45,7 +61,15 @@ function build(): FileStorage {
     // The adapter's URLs point at this API, because in development it serves
     // the bytes itself. R2 is the whole reason that is temporary.
     publicBaseUrl: env.SERVER_URL,
-    secret: env.FILE_STORAGE_SECRET,
+    /*
+     * A random secret per boot when none is configured.
+     *
+     * Better than a published default in every respect that matters: nothing
+     * in the repository can forge a signature, and the only cost is that URLs
+     * issued before a restart stop working - which for a fifteen-minute upload
+     * window in development is not a cost at all.
+     */
+    secret: env.FILE_STORAGE_SECRET ?? randomBytes(32).toString("base64url"),
   });
 }
 

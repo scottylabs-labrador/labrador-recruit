@@ -2,6 +2,7 @@ import type { AnswerMap, AnswerValue, QuestionDefinition } from "@recruit/common
 import { evaluateVisibility, validateAnswer } from "@recruit/common";
 import { useState } from "react";
 
+import { ReadonlyFileAnswer } from "@/components/forms/FileUploader";
 import { QuestionField } from "@/components/forms/QuestionField";
 
 export interface DynamicFormRendererProps {
@@ -171,7 +172,19 @@ function ReadonlyAnswer({ question, value }: { question: QuestionDefinition; val
   return (
     <div className="space-y-1">
       <p className="text-sm font-medium text-muted-foreground">{question.label}</p>
-      {text === null ? (
+      {/*
+        A `file_upload` answer is an opaque file id, so the generic path below
+        would show a uuid where somebody's resume should be - on the page whose
+        entire job is reading back what they sent.
+      */}
+      {question.type === "file_upload" ? (
+        typeof value === "string" && value !== "" ? (
+          <ReadonlyFileAnswer fileId={value} />
+        ) : (
+          <p className="text-sm text-muted-foreground italic">No file attached</p>
+        )
+      ) : null}
+      {question.type === "file_upload" ? null : text === null ? (
         <p className="text-sm text-muted-foreground italic">No answer given</p>
       ) : (
         // `whitespace-pre-wrap` so an essay's own paragraphs survive. Collapsing

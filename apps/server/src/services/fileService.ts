@@ -162,8 +162,15 @@ export const fileService = {
      * verbatim for display, because it is what the applicant called their file
      * and a reviewer should see that — but it appears nowhere in the key and
      * is never joined to a path.
+     *
+     * **A staging key, not the final one.** The presigned PUT is valid for
+     * fifteen minutes and commit happens within seconds of it, so a url that
+     * covered the final key would let an applicant pass the magic-byte check
+     * with a genuine PDF and then overwrite the object with anything while the
+     * row still read `committed`. Commit copies the validated bytes to a final
+     * key the browser never received a signature for.
      */
-    const objectKey = `uploads/${userId}/${randomUUID()}`;
+    const objectKey = `staging/${userId}/${randomUUID()}`;
 
     const [row] = await db
       .insert(file)
@@ -231,10 +238,25 @@ export const fileService = {
       throw new ValidationFailedError(verdict.reason);
     }
 
+    /*
+     * The validated bytes are copied to a key the upload url does not cover.
+     *
+     * This is the step that makes the magic-byte check mean something after
+     * the fact: whatever happens to the staging object from here on, nothing
+     * reads it again.
+     */
+    const finalKey = `uploads/${userId}/${randomUUID()}`;
+    await storage.copy(row.objectKey, finalKey);
+
     const now = new Date();
     const committed = await db
       .update(file)
-      .set({ status: "committed", committedAt: now, sizeBytes: head.sizeBytes })
+      .set({
+        status: "committed",
+        committedAt: now,
+        sizeBytes: head.sizeBytes,
+        objectKey: finalKey,
+      })
       /*
        * The owner and the prior status are both in the predicate.
        *
@@ -246,10 +268,23 @@ export const fileService = {
       .returning({ id: file.id });
 
     if (committed.length !== 1) {
+      /*
+       * The copy already happened, so the orphan is cleared.
+       *
+       * Leaving it would be a stored object nothing references — harmless to
+       * read, because no row points at it, but it is still an applicant's file
+       * sitting in a bucket for no reason.
+       */
+      await storage.delete(finalKey).catch(() => undefined);
       throw new ValidationFailedError(
         "That file changed while it was being checked. Please try again.",
       );
     }
+
+    // Best effort, and deliberately after the row is committed. A staging
+    // object that outlives its upload is waste; a committed row pointing at a
+    // key we just deleted would be a broken download.
+    await storage.delete(row.objectKey).catch(() => undefined);
 
     return {
       fileId: row.id,

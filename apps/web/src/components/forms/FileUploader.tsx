@@ -203,3 +203,66 @@ function messageFrom(error: unknown, fallback: string): string {
     ? String((error as { message: unknown }).message)
     : fallback;
 }
+
+/**
+ * A committed file, read-only.
+ *
+ * The answer stores an opaque file id, so the generic read-only answer path
+ * showed an applicant a uuid on the one page whose whole job is reading back
+ * what they sent. The name has to be fetched; the id is never shown, because
+ * it is ours and means nothing to them.
+ *
+ * The download link is the presigned URL, requested when this renders. Those
+ * URLs are deliberately short-lived, so the link is re-requested on every
+ * render rather than cached — a stale one is a dead link on a page somebody
+ * left open.
+ */
+export function ReadonlyFileAnswer({ fileId }: { fileId: string }) {
+  const [ticket, setTicket] = useState<{ url: string; originalFilename: string } | null>(null);
+  const [resolved, setResolved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void apiFetch
+      .GET("/files/{fileId}/download", { params: { path: { fileId } } })
+      .then(({ data }) => {
+        if (cancelled) {
+          return;
+        }
+        if (data !== undefined) {
+          setTicket({ url: data.url, originalFilename: data.originalFilename });
+        }
+        setResolved(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResolved(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fileId]);
+
+  if (ticket === null) {
+    /*
+     * The endpoint answers 404 for a file that is not the caller's or was
+     * never committed. "A file is attached" is honest and useful; the id is
+     * neither.
+     */
+    return (
+      <p className="text-sm text-muted-foreground">
+        {resolved ? "A file is attached." : "Loading the attached file…"}
+      </p>
+    );
+  }
+
+  return (
+    <p className="text-sm">
+      <span className="font-medium">{ticket.originalFilename}</span>{" "}
+      <a href={ticket.url} className="ml-1 text-sm underline" rel="noreferrer">
+        Download
+      </a>
+    </p>
+  );
+}
