@@ -14,10 +14,11 @@
 import { file, recruitmentCycle, team, user } from "@recruit/db/schema";
 import { eq } from "drizzle-orm";
 import request from "supertest";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { app } from "../src/app.ts";
-import { localStorage } from "../src/lib/storage.ts";
+import { LocalFileStorage } from "../src/lib/fileStorage.ts";
+import { localStorage, storage } from "../src/lib/storage.ts";
 import { seedApplicant } from "./fixtures.ts";
 import { testDb } from "./harness.ts";
 
@@ -372,6 +373,49 @@ describe("the upload url cannot be reused after commit", () => {
     const prefix = await localStorage!.readPrefix(row!.objectKey, 5);
     // Still the PDF that was validated, not the executable PUT afterwards.
     expect(Array.from(prefix!)).toEqual([0x25, 0x50, 0x44, 0x46, 0x2d]);
+  });
+
+  it("refuses when the staged bytes change between validation and the copy", async () => {
+    const applicant = await seedApplicant("aquinn");
+    const created = await upload(applicant.headers);
+    const [staged] = await testDb.select({ objectKey: file.objectKey }).from(file);
+
+    /*
+     * The race the first fix left open.
+     *
+     * Moving to a staging key shrank the window from fifteen minutes to
+     * milliseconds, but the upload url is still live, so a re-PUT landing
+     * between "read staging and validate" and "copy staging to final" puts an
+     * executable at the *immutable* final key with the row marked validated.
+     * Both requests belong to the attacker, so they can fire them together and
+     * retry until it lands - which makes milliseconds a window, not a
+     * rounding error.
+     *
+     * Overwriting staging inside `copy` reproduces that interleaving exactly
+     * and deterministically. A real race is not reproducible against PGlite,
+     * but this does not need one: the assertion is that validation reads the
+     * object that will actually be served, not a mutable predecessor of it.
+     */
+    const copy = vi.spyOn(storage, "copy").mockImplementation(async (from, to) => {
+      await localStorage!.put(from, EXECUTABLE_BYTES);
+      await LocalFileStorage.prototype.copy.call(localStorage, from, to);
+    });
+
+    try {
+      const res = await request(app)
+        .post(`/v1/files/${created.body.fileId}/commit`)
+        .set(applicant.headers)
+        .send({});
+
+      expect(res.status).toBe(422);
+      const [row] = await testDb.select().from(file);
+      expect(row!.status).toBe("pending");
+      // And the object it would have been served from is gone, rather than
+      // left behind for a later commit to find already in place.
+      expect(row!.objectKey).toBe(staged!.objectKey);
+    } finally {
+      copy.mockRestore();
+    }
   });
 
   it("presigns the upload against a staging key, never the final one", async () => {

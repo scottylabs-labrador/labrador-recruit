@@ -217,36 +217,66 @@ export const fileService = {
       };
     }
 
-    const head = await storage.head(row.objectKey);
-    if (head === null) {
-      // No PUT ever happened. An abandoned upload is ordinary, so this is a
+    /*
+     * Copy first, then validate the copy. **This order is the security
+     * property, not a style choice.**
+     *
+     * The obvious order — read staging, validate, copy — is wrong, and was
+     * wrong here through two rounds of fixing it. The presigned PUT stays
+     * valid for its full fifteen minutes, so a re-PUT landing between the
+     * validating read and the copy puts whatever the applicant likes at the
+     * *immutable* final key, with the row marked validated. Staging to a
+     * separate key shrank that window to milliseconds and did not close it:
+     * both requests belong to the attacker, so they can fire them together
+     * and retry until one lands.
+     *
+     * Copying first makes the bytes immutable — no signature was ever issued
+     * for `finalKey`, so nothing can write to it — and validating afterwards
+     * means the checks ran against the exact object that will be served.
+     *
+     * The general rule, which this flow has now taught three times: validate
+     * the thing you are going to use, never a mutable predecessor of it.
+     */
+    const finalKey = `uploads/${userId}/${randomUUID()}`;
+    try {
+      await storage.copy(row.objectKey, finalKey);
+    } catch {
+      // Nothing was ever PUT. An abandoned upload is ordinary, so this is a
       // clear refusal rather than a server error.
       throw new ValidationFailedError(
         "That upload did not finish. Please choose the file and try again.",
       );
     }
 
-    const prefix = await storage.readPrefix(row.objectKey, SNIFF_BYTES);
+    const head = await storage.head(finalKey);
+    if (head === null) {
+      // A copy that produced nothing. Not expected, so it is refused rather
+      // than committed with a size of zero.
+      await storage.delete(finalKey).catch(() => undefined);
+      throw new ValidationFailedError(
+        "That upload did not finish. Please choose the file and try again.",
+      );
+    }
+
+    const prefix = await storage.readPrefix(finalKey, SNIFF_BYTES);
     const verdict = await scanFile({
       prefix: prefix ?? new Uint8Array(0),
       sizeBytes: head.sizeBytes,
       declaredType: row.mimeType,
     });
+
     if (!verdict.ok) {
-      // Left `pending`, so nothing can reference it and the applicant can
-      // simply upload the right file.
+      /*
+       * The rejected copy is removed, and the row stays `pending`.
+       *
+       * Leaving the object behind would be worse than untidy: a later commit
+       * generates a fresh `finalKey`, so this one would simply sit there
+       * un-referenced — an applicant's rejected file kept in a bucket for no
+       * reason anybody could later explain.
+       */
+      await storage.delete(finalKey).catch(() => undefined);
       throw new ValidationFailedError(verdict.reason);
     }
-
-    /*
-     * The validated bytes are copied to a key the upload url does not cover.
-     *
-     * This is the step that makes the magic-byte check mean something after
-     * the fact: whatever happens to the staging object from here on, nothing
-     * reads it again.
-     */
-    const finalKey = `uploads/${userId}/${randomUUID()}`;
-    await storage.copy(row.objectKey, finalKey);
 
     const now = new Date();
     const committed = await db
