@@ -21,5 +21,8 @@ export const stackEnv = {
   AUTH_CLIENT_ID: "e2e-client",
   AUTH_CLIENT_SECRET: "e2e-secret",
   AUTH_JWKS_URI: "https://auth.example.com/.well-known/jwks.json",
+  // The filesystem storage adapter is opt-in, so the suite says so
+  // explicitly rather than relying on `NODE_ENV` being absent.
+  ALLOW_LOCAL_FILE_STORAGE: "on",
   VITE_SERVER_URL: API_URL,
 };

@@ -25,7 +25,7 @@
         "description": "Enter your bearer token below"
       }
     },
-    "basePath": "/",
+    "basePath": "/v1",
     "outputDirectory": "build",
     "specVersion": 3,
     "yaml": true

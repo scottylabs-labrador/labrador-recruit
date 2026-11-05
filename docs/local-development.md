@@ -60,6 +60,13 @@ bun run db:studio     # browse the database
 Without that access, use the `:local` equivalents from the repository root, which read
 `.env.local` instead. These are the ones to reach for on a fresh checkout:
 
+**`ALLOW_LOCAL_FILE_STORAGE=on` is needed for uploads to work at all.** Without
+it the server refuses to start rather than falling back to the filesystem
+adapter, which is deliberate: an unset or misspelled `NODE_ENV` is an ordinary
+deployment mistake, and inferring "not production" from its absence would mean
+a real deployment quietly storing applicant resumes on a container disk and
+losing them on the next deploy. `.env.local.example` ships it set.
+
 ```bash
 bun run db:migrate:local
 bun run db:seed:local

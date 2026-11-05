@@ -94,9 +94,18 @@ Submitted | Under Review | Interview | Decision Available | Withdrawn`. The
   internal status column is not exposed, and neither are scores, shortlist
   position, reviewer identities, or internal notes. This is enforced by which
   fields the service selects.
-- `GET /v1/forms/:formId/published` is readable by an applicant only for an
-  opening they could apply to in an open cycle. A draft version is never
-  returned here.
+- **`GET /v1/forms/:formId/published` is authenticated**, and gated on _both_
+  the cycle's status and — for a committee form — its opening's. Those two are
+  independent on purpose: a cycle can be open while a committee has not opened,
+  and checking only the cycle would serve a form nobody is supposed to see yet.
+  A `closed` or `archived` cycle stays readable so a submitted application is
+  legible alongside the questions it was answering. A draft version is never
+  returned, and a draft is 404 rather than 403.
+
+  It is not public. The landing page needs committee names and descriptions,
+  which `/v1/openings` serves publicly; it does not need the question set, and
+  serving that anonymously would publish every committee's question design,
+  archived cycles included, permanently.
 
 ---
 

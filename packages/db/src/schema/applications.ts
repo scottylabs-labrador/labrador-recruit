@@ -1,378 +1,364 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
-  boolean,
+  check,
+  foreignKey,
   index,
   integer,
   jsonb,
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { committeeDecision } from "./decisions.ts";
-import { answerType, applicantYear, candidacySource, candidacyStatus } from "./enums.ts";
-import { committee, recruitmentCycle } from "./recruitment.ts";
-import { reviewAssignment } from "./reviews.ts";
+import { user } from "./auth.ts";
+import { recruitmentCycle, recruitmentOpening } from "./cycles.ts";
+import { applicationStatus, formResponseStatus } from "./enums.ts";
+import { formVersion, question } from "./forms.ts";
 
 /**
- * The canonical person record, shared across cycles so a repeat applicant is
- * recognised. Identity is the normalised email; `email` stores it lowercased
- * and trimmed while `rawEmail` keeps exactly what the form supplied.
+ * A person's participation in one cycle.
+ *
+ * The anchor the common answers hang off, so they are given once per cycle
+ * rather than once per committee.
  */
-export const applicant = pgTable(
-  "applicant",
+export const candidateProfile = pgTable(
+  "candidate_profile",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    email: text("email").notNull(),
-    rawEmail: text("raw_email").notNull(),
-    fullName: text("full_name").notNull(),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    cycleId: uuid("cycle_id")
+      .notNull()
+      .references(() => recruitmentCycle.id, { onDelete: "cascade" }),
+
+    /**
+     * Set on the first successful final submission.
+     *
+     * After this, the common answers change only through an audited correction
+     * flow. Without it, a student editing their common answers in week three
+     * would retroactively change an application a committee already read.
+     */
+    commonLockedAt: timestamp("common_locked_at", { withTimezone: true }),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [uniqueIndex("applicant_email_key").on(table.email)],
+  (table) => [
+    uniqueIndex("candidate_profile_user_cycle_key").on(table.userId, table.cycleId),
+    index("candidate_profile_cycleId_idx").on(table.cycleId),
+  ],
 );
 
-/** One applicant's submission to one cycle. */
+/**
+ * One act of submitting, covering one or more applications.
+ *
+ * Its own row because that is what the act is: an applicant presses Submit once
+ * and several committees receive an application. The idempotency key lives here
+ * rather than on `application`, where a key shared across a batch would collide
+ * with itself on the second row — the endpoint shape and a per-application key
+ * are simply incompatible.
+ *
+ * Scoped to the applicant, not global. The key is client-supplied, so a global
+ * one would let somebody burn another applicant's key and make their real
+ * submission look like a replay.
+ */
+export const submission = pgTable(
+  "submission",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    candidateProfileId: uuid("candidate_profile_id")
+      .notNull()
+      .references(() => candidateProfile.id, { onDelete: "cascade" }),
+
+    /**
+     * Supplied by the client so a retry is recognisable as the same act.
+     *
+     * A double tap on a flaky campus connection must not submit twice or send
+     * two confirmation emails.
+     */
+    idempotencyKey: text("idempotency_key").notNull(),
+
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("submission_profile_key_key").on(table.candidateProfileId, table.idempotencyKey),
+    index("submission_candidateProfileId_idx").on(table.candidateProfileId),
+  ],
+);
+
+/**
+ * One application to one opening.
+ *
+ * The unit of review, the unit of decision, and the unit of committee scoping.
+ * v1 generated separate "candidacy" rows from a submitted preference ranking;
+ * students now apply directly, so an application *is* the candidacy and that
+ * table is gone.
+ */
 export const application = pgTable(
   "application",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    cycleId: uuid("cycle_id")
+    candidateProfileId: uuid("candidate_profile_id")
       .notNull()
-      .references(() => recruitmentCycle.id, { onDelete: "cascade" }),
-    applicantId: uuid("applicant_id")
+      .references(() => candidateProfile.id, { onDelete: "cascade" }),
+    openingId: uuid("opening_id")
       .notNull()
-      .references(() => applicant.id, { onDelete: "cascade" }),
-
-    submittedAt: timestamp("submitted_at"),
-    major: text("major"),
-    year: applicantYear("year").notNull().default("unknown"),
-    rawYear: text("raw_year"),
-
-    rankingExplanation: text("ranking_explanation"),
+      .references(() => recruitmentOpening.id, { onDelete: "cascade" }),
 
     /**
-     * The applicant's request to be placed with friends. Displayed to
-     * leadership but never an input to any score.
+     * The internal status.
+     *
+     * What an applicant sees is a *projection* of this, not this column:
+     * `shortlisted` surfaces to them as "Under Review". Track A writes up to
+     * `submitted`; Track B writes everything after.
      */
-    friendRequest: text("friend_request"),
-    heardAboutScottylabs: text("heard_about_scottylabs"),
+    status: applicationStatus("status").notNull().default("draft"),
 
-    /** The verbatim imported row, retained for audit and re-import debugging. */
-    rawResponse: jsonb("raw_response").notNull(),
+    /** The applicant's own ranking of this committee, when the cycle asks. */
+    preferenceRank: integer("preference_rank"),
 
-    sourceImportId: uuid("source_import_id"),
-    sourceRowNumber: integer("source_row_number"),
-
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("application_cycle_applicant_key").on(table.cycleId, table.applicantId),
-    index("application_cycleId_idx").on(table.cycleId),
-    index("application_applicantId_idx").on(table.applicantId),
-  ],
-);
-
-/**
- * Describes one question on the form for one cycle, so the shape of the form
- * can change between seasons without a migration. The importer maps a
- * spreadsheet header to a stable `key` through this table.
- */
-export const questionDefinition = pgTable(
-  "question_definition",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    cycleId: uuid("cycle_id")
-      .notNull()
-      .references(() => recruitmentCycle.id, { onDelete: "cascade" }),
-
-    /** The spreadsheet column header exactly as exported. */
-    externalHeader: text("external_header").notNull(),
-
-    /** Stable identifier the application code refers to. */
-    key: text("key").notNull(),
-
-    /** Grouping for display, for example "general" or "committee". */
-    section: text("section").notNull().default("general"),
-
-    /** Set when the question only applies to one committee. */
-    committeeId: uuid("committee_id").references(() => committee.id, { onDelete: "set null" }),
-
-    questionText: text("question_text").notNull(),
-    answerType: answerType("answer_type").notNull().default("long_text"),
-    displayOrder: integer("display_order").notNull().default(0),
-
-    /** Hidden from reviewers while a cycle runs in blind review mode. */
-    isSensitive: boolean("is_sensitive").notNull().default(false),
-
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("question_definition_cycle_key_key").on(table.cycleId, table.key),
-    uniqueIndex("question_definition_cycle_header_key").on(table.cycleId, table.externalHeader),
-    index("question_definition_cycleId_idx").on(table.cycleId),
-    index("question_definition_committeeId_idx").on(table.committeeId),
-  ],
-);
-
-/** One answer to one question. Absent rows mean the question was left blank. */
-export const applicationAnswer = pgTable(
-  "application_answer",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    applicationId: uuid("application_id")
-      .notNull()
-      .references(() => application.id, { onDelete: "cascade" }),
-    questionDefinitionId: uuid("question_definition_id")
-      .notNull()
-      .references(() => questionDefinition.id, { onDelete: "cascade" }),
-
-    /** Rendered as text. Structured answers additionally populate `answerJson`. */
-    answerText: text("answer_text"),
-    answerJson: jsonb("answer_json"),
-
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("application_answer_application_question_key").on(
-      table.applicationId,
-      table.questionDefinitionId,
-    ),
-    index("application_answer_applicationId_idx").on(table.applicationId),
-    index("application_answer_questionDefinitionId_idx").on(table.questionDefinitionId),
-  ],
-);
-
-/**
- * The rank an applicant gave one committee. Stored for every committee they
- * ranked, whether or not a candidacy was created, because the rank feeds the
- * deterministic preference component of the rubric.
- */
-export const committeePreference = pgTable(
-  "committee_preference",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    applicationId: uuid("application_id")
-      .notNull()
-      .references(() => application.id, { onDelete: "cascade" }),
-    committeeId: uuid("committee_id")
-      .notNull()
-      .references(() => committee.id, { onDelete: "cascade" }),
-
-    /** 1 is the applicant's first choice. */
-    rank: integer("rank").notNull(),
-
-    /** The original label, for example "1st Choice". */
-    rawRankLabel: text("raw_rank_label"),
-
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("committee_preference_application_committee_key").on(
-      table.applicationId,
-      table.committeeId,
-    ),
-    index("committee_preference_applicationId_idx").on(table.applicationId),
-    index("committee_preference_committeeId_idx").on(table.committeeId),
-  ],
-);
-
-/**
- * An applicant being considered by one committee. This is the unit that
- * reviewers are assigned to and that decisions are made against, so an
- * applicant can be evaluated differently by Tech and by Labrador.
- */
-export const committeeCandidacy = pgTable(
-  "committee_candidacy",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    applicationId: uuid("application_id")
-      .notNull()
-      .references(() => application.id, { onDelete: "cascade" }),
-    committeeId: uuid("committee_id")
-      .notNull()
-      .references(() => committee.id, { onDelete: "cascade" }),
-
-    /** Deactivated rather than deleted, so existing reviews are never orphaned. */
-    active: boolean("active").notNull().default(true),
-    source: candidacySource("source").notNull(),
-    status: candidacyStatus("status").notNull().default("pending_assignment"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
 
     /**
-     * Why the candidacy is flagged for another review. Null when it is not
-     * flagged. Always human-readable, because the interface must be able to
-     * state exactly why a candidate was flagged.
+     * The act that submitted this, or null while it is a draft.
+     *
+     * `restrict` on delete, because a submission row is the record of when an
+     * applicant pressed Submit and what it covered.
      */
-    disagreementReason: text("disagreement_reason"),
+    submissionId: uuid("submission_id").references((): never => submission.id as never, {
+      onDelete: "restrict",
+    }),
 
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },
   (table) => [
-    uniqueIndex("committee_candidacy_application_committee_key").on(
-      table.applicationId,
-      table.committeeId,
+    uniqueIndex("application_profile_opening_key").on(table.candidateProfileId, table.openingId),
+
+    index("application_submissionId_idx").on(table.submissionId),
+
+    check(
+      "application_preference_rank_ck",
+      sql`${table.preferenceRank} IS NULL OR ${table.preferenceRank} > 0`,
     ),
-    index("committee_candidacy_applicationId_idx").on(table.applicationId),
-    index("committee_candidacy_committeeId_idx").on(table.committeeId),
-    index("committee_candidacy_status_idx").on(table.status),
+
+    index("application_candidateProfileId_idx").on(table.candidateProfileId),
+    index("application_openingId_idx").on(table.openingId),
+    index("application_status_idx").on(table.status),
   ],
 );
 
-export const applicantRelations = relations(applicant, ({ many }) => ({
+/**
+ * A set of answers to one form version.
+ *
+ * Exactly one owner: a common response belongs to a `candidate_profile`, a
+ * committee response to an `application`. A row claiming both would be
+ * ambiguous to every service that loads "the common answers".
+ */
+export const formResponse = pgTable(
+  "form_response",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    /**
+     * The exact version these answers were given against.
+     *
+     * This is what makes an answer readable back against the question as it was
+     * actually asked, however many times the form has been republished since.
+     */
+    formVersionId: uuid("form_version_id")
+      .notNull()
+      .references(() => formVersion.id, { onDelete: "restrict" }),
+
+    candidateProfileId: uuid("candidate_profile_id").references(() => candidateProfile.id, {
+      onDelete: "cascade",
+    }),
+    applicationId: uuid("application_id").references(() => application.id, {
+      onDelete: "cascade",
+    }),
+
+    status: formResponseStatus("status").notNull().default("draft"),
+
+    /**
+     * Optimistic concurrency for draft writes.
+     *
+     * A draft write carries the revision it read, and a stale one is refused
+     * rather than applied. A student with a laptop and a phone both autosaving
+     * is the ordinary case, not an edge case, and silently taking the last write
+     * loses whichever answers the slower tab did not have.
+     */
+    revision: integer("revision").notNull().default(0),
+
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    check(
+      "form_response_single_owner_ck",
+      sql`(${table.candidateProfileId} IS NOT NULL AND ${table.applicationId} IS NULL)
+          OR (${table.candidateProfileId} IS NULL AND ${table.applicationId} IS NOT NULL)`,
+    ),
+
+    uniqueIndex("form_response_profile_version_key")
+      .on(table.candidateProfileId, table.formVersionId)
+      .where(sql`${table.candidateProfileId} IS NOT NULL`),
+    uniqueIndex("form_response_application_version_key")
+      .on(table.applicationId, table.formVersionId)
+      .where(sql`${table.applicationId} IS NOT NULL`),
+
+    // The parent side of `answer`'s composite foreign key, so the database can
+    // check that an answer's declared version really is its response's.
+    //
+    // A UNIQUE *constraint* rather than a unique index: drizzle emits
+    // constraints inline in CREATE TABLE and indexes afterwards, with every
+    // foreign key in between. As an index this does not exist yet when
+    // `answer`'s foreign key is added, and the migration fails outright.
+    unique("form_response_id_version_key").on(table.id, table.formVersionId),
+
+    check(
+      "form_response_submitted_at_ck",
+      sql`(${table.status} = 'submitted' AND ${table.submittedAt} IS NOT NULL)
+          OR (${table.status} <> 'submitted' AND ${table.submittedAt} IS NULL)`,
+    ),
+
+    index("form_response_formVersionId_idx").on(table.formVersionId),
+  ],
+);
+
+/**
+ * One answer to one question.
+ *
+ * `formVersionId` is denormalized here on purpose. It is not redundant data
+ * waiting to drift — it is the column that lets two composite foreign keys
+ * close the loop:
+ *
+ * 1. `(form_response_id, form_version_id)` must match a real response, so the
+ *    declared version genuinely is that response's.
+ * 2. `(form_version_id, question_id)` must match a real question, so the
+ *    question genuinely belongs to that version.
+ *
+ * Together those make it impossible for an answer to reference a question from
+ * **a different version than its own response's**. The database refuses it
+ * outright rather than a service having to remember to.
+ *
+ * What this does **not** yet guarantee, and a reader should not assume it does:
+ * that a committee response's form belongs to the same opening as its
+ * application. The chains `form_response -> application -> opening` and
+ * `form_response -> form_version -> form -> opening` are not tied together
+ * compositely, so a service bug could attach one committee's form response to
+ * another committee's application. `applicationService` checks it, with a test
+ * (#19); enforcing it in the schema would mean carrying `opening_id` onto
+ * `form_response`, which a common response does not have. Recorded here rather
+ * than left as a claim the schema does not back.
+ */
+export const answer = pgTable(
+  "answer",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    formResponseId: uuid("form_response_id").notNull(),
+    formVersionId: uuid("form_version_id").notNull(),
+    questionId: uuid("question_id").notNull(),
+
+    /**
+     * The answer value.
+     *
+     * JSONB because the shape follows the question type — a string, a number, an
+     * array of choices, a file reference. A column per type would mean a
+     * migration every time a question type is added.
+     *
+     * Large files never live here. A `file_upload` answer stores a reference to
+     * a `file` row.
+     */
+    valueJsonb: jsonb("value_jsonb"),
+
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "answer_response_version_fk",
+      columns: [table.formResponseId, table.formVersionId],
+      foreignColumns: [formResponse.id, formResponse.formVersionId],
+    }).onDelete("cascade"),
+
+    /*
+     * `restrict`, not `cascade`.
+     *
+     * Cascading would mean a deleted question silently takes an applicant's
+     * answer with it — and an answer is the one thing here that cannot be
+     * recomputed. A published version is immutable, so nothing should be
+     * deleting its questions; making the database refuse turns a service bug
+     * into an error instead of quiet data loss. Draft versions carry no
+     * answers, so editing a draft is unaffected.
+     */
+    foreignKey({
+      name: "answer_version_question_fk",
+      columns: [table.formVersionId, table.questionId],
+      foreignColumns: [question.formVersionId, question.id],
+    }).onDelete("restrict"),
+
+    uniqueIndex("answer_response_question_key").on(table.formResponseId, table.questionId),
+    index("answer_formResponseId_idx").on(table.formResponseId),
+  ],
+);
+
+export const submissionRelations = relations(submission, ({ one, many }) => ({
+  profile: one(candidateProfile, {
+    fields: [submission.candidateProfileId],
+    references: [candidateProfile.id],
+  }),
   applications: many(application),
 }));
 
-export const applicationRelations = relations(application, ({ one, many }) => ({
+export const candidateProfileRelations = relations(candidateProfile, ({ one, many }) => ({
+  user: one(user, { fields: [candidateProfile.userId], references: [user.id] }),
   cycle: one(recruitmentCycle, {
-    fields: [application.cycleId],
+    fields: [candidateProfile.cycleId],
     references: [recruitmentCycle.id],
   }),
-  applicant: one(applicant, {
-    fields: [application.applicantId],
-    references: [applicant.id],
-  }),
-  answers: many(applicationAnswer),
-  preferences: many(committeePreference),
-  candidacies: many(committeeCandidacy),
+  applications: many(application),
 }));
 
-export const questionDefinitionRelations = relations(questionDefinition, ({ one, many }) => ({
-  cycle: one(recruitmentCycle, {
-    fields: [questionDefinition.cycleId],
-    references: [recruitmentCycle.id],
+export const applicationRelations = relations(application, ({ one }) => ({
+  profile: one(candidateProfile, {
+    fields: [application.candidateProfileId],
+    references: [candidateProfile.id],
   }),
-  committee: one(committee, {
-    fields: [questionDefinition.committeeId],
-    references: [committee.id],
+  opening: one(recruitmentOpening, {
+    fields: [application.openingId],
+    references: [recruitmentOpening.id],
   }),
-  answers: many(applicationAnswer),
 }));
 
-export const applicationAnswerRelations = relations(applicationAnswer, ({ one }) => ({
+export const formResponseRelations = relations(formResponse, ({ one, many }) => ({
+  version: one(formVersion, {
+    fields: [formResponse.formVersionId],
+    references: [formVersion.id],
+  }),
+  profile: one(candidateProfile, {
+    fields: [formResponse.candidateProfileId],
+    references: [candidateProfile.id],
+  }),
   application: one(application, {
-    fields: [applicationAnswer.applicationId],
+    fields: [formResponse.applicationId],
     references: [application.id],
   }),
-  question: one(questionDefinition, {
-    fields: [applicationAnswer.questionDefinitionId],
-    references: [questionDefinition.id],
-  }),
+  answers: many(answer),
 }));
 
-export const committeePreferenceRelations = relations(committeePreference, ({ one }) => ({
-  application: one(application, {
-    fields: [committeePreference.applicationId],
-    references: [application.id],
-  }),
-  committee: one(committee, {
-    fields: [committeePreference.committeeId],
-    references: [committee.id],
-  }),
-}));
-
-export const committeeCandidacyRelations = relations(committeeCandidacy, ({ one, many }) => ({
-  application: one(application, {
-    fields: [committeeCandidacy.applicationId],
-    references: [application.id],
-  }),
-  committee: one(committee, {
-    fields: [committeeCandidacy.committeeId],
-    references: [committee.id],
-  }),
-  assignments: many(reviewAssignment),
-  decision: one(committeeDecision),
-}));
-
-/**
- * Facts GitHub states about an applicant who supplied a GitHub link.
- *
- * A cache, not a source of truth: everything here can be re-fetched, and a row
- * missing or stale is an ordinary state rather than an error. Keyed one-to-one
- * on the application so a reviewer's page is a single lookup and can never
- * trigger a fetch of its own.
- *
- * `docs/product-rules.md` §1 forbids fetching applicant links and carves out
- * github.com specifically for verbatim facts. Nothing derived from this is
- * stored: no summary, no score, no signal.
- */
-export const applicantGithubProfile = pgTable(
-  "applicant_github_profile",
-  {
-    applicationId: uuid("application_id")
-      .primaryKey()
-      .references(() => application.id, { onDelete: "cascade" }),
-
-    /** The account name taken from the link the applicant themselves supplied. */
-    username: text("username").notNull(),
-
-    /**
-     * Repositories exactly as GitHub described them.
-     *
-     * Stored as JSON rather than a table: it is a cached document that is
-     * replaced wholesale on every refresh, never queried across applicants,
-     * and never joined to anything.
-     */
-    repos: jsonb("repos"),
-
-    /**
-     * How many public repositories use each language, as GitHub labels them.
-     *
-     * Counted over every repository rather than the five that are displayed,
-     * and stored because it is derived from the same response - recomputing it
-     * would mean asking GitHub again. A count of a stated fact, never a
-     * ranking: nothing here reaches an aggregate or a score.
-     */
-    languageCounts: jsonb("language_counts"),
-
-    /**
-     * Commits in the public events GitHub still retains - roughly ninety days.
-     *
-     * Null when no GitHub token is configured, because the unauthenticated
-     * budget cannot afford the extra request per applicant. Never a career
-     * total, and labelled as recent activity wherever it is shown.
-     */
-    recentCommits: integer("recent_commits"),
-
-    /**
-     * Why the last attempt produced nothing, in words a reviewer can read.
-     *
-     * A private account, a deleted one, or a rate limit are all ordinary
-     * outcomes, so this is shown as context rather than as a failure.
-     */
-    error: text("error"),
-    httpStatus: integer("http_status"),
-
-    /** When GitHub was last asked. Shown on screen beside the data. */
-    fetchedAt: timestamp("fetched_at"),
-
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at").notNull(),
-  },
-  (table) => [index("applicant_github_profile_fetchedAt_idx").on(table.fetchedAt)],
-);
-
-export const applicantGithubProfileRelations = relations(applicantGithubProfile, ({ one }) => ({
-  application: one(application, {
-    fields: [applicantGithubProfile.applicationId],
-    references: [application.id],
-  }),
+export const answerRelations = relations(answer, ({ one }) => ({
+  question: one(question, { fields: [answer.questionId], references: [question.id] }),
 }));

@@ -1,38 +1,58 @@
-import { authHeader, seedUser } from "./harness.ts";
+import { account, user } from "@recruit/db/schema";
+import jwt from "jsonwebtoken";
 
-export const alice = {
-  id: "alice",
-  name: "Alice",
-  email: "alice@cmu.edu",
-  accountId: "alice-sub",
-};
+import { testDb } from "./harness.ts";
+import { privateKeyPem } from "./keys.ts";
 
-export const bob = {
-  id: "bob",
-  name: "Bob",
-  email: "bob@cmu.edu",
-  accountId: "bob-sub",
-};
-
-export const adminUser = {
-  id: "admin",
-  name: "Admin",
-  email: "admin@cmu.edu",
-  accountId: "admin-sub",
-};
-
-export async function seedAlice() {
-  await seedUser(alice);
+/**
+ * A bearer token for an authenticated caller.
+ *
+ * Signed with the suite's own key, which `setup.ts` serves in place of the
+ * identity provider's JWKS endpoint. The signature is real and really verified;
+ * only the key delivery is local.
+ *
+ * `groups` decides the global role, exactly as it does in production. An empty
+ * list is the common case: somebody who signed in with a CMU account and holds
+ * no authority at all.
+ */
+export function authHeader(opts: { sub: string; groups?: string[] }) {
+  const token = jwt.sign({ sub: opts.sub, groups: opts.groups ?? [] }, privateKeyPem, {
+    algorithm: "RS256",
+    issuer: process.env["AUTH_ISSUER"],
+    audience: process.env["AUTH_CLIENT_ID"],
+    keyid: "test-kid",
+    expiresIn: "1h",
+  });
+  return { Authorization: `Bearer ${token}` };
 }
 
-export async function seedBob() {
-  await seedUser(bob);
+/**
+ * A signed-in CMU account holding no authority at all.
+ *
+ * The `account` row is what links the identity provider's subject to our
+ * `user.id`, and `user.id` is the Andrew ID. Without it a perfectly valid token
+ * resolves to nobody — which is the shape of a real first sign-in, and worth
+ * being able to construct deliberately.
+ */
+export async function seedApplicant(
+  andrewId: string,
+): Promise<{ andrewId: string; headers: Record<string, string> }> {
+  const now = new Date();
+  await testDb.insert(user).values({
+    id: andrewId,
+    name: andrewId,
+    email: `${andrewId}@andrew.cmu.edu`,
+    emailVerified: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await testDb.insert(account).values({
+    id: `${andrewId}-account`,
+    accountId: `${andrewId}-sub`,
+    providerId: "keycloak",
+    userId: andrewId,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return { andrewId, headers: authHeader({ sub: `${andrewId}-sub` }) };
 }
-
-export async function seedAdmin() {
-  await seedUser(adminUser);
-}
-
-export const aliceAuth = () => authHeader({ sub: alice.accountId });
-export const bobAuth = () => authHeader({ sub: bob.accountId });
-export const adminAuth = () => authHeader({ sub: adminUser.accountId, groups: ["test-admins"] });

@@ -1,69 +1,150 @@
 import { pgEnum } from "drizzle-orm/pg-core";
 
-/** Lifecycle of a recruitment cycle. Archived cycles are read-only. */
+/**
+ * Every enum the schema uses, in one place.
+ *
+ * **Shared file: append-only and alphabetical within a group.** Both tracks add
+ * to it, and a conflict in a file ordered any other way is one somebody has to
+ * think about rather than resolve mechanically.
+ */
+
+/* -------------------------------------------------------------------------- */
+/* Organization                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A role a `permission_grant` confers.
+ *
+ * Layered on top of the global `admin | user | guest` role rather than
+ * replacing it. Holding the ScottyLabs admin group lets somebody create a cycle
+ * and issue grants; it does not let them read applicant data.
+ */
+export const grantRole = pgEnum("grant_role", [
+  "org_admin",
+  "committee_director",
+  "question_editor",
+  "reviewer",
+]);
+
+/**
+ * What a grant applies to.
+ *
+ * `organization` grants carry no team; `team` grants must name one. The database
+ * enforces that pairing with a CHECK, because a grant with the wrong shape is
+ * either authority nobody intended or authority that silently applies nowhere.
+ */
+export const grantScope = pgEnum("grant_scope", ["organization", "team"]);
+
+/* -------------------------------------------------------------------------- */
+/* Cycles                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Where a cycle sits in its lifecycle.
+ *
+ * Unlike v1, where status was cosmetic apart from `archived`, these are
+ * enforced: submission checks the cycle status server-side and every transition
+ * is explicit and audited.
+ */
 export const cycleStatus = pgEnum("cycle_status", [
   "draft",
+  "scheduled",
   "open",
+  "closed",
   "reviewing",
-  "deciding",
+  "decisions_released",
   "archived",
 ]);
 
 /**
- * Recruitment permissions, scoped to one cycle. Layered on top of the global
- * `admin | user | guest` role rather than replacing it: a global admin is not
- * automatically a recruitment admin.
+ * Whether one committee is accepting applications in one cycle.
+ *
+ * Deliberately independent of the cycle's own status. A cycle can be `open`
+ * while a committee's form is still unpublished, and that committee simply does
+ * not accept applications yet.
  */
-export const recruitmentRole = pgEnum("recruitment_role", [
-  "reviewer",
-  "committee_lead",
-  "recruitment_admin",
-]);
+export const openingStatus = pgEnum("opening_status", ["draft", "open", "closed"]);
 
-/** Normalised class year. `raw_year` retains whatever the form supplied. */
-export const applicantYear = pgEnum("applicant_year", [
-  "first_year",
-  "sophomore",
-  "junior",
-  "senior",
-  "grad",
-  "unknown",
-]);
+/* -------------------------------------------------------------------------- */
+/* Forms                                                                      */
+/* -------------------------------------------------------------------------- */
 
-/** How an answer should be rendered and validated. */
-export const answerType = pgEnum("answer_type", [
-  "short_text",
-  "long_text",
-  "url",
-  "choice",
-  "multi_choice",
-  "rank",
-  "boolean",
-]);
+/**
+ * Who owns a form.
+ *
+ * `common` is the cycle's shared questions, owned by the organization and
+ * answered once per applicant per cycle. `committee` is one opening's own.
+ */
+export const formKind = pgEnum("form_kind", ["common", "committee"]);
 
-/** Why a candidacy exists. Drives the default generation rules. */
-export const candidacySource = pgEnum("candidacy_source", [
-  "top_preference",
-  "committee_question_opt_in",
-  "manual",
-]);
-
-/** Where a candidacy sits in the review pipeline. */
-export const candidacyStatus = pgEnum("candidacy_status", [
-  "pending_assignment",
-  "in_review",
-  "needs_additional_review",
-  "ready_for_decision",
-  "decided",
+/**
+ * Where a form version sits.
+ *
+ * `published` is immutable. `superseded` is a published version that a newer one
+ * replaced, kept because responses still point at it.
+ */
+export const formVersionStatus = pgEnum("form_version_status", [
+  "draft",
+  "published",
+  "superseded",
 ]);
 
 /**
- * Whether a rubric criterion is scored by a human or derived deterministically
- * from the applicant's own submitted committee ranking.
+ * What a question asks for, and therefore how it renders and validates.
+ *
+ * `section_heading` and `static_content` carry no answer and are never required;
+ * they exist so a long form can be broken up without a second mechanism.
  */
-export const criterionSource = pgEnum("criterion_source", ["reviewer", "application_preference"]);
+export const questionType = pgEnum("question_type", [
+  "short_text",
+  "long_text",
+  "single_select",
+  "multi_select",
+  "dropdown",
+  "number",
+  "url",
+  "file_upload",
+  "section_heading",
+  "static_content",
+]);
 
-/** State of one reviewer's assignment to one candidacy. */
+/* -------------------------------------------------------------------------- */
+/* Applications                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * An application's internal status.
+ *
+ * What an applicant sees is a projection of this, not this value: `shortlisted`
+ * surfaces to them as "Under Review". Track A writes up to `submitted`; Track B
+ * writes everything after.
+ */
+export const applicationStatus = pgEnum("application_status", [
+  "draft",
+  "submitted",
+  "under_review",
+  "shortlisted",
+  "interview",
+  "decided",
+  "withdrawn",
+]);
+
+/** Whether a set of answers is still being edited or has been finalized. */
+export const formResponseStatus = pgEnum("form_response_status", ["draft", "submitted"]);
+
+/* -------------------------------------------------------------------------- */
+/* Reviews                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/** Where a rubric version sits. `locked` is immutable. */
+export const rubricStatus = pgEnum("rubric_status", ["draft", "active", "locked"]);
+
+/**
+ * State of one reviewer's commission.
+ *
+ * `cancelled` is excluded from the live-assignment unique index, so a reviewer
+ * who was removed can be reassigned.
+ */
 export const assignmentStatus = pgEnum("assignment_status", [
   "assigned",
   "in_progress",
@@ -72,7 +153,10 @@ export const assignmentStatus = pgEnum("assignment_status", [
   "cancelled",
 ]);
 
-/** A reviewer's overall recommendation, collected alongside rubric scores. */
+/** Whether a review is still being written or has been finalized. */
+export const reviewStatus = pgEnum("review_status", ["draft", "submitted"]);
+
+/** A reviewer's overall recommendation, alongside their rubric scores. */
 export const recommendation = pgEnum("recommendation", [
   "strong_yes",
   "yes",
@@ -84,38 +168,40 @@ export const recommendation = pgEnum("recommendation", [
 /** How confident the reviewer is in their own assessment. */
 export const reviewConfidence = pgEnum("review_confidence", ["high", "medium", "low"]);
 
-/** A committee's proposed outcome for a candidacy. Never final on its own. */
-export const decisionStatus = pgEnum("decision_status", [
-  "pending",
-  "discuss",
-  "accept",
-  "waitlist",
-  "reject",
-  "redirect",
-]);
+/* -------------------------------------------------------------------------- */
+/* Records                                                                    */
+/* -------------------------------------------------------------------------- */
 
-/** The leadership-level outcome for an applicant across all committees. */
-export const placementStatus = pgEnum("placement_status", [
-  "pending",
-  "placed",
-  "waitlisted",
-  "rejected",
+/**
+ * What happened to an application.
+ *
+ * Offer, acceptance and confirmation are distinct events rather than values of
+ * one status column, because the organization may need that workflow and
+ * retrofitting it would mean rewriting decision history.
+ */
+export const statusEvent = pgEnum("status_event", [
+  "created",
+  "submitted",
+  "withdrawn",
+  "review_started",
+  "shortlisted",
+  "interview_invited",
+  "offered",
+  "accepted",
   "declined",
+  "confirmed",
+  "rejected",
+  "waitlisted",
 ]);
 
-/** Progress of an uploaded spreadsheet through preview and commit. */
-export const importStatus = pgEnum("import_status", [
+/** Whether an upload has been validated and may be attached to an application. */
+export const fileStatus = pgEnum("file_status", ["pending", "committed", "rejected"]);
+
+/** Delivery state of one queued notification. */
+export const notificationStatus = pgEnum("notification_status", [
   "pending",
-  "previewed",
-  "committed",
+  "sending",
+  "sent",
   "failed",
-]);
-
-/** Per-row outcome, so one malformed row cannot fail an entire batch. */
-export const importRowStatus = pgEnum("import_row_status", [
-  "pending",
-  "imported",
-  "updated",
-  "skipped",
-  "error",
+  "dead",
 ]);

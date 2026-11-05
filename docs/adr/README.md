@@ -68,7 +68,6 @@ Decisions each workstream still owes an ADR for, from
 - **B** — how a committee-scoped rule is compiled, given that a CASL condition
   targets one table and an application reaches its team through
   `recruitment_opening`.
-- **E** — the conditional-rule expression format.
 - **L** — the email provider, and the retry and backoff policy.
 - **M** — the origin layout: one public origin with Caddy proxying the API, or
   two hosts under `scottylabs.org`.

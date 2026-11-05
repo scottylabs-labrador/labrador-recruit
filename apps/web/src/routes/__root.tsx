@@ -1,7 +1,7 @@
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import type { QueryClient } from "@tanstack/react-query";
 import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools";
-import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
+import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 
 import { NavBar } from "@/components/NavBar.tsx";
@@ -17,7 +17,32 @@ interface MyRouterContext {
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   component: RootComponent,
+  notFoundComponent: NotFound,
 });
+
+/**
+ * A wrong URL, explained.
+ *
+ * Without this the router renders its own `<p>Not Found</p>`, with no heading,
+ * no way back, and nothing to say whether the platform is broken or the link
+ * was. An applicant following a stale link from an old announcement is the
+ * likeliest person to land here, and they need the committees, not a
+ * diagnosis.
+ */
+function NotFound() {
+  return (
+    <div className="mx-auto w-full max-w-[62ch] px-6 py-20">
+      <h1 className="text-xl font-semibold">That page does not exist</h1>
+      <p className="mt-3 text-[0.95rem] leading-7 text-muted-foreground">
+        The link may be out of date, or the page may have moved. Nothing is wrong with your
+        application.
+      </p>
+      <Link to="/recruit" className="mt-6 inline-block text-sm font-medium underline">
+        Go to the committees
+      </Link>
+    </div>
+  );
+}
 
 /**
  * Nothing renders until a temporary password has been replaced.

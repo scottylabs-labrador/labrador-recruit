@@ -28,6 +28,56 @@ export class AuthorizationError extends HttpError {
   }
 }
 
+/**
+ * Not found, or not visible to this caller.
+ *
+ * One class for both, on purpose. Returning 404 rather than 403 for something
+ * the caller may not see is what stops the platform leaking that a record
+ * exists — see `docs/authorization.md`. Having a separate "forbidden but it
+ * exists" error available here would make that mistake easy to reach for.
+ */
+export class NotFoundError extends HttpError {
+  constructor(message = "Not found") {
+    super(404, message);
+    this.name = "NotFound";
+  }
+}
+
+/**
+ * The request was understood but conflicts with the current state.
+ *
+ * Carries `details` so a caller can act on it rather than just read it — a
+ * stale draft write returns the revision it should have used, which is what
+ * lets the client tell somebody their other tab is ahead instead of silently
+ * discarding one side.
+ */
+export class ConflictError extends HttpError {
+  details: Record<string, unknown> | undefined;
+
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(409, message);
+    this.name = "Conflict";
+    this.details = details;
+  }
+}
+
+/**
+ * The request was well formed but its content is not acceptable.
+ *
+ * Carries `problems` so a client can link each message to the field it belongs
+ * to. A single sentence on a form with forty questions is not a usable error —
+ * somebody will submit forty times to find them all.
+ */
+export class ValidationFailedError extends HttpError {
+  problems: unknown;
+
+  constructor(message: string, problems?: unknown) {
+    super(422, message);
+    this.name = "ValidationFailed";
+    this.problems = problems;
+  }
+}
+
 export class InternalServerError extends HttpError {
   constructor(message: string) {
     super(500, message);
@@ -63,6 +113,18 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
   }
 
   // The HTTP errors take priority over unknown errors
+  if (err instanceof ValidationFailedError) {
+    return res.status(err.status).json({
+      name: err.name,
+      message: err.message,
+      ...(err.problems === undefined ? {} : { problems: err.problems }),
+    });
+  }
+
+  if (err instanceof ConflictError) {
+    return res.status(err.status).json({ name: err.name, message: err.message, ...err.details });
+  }
+
   if (err instanceof HttpError) {
     return res.status(err.status).json({ name: err.name, message: err.message });
   }
@@ -93,8 +155,11 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
   }
 
   if (err instanceof Error) {
+    // The detail goes to Sentry or the console, never to the client. A driver
+    // error echoed back describes the query that failed, and on a database
+    // holding applicant essays that is a map somebody did not have before.
     captureUnexpectedError(`Unexpected error in ${req.path}: ${err}`);
-    return res.status(500).json({ message: `Internal Server Error: ${err.message}` });
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 
   return next();

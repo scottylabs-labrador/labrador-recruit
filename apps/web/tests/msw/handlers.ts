@@ -1,689 +1,600 @@
+import type { components } from "@recruit/server/build/swagger";
 import { http, HttpResponse } from "msw";
 
-import { API_URL } from "../fixtures.ts";
-import type {
-  Aggregate,
-  Application,
-  Committee,
-  Cycle,
-  CycleProgress,
-  DecisionExport,
-  ImportCommitReport,
-  ImportPreview,
-  ImportRowOutcome,
-  ImportSummary,
-  MyStanding,
-  PeerReview,
-  QueueEntry,
-  RankingEntry,
-  RankingExport,
-  Review,
-  ReviewerLoadExport,
-  Rubric,
-  RubricValidation,
-  RubricVersion,
-} from "../recruitmentFixtures.ts";
+/**
+ * Every fixture in this file is typed against the generated API schema.
+ *
+ * Three of them were originally hand-written and all three were wrong: the
+ * question definitions invented `id`, `helpText` and `visibleWhen` so the form
+ * rendered nothing; the 409 body nested `details.revision` where the server
+ * spreads it at the top level; and the submission result invented
+ * `{ submittedAt, applicationIds, commonLocked }` where the server returns
+ * `{ submitted: [...] }` - and that last one had a *passing* test against a
+ * response the server has never sent.
+ *
+ * A fixture that does not match the contract tests a product that does not
+ * exist. Aliasing them to `components["schemas"][...]` makes the next drift a
+ * compile error instead of a green test.
+ */
+type Schemas = components["schemas"];
 
-export let session: ReturnType<typeof import("../fixtures.ts").userSession> | null = null;
-export let adminUsers: Array<{
-  id: string;
-  name: string;
-}> = [];
+/**
+ * The mocked API surface.
+ *
+ * Deliberately small. The handlers grow with the endpoints they stand in for,
+ * and `onUnhandledRequest: "error"` means an endpoint a test forgets to mock
+ * fails loudly here rather than hanging — so an empty-looking file is the
+ * honest starting point rather than a gap.
+ */
+const API = "http://localhost:3001";
 
-export function setSession(next: typeof session) {
+export type Session = {
+  user: { id: string; name: string; email: string; role: "admin" | "user" | "guest" };
+} | null;
+
+export let session: Session = null;
+
+export function setSession(next: Session) {
   session = next;
 }
 
-/**
- * Whether the deployment has a registered OIDC client. Defaults to true, which
- * is what a properly configured deployment reports.
- */
-export let identityProviderConfigured = true;
+let identityProviderConfigured = true;
 
 export function setIdentityProviderConfigured(next: boolean) {
   identityProviderConfigured = next;
 }
 
-export function setAdminUsers(next: typeof adminUsers) {
-  adminUsers = next;
-}
+export type CurrentCycle = Schemas["CurrentCycle"];
+
+export type PublicOpening = Schemas["PublicOpening"];
 
 /**
- * Recruitment state. Mutable module-level values with setters, matching the
- * pattern the existing dashboard handlers established.
- */
-
-export let cycles: Cycle[] = [];
-export let committees: Committee[] = [];
-export let queue: QueueEntry[] = [];
-let nextReview: { assignmentId: string; candidacyId: string } | null = null;
-export let applications: Application[] = [];
-export let rubric: Rubric | null = null;
-export let review: Review | null = null;
-export let aggregates: Aggregate[] = [];
-export let ranking: RankingEntry[] = [];
-export let disagreements: Aggregate[] = [];
-export let peerReviews: PeerReview[] = [];
-/** Null means `/me` 404s, which is how "no standing in this cycle" arrives. */
-export let standing: MyStanding | null = null;
-export let progress: CycleProgress | null = null;
-export let workloads: Array<{
-  userId: string;
-  assigned: number;
-  submitted: number;
-  conflicted: number;
-  outstanding: number;
-}> = [];
-
-/** Every recruitment request the handlers served, so tests can assert on calls. */
-export let recordedRequests: Array<{ method: string; url: string; body: unknown }> = [];
-
-export function setCycles(next: Cycle[]) {
-  cycles = next;
-}
-export function setCommittees(next: Committee[]) {
-  committees = next;
-}
-export function setQueue(next: QueueEntry[]) {
-  queue = next;
-}
-/**
- * What the next claim hands back, or `null` for "nothing left".
+ * The default cycle every test starts from.
  *
- * Claiming is a POST that mutates real state, so it cannot be derived from
- * `queue` the way the list handlers are - a test has to say what the server
- * would pick.
+ * A cycle that is open with a deadline in the future is the ordinary case, so
+ * a test that cares about something else overrides only the field it is about
+ * and the rest stays legible.
  */
-export function setNextReview(next: { assignmentId: string; candidacyId: string } | null) {
-  nextReview = next;
+export const DEFAULT_CYCLE: CurrentCycle = {
+  slug: "spring-2027",
+  name: "Spring 2027 Recruitment",
+  description: "Apply to ScottyLabs committees.",
+  timeZone: "America/New_York",
+  opensAt: "2027-01-05T17:00:00.000Z",
+  closesAt: "2027-02-01T04:59:00.000Z",
+  maxCommitteesPerApplicant: 3,
+  requirePreferenceRanking: false,
+};
+
+export const DEFAULT_OPENINGS: PublicOpening[] = [
+  {
+    openingId: "opening-labrador",
+    teamSlug: "labrador",
+    teamName: "Labrador",
+    description: "Product teams building for the CMU community.",
+    accepting: true,
+    opensAt: "2027-01-05T17:00:00.000Z",
+    closesAt: "2027-02-01T04:59:00.000Z",
+  },
+  {
+    openingId: "opening-design",
+    teamSlug: "design",
+    teamName: "Design",
+    description: "Brand, product and event design.",
+    accepting: true,
+    opensAt: "2027-01-05T17:00:00.000Z",
+    closesAt: null,
+  },
+];
+
+// `undefined` is a cycle that exists; `null` is none, which the endpoint
+// answers with a 404. The two are different pages, so the fixture keeps them
+// distinguishable rather than collapsing both to a falsy value.
+let currentCycle: CurrentCycle | null = DEFAULT_CYCLE;
+let openings: PublicOpening[] = DEFAULT_OPENINGS;
+
+export function setCurrentCycle(next: CurrentCycle | null) {
+  currentCycle = next;
 }
-export function setApplications(next: Application[]) {
+
+export function setOpenings(next: PublicOpening[]) {
+  openings = next;
+}
+
+export type ProfileView = Schemas["ProfileView"];
+
+export type ApplicantStatus = ApplicationSummary["status"];
+
+export type ApplicationSummary = Schemas["ApplicationSummary"];
+
+export const DEFAULT_PROFILE: ProfileView = {
+  cycleSlug: "spring-2027",
+  cycleName: "Spring 2027 Recruitment",
+  closesAt: "2027-02-01T04:59:00.000Z",
+  commonLocked: false,
+};
+
+// `null` is no profile at all, which the endpoint answers with a 404 - the
+// ordinary state between seasons rather than an error.
+let profile: ProfileView | null = DEFAULT_PROFILE;
+let applications: ApplicationSummary[] = [];
+
+export function setProfile(next: ProfileView | null) {
+  profile = next;
+}
+
+export function setApplications(next: ApplicationSummary[]) {
   applications = next;
 }
-export function setRubric(next: Rubric | null) {
-  rubric = next;
+
+/**
+ * Every withdraw the page actually sent.
+ *
+ * Recorded rather than asserted through a spy, because what matters is that
+ * the request reached the API exactly once - a confirmation step that still
+ * fires on the first click would pass a spy-free test and lose somebody's
+ * application.
+ */
+export const withdrawCalls: string[] = [];
+
+/** Every opening the page asked to apply to, in order. */
+export const applyCalls: string[] = [];
+
+/**
+ * The last ordering the page sent, and every ordering it sent.
+ *
+ * The whole list each time, because a ranking is one statement about a set -
+ * a page that sent them one at a time would pass a "did it call the endpoint"
+ * assertion while recording two first choices.
+ */
+export const preferenceCalls: string[][] = [];
+
+/** Every upload the page asked for, and every object it PUT. */
+export const uploadCalls: { originalFilename: string; mimeType: string; sizeBytes: number }[] = [];
+export const putCalls: string[] = [];
+export const commitCalls: string[] = [];
+
+/**
+ * How the next commit is answered.
+ *
+ * `"ok"` commits. `"wrong-type"` is the 422 the server returns when the bytes
+ * are not the format they claim - the case that matters, because the declared
+ * type came from the browser.
+ */
+let nextCommit: "ok" | "wrong-type" = "ok";
+
+export function setNextCommit(next: "ok" | "wrong-type") {
+  nextCommit = next;
 }
-export function setReview(next: Review | null) {
-  review = next;
+
+const committedFiles = new Map<string, { originalFilename: string; mimeType: string }>();
+
+export function setCommittedFile(
+  fileId: string,
+  info: { originalFilename: string; mimeType: string },
+) {
+  committedFiles.set(fileId, info);
 }
-export function setAggregates(next: Aggregate[]) {
-  aggregates = next;
+
+/** Every submission the page sent: the key and what it named. */
+export const submissionCalls: Schemas["SubmitBody"][] = [];
+
+/**
+ * How the next submission is answered.
+ *
+ * `"ok"` commits. `"incomplete"` is the 422 the server returns when a required
+ * answer is missing, carrying the per-application detail the review page has
+ * to render. `"deadline"` is the 409 for a passed deadline.
+ */
+let nextSubmission: "ok" | "incomplete" | "deadline" = "ok";
+
+export function setNextSubmission(next: "ok" | "incomplete" | "deadline") {
+  nextSubmission = next;
 }
-export function setRanking(next: RankingEntry[]) {
-  ranking = next;
+
+export type QuestionDefinitionFixture = Schemas["QuestionDefinition"];
+
+export type PublishedFormFixture = Schemas["PublishedForm"];
+
+export const COMMON_FORM: PublishedFormFixture = {
+  formId: "form-common",
+  kind: "common",
+  title: "Shared questions",
+  description: "Answered once and reused for every committee.",
+  version: 1,
+  questions: [
+    {
+      questionKey: "major",
+      type: "short_text",
+      label: "Your major",
+      required: true,
+      position: 1,
+      config: null,
+      visibilityRule: null,
+    },
+    {
+      questionKey: "year",
+      type: "single_select",
+      label: "Year",
+      required: true,
+      position: 2,
+      config: { choices: ["First year", "Sophomore", "Junior", "Senior"] },
+      visibilityRule: null,
+    },
+    {
+      questionKey: "transferFrom",
+      type: "short_text",
+      label: "Which school did you transfer from?",
+      required: false,
+      position: 3,
+      config: null,
+      visibilityRule: { equals: { questionKey: "year", value: "Junior" } },
+    },
+  ],
+};
+
+export const COMMITTEE_FORM: PublishedFormFixture = {
+  formId: "form-labrador",
+  kind: "committee",
+  title: "Labrador application",
+  description: null,
+  version: 1,
+  questions: [
+    {
+      questionKey: "why",
+      type: "long_text",
+      label: "Why Labrador?",
+      required: true,
+      position: 1,
+      config: null,
+      visibilityRule: null,
+    },
+  ],
+};
+
+let forms: PublishedFormFixture[] = [COMMON_FORM, COMMITTEE_FORM];
+
+export function setForms(next: PublishedFormFixture[]) {
+  forms = next;
 }
-export function setDisagreements(next: Aggregate[]) {
-  disagreements = next;
+
+export type CommonResponseFixture = Schemas["CommonResponseView"];
+
+export const DEFAULT_COMMON_RESPONSE: CommonResponseFixture = {
+  formId: "form-common",
+  title: "Shared questions",
+  description: "Answered once and reused for every committee.",
+  revision: 0,
+  answers: {},
+  locked: false,
+};
+
+let commonResponse: CommonResponseFixture = DEFAULT_COMMON_RESPONSE;
+
+export function setCommonResponse(next: CommonResponseFixture) {
+  commonResponse = { ...next };
 }
-export function setPeerReviews(next: PeerReview[]) {
-  peerReviews = next;
+
+/** Answers and revisions per application, for the committee draft routes. */
+const applicationDrafts = new Map<string, ApplicationDraft>();
+
+interface ApplicationDraft {
+  formId: string | null;
+  revision: number;
+  answers: Schemas["AnswerMap"];
 }
-export function setWorkloads(next: typeof workloads) {
-  workloads = next;
-}
-export function setStanding(next: MyStanding | null) {
-  standing = next;
-}
-export function setProgress(next: CycleProgress | null) {
-  progress = next;
+
+export function setApplicationDraft(applicationId: string, draft: ApplicationDraft) {
+  applicationDrafts.set(applicationId, { ...draft });
 }
 
 /**
- * Import, rubric-version, and export state. Same mutable-value-plus-setter
- * pattern as everything above, and every one of these is reset in `setup.ts`.
+ * Forces the next draft save to be refused as stale.
+ *
+ * A laptop and a phone both autosaving is the ordinary case rather than an
+ * edge case, so the page's behaviour on a 409 is a first-class thing to test:
+ * it must say the other tab is ahead and must not discard what was typed.
  */
+let nextSaveConflicts = false;
 
-export let imports: ImportSummary[] = [];
-export let importPreview: ImportPreview | null = null;
-export let importRows: ImportRowOutcome[] = [];
-export let commitReport: ImportCommitReport | null = null;
-export let rubricVersions: RubricVersion[] = [];
-export let rubricValidation: RubricValidation | null = null;
-export let rankingExport: RankingExport[] = [];
-export let decisionExport: DecisionExport[] = [];
-export let reviewerLoadExport: ReviewerLoadExport[] = [];
-
-export function setImports(next: ImportSummary[]) {
-  imports = next;
-}
-export function setImportPreview(next: ImportPreview | null) {
-  importPreview = next;
-}
-export function setImportRows(next: ImportRowOutcome[]) {
-  importRows = next;
-}
-export function setCommitReport(next: ImportCommitReport | null) {
-  commitReport = next;
-}
-export function setRubricVersions(next: RubricVersion[]) {
-  rubricVersions = next;
-}
-export function setRubricValidation(next: RubricValidation | null) {
-  rubricValidation = next;
-}
-export function setRankingExport(next: RankingExport[]) {
-  rankingExport = next;
-}
-export function setDecisionExport(next: DecisionExport[]) {
-  decisionExport = next;
-}
-export function setReviewerLoadExport(next: ReviewerLoadExport[]) {
-  reviewerLoadExport = next;
-}
-export function resetRecordedRequests() {
-  recordedRequests = [];
+export function failNextDraftSaveWithConflict() {
+  nextSaveConflicts = true;
 }
 
-export function requestsMatching(method: string, fragment: string) {
-  return recordedRequests.filter(
-    (entry) => entry.method === method && entry.url.includes(fragment),
-  );
-}
+/** Every draft save the page sent, in order, with what it carried. */
+export const draftSaves: {
+  target: string;
+  revision: number;
+  answers: Schemas["DraftBody"]["answers"];
+}[] = [];
 
-async function record(method: string, request: Request) {
-  let body: unknown = null;
-  if (method !== "GET") {
-    body = await request
-      .clone()
-      .json()
-      .catch(() => null);
-  }
-  recordedRequests.push({ method, url: request.url, body });
-}
-
-const RECRUITMENT = `${API_URL}/recruitment`;
-
-type SaveBody = Partial<Omit<Review, "scores">> & { scores?: Record<string, number> };
-
-/**
- * Mirrors the server: the save request carries `scores` as a criterion-keyed
- * map, while the stored review returns them as an array.
- */
-function applySave(current: Review, body: SaveBody): Review {
-  const { scores, ...rest } = body;
-  return {
-    ...current,
-    ...rest,
-    scores:
-      scores === undefined
-        ? current.scores
-        : Object.entries(scores).map(([criterionKey, score]) => ({ criterionKey, score })),
-  };
-}
-
-/**
- * Simulates the identity provider being unreachable, which is what a
- * misconfigured issuer or a Keycloak outage looks like from the browser.
- */
-export let signInFails = false;
-export function setSignInFails(next: boolean) {
-  signInFails = next;
-}
-
-/** What the last password sign-in was posted, so a test can assert on it. */
-export let lastSignIn: { email: string; password: string } | null = null;
-export let lastPasswordChange: { currentPassword: string; newPassword: string } | null = null;
-export let rejectCredentials = false;
-
-export function setRejectCredentials(next: boolean) {
-  rejectCredentials = next;
-}
-
-export function resetAuthProbes() {
-  lastSignIn = null;
-  lastPasswordChange = null;
-  rejectCredentials = false;
-}
-
-/** The last committee decision recorded, so a test can assert on it. */
-export let lastDecision: { candidacyId: string; status: string } | null = null;
-
-/** Every decision written, so a bulk action can be checked row by row. */
-export let decisionLog: Array<{ candidacyId: string; status: string }> = [];
-
-/** Candidacy ids the API should refuse, for testing a partial bulk failure. */
-let rejectedCandidacyIds = new Set<string>();
-
-export function setRejectedCandidacies(ids: readonly string[]) {
-  rejectedCandidacyIds = new Set(ids);
-}
-
-export function resetDecisions() {
-  lastDecision = null;
-  decisionLog = [];
-  rejectedCandidacyIds = new Set();
-}
-
-/** What the settings screen last sent, so a test can assert on the payload. */
-export let lastCycleCreate: Record<string, unknown> | null = null;
-export let lastCycleUpdate: Record<string, unknown> | null = null;
-export let lastMembershipGrant: Record<string, unknown> | null = null;
-export let lastRevokedMembershipId: string | null = null;
-export let lastCommitteeAttach: Record<string, unknown> | null = null;
-export let lastAccountCreate: Record<string, unknown> | null = null;
-export let syncCallCount = 0;
-
-/** The cached GitHub profile the API reports, and how often it was refreshed. */
-let githubProfile: Record<string, unknown> | null = null;
-export let githubRefreshCount = 0;
-
-export function setGithubProfile(next: typeof githubProfile) {
-  githubProfile = next;
-}
-
-let memberships: Array<Record<string, unknown>> = [];
-
-export function setMemberships(next: typeof memberships) {
-  memberships = next;
-}
-
-export function resetAdminRecorders() {
-  lastCycleCreate = null;
-  lastCycleUpdate = null;
-  lastMembershipGrant = null;
-  lastRevokedMembershipId = null;
-  lastCommitteeAttach = null;
-  lastAccountCreate = null;
-  syncCallCount = 0;
-  githubProfile = null;
-  githubRefreshCount = 0;
-  memberships = [];
+export function resetCatalogue() {
+  withdrawCalls.length = 0;
+  applyCalls.length = 0;
+  preferenceCalls.length = 0;
+  draftSaves.length = 0;
+  submissionCalls.length = 0;
+  nextSubmission = "ok";
+  uploadCalls.length = 0;
+  putCalls.length = 0;
+  commitCalls.length = 0;
+  nextCommit = "ok";
+  committedFiles.clear();
+  forms = [COMMON_FORM, COMMITTEE_FORM];
+  commonResponse = { ...DEFAULT_COMMON_RESPONSE, answers: {} };
+  applicationDrafts.clear();
+  nextSaveConflicts = false;
+  currentCycle = DEFAULT_CYCLE;
+  openings = DEFAULT_OPENINGS;
+  profile = DEFAULT_PROFILE;
+  applications = [];
 }
 
 export const handlers = [
-  http.get(`${API_URL}/auth/config`, () => {
-    // Mirrors the server: password sign-in is the fallback for a deployment
-    // with no identity provider, never a second door alongside one. Deriving
-    // it here rather than exposing a second switch keeps the fixture from
-    // describing a combination the API cannot produce.
-    return HttpResponse.json({
+  http.get(`${API}/api/auth/get-session`, () => HttpResponse.json(session)),
+
+  http.get(`${API}/v1/auth/config`, () =>
+    HttpResponse.json({
       identityProviderConfigured,
       passwordSignInEnabled: !identityProviderConfigured,
+    }),
+  ),
+
+  http.get(`${API}/v1/health`, () => HttpResponse.json({ status: "ok" })),
+
+  http.get(`${API}/v1/cycles/current`, () =>
+    currentCycle === null
+      ? HttpResponse.json(
+          { message: "There is no recruitment cycle at the moment." },
+          { status: 404 },
+        )
+      : HttpResponse.json(currentCycle),
+  ),
+
+  http.get(`${API}/v1/openings`, () => HttpResponse.json(openings)),
+
+  http.get(`${API}/v1/me/profile`, () =>
+    profile === null
+      ? HttpResponse.json({ message: "Not found" }, { status: 404 })
+      : HttpResponse.json(profile),
+  ),
+
+  http.get(`${API}/v1/me/applications`, () => HttpResponse.json(applications)),
+
+  http.get(`${API}/v1/forms/:formId/published`, ({ params }) => {
+    const row = forms.find((candidate) => candidate.formId === String(params["formId"]));
+    return row === undefined
+      ? HttpResponse.json({ message: "Not found" }, { status: 404 })
+      : HttpResponse.json(row);
+  }),
+
+  http.get(`${API}/v1/me/common-response`, () => HttpResponse.json(commonResponse)),
+
+  http.patch(`${API}/v1/me/common-response/draft`, async ({ request }) => {
+    const body = (await request.json()) as Schemas["DraftBody"];
+    draftSaves.push({ target: "common", revision: body.revision, answers: body.answers });
+
+    if (nextSaveConflicts) {
+      nextSaveConflicts = false;
+      return HttpResponse.json(
+        {
+          name: "ConflictError",
+          message: "Your answers changed somewhere else. Reload to see the newer version.",
+          // `currentRevision`, which is what `saveAnswers` puts in
+          // `ConflictError`'s details. The fourth fixture in this file caught
+          // inventing a field name - harmless today only because the page
+          // shows the server's message and does not read this one.
+          currentRevision: 9,
+        },
+        { status: 409 },
+      );
+    }
+    for (const answer of body.answers) {
+      commonResponse.answers[answer.questionKey] = answer.value;
+    }
+    commonResponse.revision += 1;
+    return HttpResponse.json({
+      revision: commonResponse.revision,
+      savedAt: "2027-01-20T15:04:00.000Z",
     });
   }),
 
-  http.get(`${API_URL}/api/auth/*`, () => {
-    return HttpResponse.json(session);
-  }),
-  http.post(`${API_URL}/api/auth/sign-in/email`, async ({ request }) => {
-    const body = (await request.json()) as { email: string; password: string };
-    lastSignIn = body;
-    if (rejectCredentials) {
-      return HttpResponse.json({ message: "Invalid email or password" }, { status: 401 });
-    }
-    return HttpResponse.json(session);
-  }),
-  http.post(`${API_URL}/api/auth/change-password`, async ({ request }) => {
-    lastPasswordChange = (await request.json()) as { currentPassword: string; newPassword: string };
-    return HttpResponse.json(session);
-  }),
-  http.post(`${API_URL}/api/auth/sign-in/*`, () => {
-    if (signInFails) {
-      return HttpResponse.json({ message: "provider unreachable" }, { status: 500 });
-    }
-    return HttpResponse.json(session);
-  }),
-  http.post(`${API_URL}/api/auth/*`, () => {
-    return HttpResponse.json(session);
-  }),
-  http.get(`${API_URL}/admin/users`, () => {
-    return HttpResponse.json(adminUsers);
-  }),
-
-  http.get(`${RECRUITMENT}/cycles`, async ({ request }) => {
-    await record("GET", request);
-    return HttpResponse.json(cycles);
-  }),
-
-  http.get(`${RECRUITMENT}/cycles/:cycleId`, async ({ request, params }) => {
-    await record("GET", request);
-    const match = cycles.find((cycle) => cycle.id === params["cycleId"]);
-    return match === undefined ? new HttpResponse(null, { status: 404 }) : HttpResponse.json(match);
-  }),
-
-  http.get(`${RECRUITMENT}/cycles/:cycleId/me`, async ({ request }) => {
-    await record("GET", request);
-    return standing === null
-      ? new HttpResponse(null, { status: 404 })
-      : HttpResponse.json(standing);
-  }),
-
-  http.get(`${RECRUITMENT}/cycles/:cycleId/progress`, async ({ request }) => {
-    await record("GET", request);
-    return progress === null
-      ? new HttpResponse(null, { status: 404 })
-      : HttpResponse.json(progress);
-  }),
-
-  http.put(`${RECRUITMENT}/candidacies/:candidacyId/decision`, async ({ request, params }) => {
-    await record("PUT", request);
-    const body = (await request.json()) as { status: string };
-    const candidacyId = String(params["candidacyId"]);
-    if (rejectedCandidacyIds.has(candidacyId)) {
-      // Deliberately bodyless. openapi-react-query throws only when the error
-      // body parses, so this is the refusal that a naive bulk loop counts as a
-      // success - which is the case worth having a test for.
-      return new HttpResponse(null, { status: 409 });
-    }
-    lastDecision = { candidacyId, status: body.status };
-    decisionLog.push(lastDecision);
-    return HttpResponse.json({ candidacyId, status: body.status });
-  }),
-
-  http.get(`${RECRUITMENT}/cycles/:cycleId/committees`, async ({ request }) => {
-    await record("GET", request);
-    return HttpResponse.json(committees);
-  }),
-
-  http.post(`${RECRUITMENT}/cycles`, async ({ request }) => {
-    await record("POST", request);
-    lastCycleCreate = (await request.json()) as Record<string, unknown>;
-    return HttpResponse.json({ id: "cycle-created", ...lastCycleCreate }, { status: 201 });
-  }),
-
-  http.patch(`${RECRUITMENT}/cycles/:cycleId`, async ({ request, params }) => {
-    await record("PATCH", request);
-    lastCycleUpdate = (await request.json()) as Record<string, unknown>;
-    const match = cycles.find((cycle) => cycle.id === params["cycleId"]);
-    return HttpResponse.json({ ...match, ...lastCycleUpdate });
-  }),
-
-  http.post(`${RECRUITMENT}/cycles/:cycleId/committees`, async ({ request }) => {
-    await record("POST", request);
-    lastCommitteeAttach = (await request.json()) as Record<string, unknown>;
-    return HttpResponse.json({ id: "committee-new", ...lastCommitteeAttach }, { status: 201 });
-  }),
-
-  http.post(`${RECRUITMENT}/cycles/:cycleId/sync`, async ({ request }) => {
-    await record("POST", request);
-    syncCallCount += 1;
-    return HttpResponse.json(
-      {
-        importId: "import-from-sheet",
-        preview: {
-          sheetName: "Form Responses 1",
-          mapping: {},
-          rowCount: 12,
-          okCount: 11,
-          errorCount: 1,
-          failures: [],
-          duplicateEmails: [],
-        },
-      },
-      { status: 201 },
-    );
-  }),
-
-  http.get(`${RECRUITMENT}/cycles/:cycleId/memberships`, async ({ request }) => {
-    await record("GET", request);
-    return HttpResponse.json(memberships);
-  }),
-
-  http.post(`${RECRUITMENT}/cycles/:cycleId/memberships`, async ({ request }) => {
-    await record("POST", request);
-    lastMembershipGrant = (await request.json()) as Record<string, unknown>;
-    return HttpResponse.json({ id: "membership-new", ...lastMembershipGrant }, { status: 201 });
-  }),
-
-  http.delete(`${RECRUITMENT}/memberships/:membershipId`, async ({ request, params }) => {
-    await record("DELETE", request);
-    lastRevokedMembershipId = String(params["membershipId"]);
-    return new HttpResponse(null, { status: 204 });
-  }),
-
-  http.post(`${API_URL}/admin/users`, async ({ request }) => {
-    await record("POST", request);
-    lastAccountCreate = (await request.json()) as Record<string, unknown>;
-    return HttpResponse.json(
-      {
-        andrewId: String(lastAccountCreate["andrewId"]),
-        email: `${String(lastAccountCreate["andrewId"])}@andrew.cmu.edu`,
-        name: String(lastAccountCreate["name"]),
-        role: typeof lastAccountCreate["role"] === "string" ? lastAccountCreate["role"] : "user",
-        temporaryPassword: "fixture-temporary-password",
-      },
-      { status: 201 },
-    );
-  }),
-
-  http.get(`${RECRUITMENT}/cycles/:cycleId/my-queue`, async ({ request }) => {
-    await record("GET", request);
-    const url = new URL(request.url);
-    const status = url.searchParams.get("status");
-    const committeeId = url.searchParams.get("committeeId");
-    const filtered = queue.filter(
-      (item) =>
-        (status === null || item.status === status) &&
-        (committeeId === null || item.committeeId === committeeId),
-    );
-    return HttpResponse.json(filtered);
-  }),
-
-  http.post(`${RECRUITMENT}/cycles/:cycleId/next-review`, async ({ request }) => {
-    await record("POST", request);
-    if (nextReview === null) return new HttpResponse(null, { status: 204 });
-    return HttpResponse.json(nextReview);
-  }),
-
-  http.get(`${RECRUITMENT}/cycles/:cycleId/applications`, async ({ request }) => {
-    await record("GET", request);
-    const url = new URL(request.url);
-    const committeeId = url.searchParams.get("committeeId");
-    const filtered =
-      committeeId === null
-        ? applications
-        : applications.filter((item) =>
-            item.committees.some((committee) => committee.committeeId === committeeId),
-          );
-    return HttpResponse.json(filtered);
-  }),
-
-  http.get(`${RECRUITMENT}/applications/:applicationId/github`, async ({ request }) => {
-    await record("GET", request);
-    return HttpResponse.json({ profile: githubProfile });
-  }),
-
-  http.post(`${RECRUITMENT}/applications/:applicationId/github/refresh`, async ({ request }) => {
-    await record("POST", request);
-    githubRefreshCount += 1;
-    return HttpResponse.json({ profile: githubProfile });
-  }),
-
-  http.get(`${RECRUITMENT}/applications/:applicationId`, async ({ request, params }) => {
-    await record("GET", request);
-    const match = applications.find((item) => item.applicationId === params["applicationId"]);
-    return match === undefined || match.detail === undefined
-      ? new HttpResponse(null, { status: 404 })
-      : HttpResponse.json(match.detail);
-  }),
-
-  http.get(`${RECRUITMENT}/cycles/:cycleId/committees/:committeeId/rubric`, async ({ request }) => {
-    await record("GET", request);
-    return rubric === null ? new HttpResponse(null, { status: 404 }) : HttpResponse.json(rubric);
-  }),
-
-  http.get(
-    `${RECRUITMENT}/cycles/:cycleId/committees/:committeeId/aggregates`,
-    async ({ request }) => {
-      await record("GET", request);
-      return HttpResponse.json(aggregates);
-    },
-  ),
-
-  http.get(
-    `${RECRUITMENT}/cycles/:cycleId/committees/:committeeId/ranking`,
-    async ({ request }) => {
-      await record("GET", request);
-      return HttpResponse.json(ranking);
-    },
-  ),
-
-  http.get(
-    `${RECRUITMENT}/cycles/:cycleId/committees/:committeeId/disagreements`,
-    async ({ request }) => {
-      await record("GET", request);
-      return HttpResponse.json(disagreements);
-    },
-  ),
-
-  http.get(`${RECRUITMENT}/cycles/:cycleId/workloads`, async ({ request }) => {
-    await record("GET", request);
-    return HttpResponse.json(workloads);
-  }),
-
-  http.get(`${RECRUITMENT}/assignments/:assignmentId/review`, async ({ request }) => {
-    await record("GET", request);
-    return review === null ? new HttpResponse(null, { status: 404 }) : HttpResponse.json(review);
-  }),
-
-  http.put(`${RECRUITMENT}/assignments/:assignmentId/review`, async ({ request }) => {
-    await record("PUT", request);
-    const body = (await request.json()) as SaveBody;
-    if (review !== null) {
-      review = applySave(review, body);
-    }
-    return HttpResponse.json(review);
-  }),
-
-  http.post(`${RECRUITMENT}/assignments/:assignmentId/review/submit`, async ({ request }) => {
-    await record("POST", request);
-    const body = (await request.json()) as SaveBody;
-    if (review !== null) {
-      review = {
-        ...applySave(review, body),
-        submittedAt: "2026-02-01T00:00:00.000Z",
-        computedScore: 4,
-      };
-    }
-    queue = queue.map((item) =>
-      item.assignmentId === review?.assignmentId
-        ? { ...item, status: "submitted", submitted: true }
-        : item,
-    );
-    return HttpResponse.json(review);
-  }),
-
-  http.post(`${RECRUITMENT}/assignments/:assignmentId/review/reopen`, async ({ request }) => {
-    await record("POST", request);
-    if (review !== null) {
-      review = { ...review, submittedAt: null };
-    }
-    return new HttpResponse(null, { status: 204 });
-  }),
-
-  http.post(`${RECRUITMENT}/assignments/:assignmentId/conflict`, async ({ request, params }) => {
-    await record("POST", request);
-    queue = queue.map((item) =>
-      item.assignmentId === params["assignmentId"] ? { ...item, status: "conflicted" } : item,
-    );
-    return new HttpResponse(null, { status: 204 });
-  }),
-
-  http.get(`${RECRUITMENT}/candidacies/:candidacyId/aggregate`, async ({ request }) => {
-    await record("GET", request);
-    const [first] = aggregates;
-    if (first === undefined) return new HttpResponse(null, { status: 404 });
-    return HttpResponse.json(first);
-  }),
-
-  http.get(`${RECRUITMENT}/candidacies/:candidacyId/reviews`, async ({ request }) => {
-    await record("GET", request);
-    return HttpResponse.json(peerReviews);
-  }),
-
-  http.get(`${RECRUITMENT}/cycles/:cycleId/imports`, async ({ request }) => {
-    await record("GET", request);
-    return HttpResponse.json(imports);
-  }),
-
-  http.post(`${RECRUITMENT}/cycles/:cycleId/imports`, async ({ request }) => {
-    await record("POST", request);
-    return importPreview === null
-      ? new HttpResponse(null, { status: 422 })
-      : HttpResponse.json({ importId: "import-1", preview: importPreview }, { status: 201 });
-  }),
-
-  http.get(`${RECRUITMENT}/imports/:importId/rows`, async ({ request }) => {
-    await record("GET", request);
-    return HttpResponse.json(importRows);
-  }),
-
-  http.post(`${RECRUITMENT}/imports/:importId/commit`, async ({ request }) => {
-    await record("POST", request);
-    return commitReport === null
-      ? new HttpResponse(null, { status: 409 })
-      : HttpResponse.json(commitReport);
-  }),
-
-  http.get(`${RECRUITMENT}/cycles/:cycleId/rubrics`, async ({ request }) => {
-    await record("GET", request);
-    return HttpResponse.json(rubricVersions);
-  }),
-
-  /**
-   * Mirrors the server's weight rule rather than echoing a canned answer, so a
-   * test that types an invalid draft gets the same verdict the server gives.
-   * `setRubricValidation` overrides it when a test needs a specific issue.
-   */
-  http.post(`${RECRUITMENT}/cycles/:cycleId/rubrics/validate`, async ({ request }) => {
-    await record("POST", request);
-    if (rubricValidation !== null) {
-      return HttpResponse.json(rubricValidation);
-    }
-
-    const body = (await request.json()) as {
-      criteria: Array<{ weight: number; active?: boolean }>;
-    };
-    const active = body.criteria.filter((criterion) => criterion.active !== false);
-    const sum = active.reduce((total, criterion) => total + criterion.weight, 0);
-
-    if (active.length > 0 && Math.abs(sum - 1) <= 1e-6) {
-      return HttpResponse.json({ valid: true, issues: [] });
+  http.get(`${API}/v1/me/applications/:applicationId`, ({ params }) => {
+    const id = String(params["applicationId"]);
+    const summary = applications.find((row) => row.applicationId === id);
+    const draft = applicationDrafts.get(id);
+    if (summary === undefined) {
+      return HttpResponse.json({ message: "Not found" }, { status: 404 });
     }
     return HttpResponse.json({
-      valid: false,
-      issues: [
-        {
-          code: "weights_do_not_sum_to_one",
-          message: `The active criteria weights sum to ${sum} rather than 1. Adjust the weights so they add up to exactly 1.`,
-        },
-      ],
+      ...summary,
+      formId: draft?.formId ?? COMMITTEE_FORM.formId,
+      revision: draft?.revision ?? 0,
+      answers: draft?.answers ?? {},
     });
   }),
 
-  http.post(`${RECRUITMENT}/cycles/:cycleId/rubrics`, async ({ request }) => {
-    await record("POST", request);
-    const body = (await request.json()) as { name: string };
-    const highest = rubricVersions.reduce((max, item) => Math.max(max, item.version), 0);
-    const published: RubricVersion = {
-      id: `rubric-v${highest + 1}`,
-      version: highest + 1,
-      name: body.name,
-      committeeId: null,
-      active: true,
-      reviewCount: 0,
-      createdAt: "2026-03-01T00:00:00.000Z",
-      criteria: [],
+  http.patch(`${API}/v1/me/applications/:applicationId/draft`, async ({ params, request }) => {
+    const id = String(params["applicationId"]);
+    const body = (await request.json()) as Schemas["DraftBody"];
+    draftSaves.push({ target: id, revision: body.revision, answers: body.answers });
+
+    if (nextSaveConflicts) {
+      nextSaveConflicts = false;
+      return HttpResponse.json(
+        {
+          name: "ConflictError",
+          message: "Your answers changed somewhere else. Reload to see the newer version.",
+          currentRevision: 9,
+        },
+        { status: 409 },
+      );
+    }
+    const current = applicationDrafts.get(id) ?? {
+      formId: COMMITTEE_FORM.formId,
+      revision: 0,
+      answers: {},
     };
-    rubricVersions = [published, ...rubricVersions.map((item) => ({ ...item, active: false }))];
-    return HttpResponse.json(published, { status: 201 });
+    for (const answer of body.answers) {
+      current.answers[answer.questionKey] = answer.value;
+    }
+    current.revision += 1;
+    applicationDrafts.set(id, current);
+    return HttpResponse.json({
+      revision: current.revision,
+      savedAt: "2027-01-20T15:04:00.000Z",
+    });
   }),
 
-  http.get(
-    `${RECRUITMENT}/cycles/:cycleId/exports/committees/:committeeId/ranking`,
-    async ({ request }) => {
-      await record("GET", request);
-      return HttpResponse.json(rankingExport);
-    },
-  ),
-
-  http.get(`${RECRUITMENT}/cycles/:cycleId/exports/decisions`, async ({ request }) => {
-    await record("GET", request);
-    return HttpResponse.json(decisionExport);
+  http.post(`${API}/v1/files`, async ({ request }) => {
+    const body = (await request.json()) as {
+      originalFilename: string;
+      mimeType: string;
+      sizeBytes: number;
+    };
+    uploadCalls.push(body);
+    const fileId = `file-${uploadCalls.length}`;
+    committedFiles.set(fileId, {
+      originalFilename: body.originalFilename,
+      mimeType: body.mimeType,
+    });
+    return HttpResponse.json(
+      {
+        fileId,
+        uploadUrl: `${API}/__local-storage/put?key=uploads/${fileId}&exp=1&sig=x`,
+        expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      },
+      { status: 201 },
+    );
   }),
 
-  http.get(`${RECRUITMENT}/cycles/:cycleId/exports/reviewer-load`, async ({ request }) => {
-    await record("GET", request);
-    return HttpResponse.json(reviewerLoadExport);
+  http.put(`${API}/__local-storage/put`, ({ request }) => {
+    putCalls.push(new URL(request.url).searchParams.get("key") ?? "");
+    return HttpResponse.json({ status: "ok" });
+  }),
+
+  http.post(`${API}/v1/files/:fileId/commit`, ({ params }) => {
+    const fileId = String(params["fileId"]);
+    commitCalls.push(fileId);
+
+    if (nextCommit === "wrong-type") {
+      return HttpResponse.json(
+        {
+          name: "ValidationFailed",
+          message:
+            "That file does not match the type it claims to be. Please upload a PDF, PNG or JPEG.",
+        },
+        { status: 422 },
+      );
+    }
+    const info = committedFiles.get(fileId);
+    return HttpResponse.json({
+      fileId,
+      originalFilename: info?.originalFilename ?? "upload",
+      mimeType: info?.mimeType ?? "application/pdf",
+      sizeBytes: 1024,
+    });
+  }),
+
+  http.get(`${API}/v1/files/:fileId/download`, ({ params }) => {
+    const fileId = String(params["fileId"]);
+    const info = committedFiles.get(fileId);
+    return info === undefined
+      ? HttpResponse.json({ message: "Not found" }, { status: 404 })
+      : HttpResponse.json({
+          url: `${API}/__local-storage/get?key=uploads/${fileId}&exp=1&sig=x`,
+          expiresAt: new Date(Date.now() + 120_000).toISOString(),
+          originalFilename: info.originalFilename,
+        });
+  }),
+
+  http.post(`${API}/v1/me/submissions`, async ({ request }) => {
+    const body = (await request.json()) as Schemas["SubmitBody"];
+    submissionCalls.push(body);
+
+    if (nextSubmission === "incomplete") {
+      return HttpResponse.json(
+        {
+          name: "ValidationFailedError",
+          message: "Some answers are missing.",
+          problems: [
+            {
+              applicationId: "app-labrador",
+              committeeName: "Labrador",
+              missing: ["why"],
+              invalid: [],
+            },
+          ],
+        },
+        { status: 422 },
+      );
+    }
+    if (nextSubmission === "deadline") {
+      return HttpResponse.json(
+        {
+          name: "ConflictError",
+          message: "The deadline for this recruitment cycle has passed.",
+        },
+        { status: 409 },
+      );
+    }
+
+    applications = applications.map((row) =>
+      body.applicationIds.includes(row.applicationId)
+        ? { ...row, status: "Submitted" as const, submittedAt: "2027-01-22T18:00:00.000Z" }
+        : row,
+    );
+    commonResponse.locked = true;
+    return HttpResponse.json({
+      submitted: body.applicationIds.map((applicationId) => ({
+        applicationId,
+        committeeName:
+          applications.find((row) => row.applicationId === applicationId)?.committeeName ??
+          "Committee",
+        submittedAt: "2027-01-22T18:00:00.000Z",
+      })),
+    });
+  }),
+
+  http.patch(`${API}/v1/me/applications/preferences`, async ({ request }) => {
+    const body = (await request.json()) as Schemas["PreferencesBody"];
+    preferenceCalls.push(body.applicationIds);
+    return new HttpResponse(null, { status: 200 });
+  }),
+
+  http.post(`${API}/v1/me/applications`, async ({ request }) => {
+    const body = (await request.json()) as { openingId: string };
+    applyCalls.push(body.openingId);
+    const opening = openings.find((row) => row.openingId === body.openingId);
+    if (opening === undefined) {
+      return HttpResponse.json({ message: "Not found" }, { status: 404 });
+    }
+    const existing = applications.find((row) => row.openingId === body.openingId);
+    if (existing !== undefined) {
+      return HttpResponse.json(existing);
+    }
+    const created: ApplicationSummary = {
+      applicationId: `app-${opening.teamSlug}`,
+      openingId: opening.openingId,
+      committeeName: opening.teamName,
+      committeeSlug: opening.teamSlug,
+      status: "Draft",
+      lastSavedAt: null,
+      submittedAt: null,
+    };
+    applications = [...applications, created];
+    return HttpResponse.json(created, { status: 201 });
+  }),
+
+  http.post(`${API}/v1/me/applications/:applicationId/withdraw`, ({ params }) => {
+    const id = String(params["applicationId"]);
+    withdrawCalls.push(id);
+    applications = applications.map((row) =>
+      row.applicationId === id ? { ...row, status: "Withdrawn" as const } : row,
+    );
+    const row = applications.find((candidate) => candidate.applicationId === id);
+    return row === undefined
+      ? HttpResponse.json({ message: "Not found" }, { status: 404 })
+      : HttpResponse.json(row);
   }),
 ];
