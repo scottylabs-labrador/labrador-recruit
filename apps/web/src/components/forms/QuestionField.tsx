@@ -1,5 +1,6 @@
 import type { AnswerValue, QuestionDefinition } from "@recruit/common";
 
+import { FileUploader } from "@/components/forms/FileUploader";
 import {
   Checkbox,
   FieldError,
@@ -166,10 +167,21 @@ export function QuestionField({ question, value, error, onChange, onBlur }: Ques
       }
 
       case "file_upload":
-        // TODO(track-a): #21 replaces this with FileUploader, which exchanges
-        // the file for a committed `file` id. Until then the control is absent
-        // rather than a text box that looks like it works.
-        return <FieldHint>Uploads are not available yet.</FieldHint>;
+        /*
+         * The answer is a committed `file` id, never the bytes.
+         *
+         * `FileUploader` owns the three-step exchange and only reports an id
+         * once the server has committed it — which is what makes the answer
+         * something submission will accept rather than a reference it refuses.
+         */
+        return (
+          <FileUploader
+            id={controlId}
+            value={typeof value === "string" && value !== "" ? value : null}
+            onChange={(fileId) => onChange(fileId)}
+            describedBy={describedBy}
+          />
+        );
 
       case "short_text":
       default:

@@ -62,6 +62,28 @@ const envSchema = z.object({
    * than inheriting it.
    */
   GITHUB_ENRICHMENT: z.enum(["on", "off"]).default("off"),
+  /*
+   * Object storage for applicant uploads.
+   *
+   * All optional, because `#11` has not provisioned a bucket yet and a
+   * deployment without one still has to boot. When the four `R2_*` values are
+   * present the R2 adapter is used; otherwise storage falls back to the local
+   * filesystem adapter, which `lib/storage.ts` refuses to do in production.
+   */
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET: z.string().optional(),
+  /** Where the local adapter writes. Development and tests only. */
+  FILE_STORAGE_ROOT: z.string().optional(),
+  /**
+   * Signs the local adapter's presigned URLs.
+   *
+   * The default is deliberately not a secret, because the adapter it signs for
+   * must never run in production - `lib/storage.ts` throws at boot rather than
+   * letting it. A real secret here would imply this path is production-safe.
+   */
+  FILE_STORAGE_SECRET: z.string().default("local-development-only-not-a-secret"),
   SENTRY_DSN: z.string().optional(),
   SERVER_URL: z.url(),
   SERVER_PORT: z.coerce.number().default(80),

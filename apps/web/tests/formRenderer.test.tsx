@@ -136,18 +136,17 @@ describe("every question type renders a usable control", () => {
     expect(onChange).toHaveBeenLastCalledWith("langs", ["Rust"]);
   });
 
-  it("withholds a file upload rather than offering a box that does nothing", () => {
+  it("renders a file input for an upload, never a text box", () => {
     renderForm([q("resume", "file_upload", { label: "Your resume", required: true })]);
 
     /*
-     * #21 owns uploads and is not built yet.
-     *
      * A text box here would accept whatever somebody typed and look exactly
      * like a working upload, and the applicant would believe their resume was
-     * attached. Saying so plainly is the only honest placeholder - and this
-     * test is what stops the default branch quietly turning it into an input.
+     * attached. This test is what stops the switch default quietly turning it
+     * into one.
      */
-    expect(screen.getByText(/uploads are not available yet/i)).toBeDefined();
+    const input = screen.getByLabelText(/choose a file/i);
+    expect(input).toHaveProperty("type", "file");
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 

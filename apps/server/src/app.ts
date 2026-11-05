@@ -11,6 +11,7 @@ import { parse as parseYaml } from "yaml";
 import { RegisterRoutes } from "../build/routes.ts";
 import { env } from "./env.ts";
 import { auth } from "./lib/auth.ts";
+import { localStorage } from "./lib/storage.ts";
 import { errorHandler } from "./middlewares/errorHandler.ts";
 import { notFoundHandler } from "./middlewares/notFoundHandler.ts";
 
@@ -95,6 +96,83 @@ if (swaggerJson !== null) {
 const v1 = Router();
 RegisterRoutes(v1);
 app.use("/v1", v1);
+
+/*
+ * Object storage, in development only.
+ *
+ * In production the browser PUTs and GETs straight to R2 and these paths do
+ * not exist at all - `localStorage` is null and nothing is mounted. The local
+ * adapter serves the bytes itself so that the whole upload flow can be built
+ * and exercised before anyone has provisioned a bucket (see `#11`).
+ *
+ * Deliberately **outside `/v1`**: these are not part of the API contract and
+ * must not appear in the generated spec, because a client written against
+ * them would break the moment real storage arrives.
+ *
+ * The signature is the authorization here. A request with no signature, an
+ * expired one, or one issued for a different key is 403 - which is the
+ * property that makes the object key worthless on its own, in development
+ * exactly as in R2.
+ */
+/**
+ * A filename safe to put inside a quoted `Content-Disposition`.
+ *
+ * Quotes and backslashes removed rather than escaped. The header is a quoted
+ * string, so a filename containing either can end the quoting early and inject
+ * a second header parameter - and the filename came from the applicant.
+ *
+ * `replaceAll` rather than spreading the string: spreading iterates Unicode
+ * code points, which splits an emoji in a filename into pieces and reassembles
+ * it as mojibake. The applicant named their file; we only remove the two
+ * characters that break the header.
+ */
+function safeFilename(name: string): string {
+  return name.replaceAll('"', "").replaceAll("\\", "");
+}
+
+if (localStorage !== null) {
+  const local = localStorage;
+
+  app.put("/__local-storage/put", express.raw({ limit: "16mb", type: "*/*" }), (req, res) => {
+    const verdict = local.verify(req.originalUrl.slice(req.originalUrl.indexOf("?")), "put");
+    if (!verdict.ok || verdict.key === undefined) {
+      res.status(403).json({ message: "Forbidden" });
+      return;
+    }
+    void local
+      .put(verdict.key, new Uint8Array(req.body as Buffer))
+      .then(() => res.status(200).json({ status: "ok" }))
+      .catch(() => res.status(500).json({ message: "Could not store the file." }));
+  });
+
+  app.get("/__local-storage/get", (req, res) => {
+    const query = req.originalUrl.slice(req.originalUrl.indexOf("?"));
+    const verdict = local.verify(query, "get");
+    if (!verdict.ok || verdict.key === undefined) {
+      res.status(403).json({ message: "Forbidden" });
+      return;
+    }
+    void local
+      .readPrefix(verdict.key, 16 * 1024 * 1024)
+      .then((bytes) => {
+        if (bytes === null) {
+          res.status(404).json({ message: "Not found" });
+          return;
+        }
+        const filename = new URLSearchParams(query).get("filename") ?? "download";
+        /*
+         * `attachment`, always, and the filename is quoted rather than
+         * interpolated into a path. An applicant's upload must never be
+         * rendered inline by the browser - that is how an accepted image
+         * becomes a page running on this origin.
+         */
+        res.setHeader("Content-Type", "application/octet-stream");
+        res.setHeader("Content-Disposition", `attachment; filename="${safeFilename(filename)}"`);
+        res.status(200).send(Buffer.from(bytes));
+      })
+      .catch(() => res.status(500).json({ message: "Could not read the file." }));
+  });
+}
 app.get("/", (_req, res) => {
   res.status(200).json({ status: "ok" });
 });

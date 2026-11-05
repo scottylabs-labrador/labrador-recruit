@@ -149,6 +149,33 @@ export const applyCalls: string[] = [];
  */
 export const preferenceCalls: string[][] = [];
 
+/** Every upload the page asked for, and every object it PUT. */
+export const uploadCalls: { originalFilename: string; mimeType: string; sizeBytes: number }[] = [];
+export const putCalls: string[] = [];
+export const commitCalls: string[] = [];
+
+/**
+ * How the next commit is answered.
+ *
+ * `"ok"` commits. `"wrong-type"` is the 422 the server returns when the bytes
+ * are not the format they claim - the case that matters, because the declared
+ * type came from the browser.
+ */
+let nextCommit: "ok" | "wrong-type" = "ok";
+
+export function setNextCommit(next: "ok" | "wrong-type") {
+  nextCommit = next;
+}
+
+const committedFiles = new Map<string, { originalFilename: string; mimeType: string }>();
+
+export function setCommittedFile(
+  fileId: string,
+  info: { originalFilename: string; mimeType: string },
+) {
+  committedFiles.set(fileId, info);
+}
+
 /** Every submission the page sent: the key and what it named. */
 export const submissionCalls: Schemas["SubmitBody"][] = [];
 
@@ -288,6 +315,11 @@ export function resetCatalogue() {
   draftSaves.length = 0;
   submissionCalls.length = 0;
   nextSubmission = "ok";
+  uploadCalls.length = 0;
+  putCalls.length = 0;
+  commitCalls.length = 0;
+  nextCommit = "ok";
+  committedFiles.clear();
   forms = [COMMON_FORM, COMMITTEE_FORM];
   commonResponse = { ...DEFAULT_COMMON_RESPONSE, answers: {} };
   applicationDrafts.clear();
@@ -412,6 +444,68 @@ export const handlers = [
       revision: current.revision,
       savedAt: "2027-01-20T15:04:00.000Z",
     });
+  }),
+
+  http.post(`${API}/v1/files`, async ({ request }) => {
+    const body = (await request.json()) as {
+      originalFilename: string;
+      mimeType: string;
+      sizeBytes: number;
+    };
+    uploadCalls.push(body);
+    const fileId = `file-${uploadCalls.length}`;
+    committedFiles.set(fileId, {
+      originalFilename: body.originalFilename,
+      mimeType: body.mimeType,
+    });
+    return HttpResponse.json(
+      {
+        fileId,
+        uploadUrl: `${API}/__local-storage/put?key=uploads/${fileId}&exp=1&sig=x`,
+        expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      },
+      { status: 201 },
+    );
+  }),
+
+  http.put(`${API}/__local-storage/put`, ({ request }) => {
+    putCalls.push(new URL(request.url).searchParams.get("key") ?? "");
+    return HttpResponse.json({ status: "ok" });
+  }),
+
+  http.post(`${API}/v1/files/:fileId/commit`, ({ params }) => {
+    const fileId = String(params["fileId"]);
+    commitCalls.push(fileId);
+
+    if (nextCommit === "wrong-type") {
+      return HttpResponse.json(
+        {
+          name: "ValidationFailed",
+          message:
+            "That file does not match the type it claims to be. Please upload a PDF, PNG or JPEG.",
+        },
+        { status: 422 },
+      );
+    }
+    const info = committedFiles.get(fileId);
+    return HttpResponse.json({
+      fileId,
+      originalFilename: info?.originalFilename ?? "upload",
+      mimeType: info?.mimeType ?? "application/pdf",
+      sizeBytes: 1024,
+    });
+  }),
+
+  http.get(`${API}/v1/files/:fileId/download`, ({ params }) => {
+    const fileId = String(params["fileId"]);
+    const info = committedFiles.get(fileId);
+    return info === undefined
+      ? HttpResponse.json({ message: "Not found" }, { status: 404 })
+      : HttpResponse.json({
+          url: `${API}/__local-storage/get?key=uploads/${fileId}&exp=1&sig=x`,
+          expiresAt: new Date(Date.now() + 120_000).toISOString(),
+          originalFilename: info.originalFilename,
+        });
   }),
 
   http.post(`${API}/v1/me/submissions`, async ({ request }) => {

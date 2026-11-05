@@ -262,7 +262,9 @@ test("a long form with every question type fits a phone", async ({ page, context
   // Every type is present, including the two that carry no answer.
   await expect(page.getByRole("heading", { name: "About you" })).toBeVisible();
   await expect(page.getByText(/not evaluated by any model/i)).toBeVisible();
-  await expect(page.getByText(/uploads are not available yet/i)).toBeVisible();
+  // A real file input now that #21 is built, not the placeholder it replaced.
+  await expect(page.getByLabel("Choose a file")).toBeVisible();
+  await expect(page.getByText(/PDF, PNG or JPEG, up to 10MB/i)).toBeVisible();
 
   const overflow = await page.evaluate(() => {
     const root = (
@@ -340,4 +342,67 @@ test("every control on a long form can be completed by keyboard in a real browse
   await page.reload();
   await expect(page.getByLabel("Your major")).toHaveValue("Statistics");
   await expect(page.getByLabel("Graduating year")).toHaveValue("2028");
+});
+
+test("a file uploads, commits, and survives a reload", async ({ page, context }) => {
+  await seedOpenCycle({ everyQuestionType: true });
+  await seedAlice();
+  await context.addCookies([await sessionCookie(alice.sessionToken)]);
+
+  await page.goto("/app/apply/common");
+  await expect(page.getByLabel("Choose a file")).toBeVisible();
+
+  /*
+   * The whole three-step flow in a real browser.
+   *
+   * Presign, a genuine PUT to the storage URL, then commit — none of which the
+   * jsdom tests exercise against a real server, and the PUT in particular is
+   * the step that cannot be mocked honestly: it goes to an origin that is not
+   * the API.
+   */
+  await page.getByLabel("Choose a file").setInputFiles({
+    name: "resume.pdf",
+    mimeType: "application/pdf",
+    // A minimal but genuine PDF header, because commit sniffs the magic bytes
+    // and a file of zeroes is correctly refused.
+    buffer: Buffer.concat([Buffer.from("%PDF-1.7\n"), Buffer.alloc(512)]),
+  });
+
+  await expect(page.getByText("resume.pdf")).toBeVisible();
+  await expect(page.getByText("File attached.")).toBeVisible();
+
+  await page.getByRole("button", { name: /save draft/i }).click();
+  await expect(page.getByText(/^Saved /)).toBeVisible();
+
+  await page.reload();
+
+  /*
+   * The filename after a reload is the real assertion.
+   *
+   * The answer stores an opaque file id, so the name has to come back from the
+   * download endpoint. If that is broken, a returning applicant sees a bare
+   * uuid and cannot tell which file is attached — or whether one is.
+   */
+  await expect(page.getByText("resume.pdf")).toBeVisible();
+});
+
+test("the browser cannot fetch an upload without a signature", async ({ page, context }) => {
+  await seedOpenCycle({ everyQuestionType: true });
+  await seedAlice();
+  await context.addCookies([await sessionCookie(alice.sessionToken)]);
+
+  await page.goto("/app/apply/common");
+  await page.getByLabel("Choose a file").setInputFiles({
+    name: "resume.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.concat([Buffer.from("%PDF-1.7\n"), Buffer.alloc(512)]),
+  });
+  await expect(page.getByText("File attached.")).toBeVisible();
+
+  // A signed-in session is not enough. The object key is not a capability, so
+  // storage refuses a request carrying no signature even from the owner's own
+  // authenticated browser.
+  const denied = await page.request.get(`${API_URL}/__local-storage/get?key=uploads/alice/any`);
+
+  expect(denied.status()).toBe(403);
 });
