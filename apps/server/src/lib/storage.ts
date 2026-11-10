@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { env } from "../env.ts";
 import type { FileStorage } from "./fileStorage.ts";
 import { LocalFileStorage } from "./fileStorage.ts";
+import { R2FileStorage } from "./r2Storage.ts";
 
 /**
  * The storage the application uses, chosen once at boot.
@@ -15,12 +16,12 @@ import { LocalFileStorage } from "./fileStorage.ts";
  * deploy, is a worse outcome than failing to start, and it is the kind of
  * thing nobody notices until somebody asks for a file back.
  *
- * TODO(#21): the R2 adapter itself is not written yet — `#11` has not
- * provisioned a bucket, so there is nothing to write it against. Everything in
- * front of this (presign, commit, magic bytes, size cap, ownership, expiry) is
- * built and tested against the port, so the remaining work is one adapter and
- * the one test a real bucket makes possible: fetching an object key directly
- * and being denied.
+ * The R2 adapter is written and selected whenever all four `R2_*` variables
+ * are set. What is still missing is the **bucket** — `#11` has not provisioned
+ * one — and therefore the one test only a real bucket makes possible: fetching
+ * an object key directly and being denied. Everything in front of storage is
+ * exercised against the port by the local adapter, which is why that is the
+ * only gap rather than the whole feature.
  */
 function build(): FileStorage {
   const r2Configured =
@@ -30,9 +31,12 @@ function build(): FileStorage {
     env.R2_BUCKET !== undefined;
 
   if (r2Configured) {
-    throw new Error(
-      "R2 is configured but the R2 storage adapter is not implemented yet — see #21. Unset the R2_* variables to use local storage.",
-    );
+    return new R2FileStorage({
+      accountId: env.R2_ACCOUNT_ID as string,
+      accessKeyId: env.R2_ACCESS_KEY_ID as string,
+      secretAccessKey: env.R2_SECRET_ACCESS_KEY as string,
+      bucket: env.R2_BUCKET as string,
+    });
   }
 
   /*

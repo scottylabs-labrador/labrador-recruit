@@ -2,6 +2,8 @@
   "name": "@recruit/server",
   "version": "0.0.0",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1165.0",
+    "@aws-sdk/s3-request-presigner": "^3.1165.0",
     "@better-auth/drizzle-adapter": "^1.5.4",
     "@recruit/access-control": "workspace:*",
     "@recruit/common": "workspace:*",
