@@ -1,4 +1,5 @@
 import type { AppAbility } from "@recruit/access-control";
+import { forSubject } from "@recruit/access-control";
 import type { QuestionConfig, QuestionDefinition, VisibilityRule } from "@recruit/common";
 import { CONTENT_ONLY_TYPES, validateFormRules } from "@recruit/common";
 import { form, formVersion, question } from "@recruit/db/schema";
@@ -49,6 +50,16 @@ export interface DraftView {
   version: number;
   status: "draft";
   questions: QuestionDefinition[];
+  /**
+   * Whether this caller may publish, so the builder can withhold the button.
+   *
+   * Computed from the same ability the publish route gates on, and returned
+   * rather than re-derived in the browser from a role: the client has no
+   * grants and should not be given a reason to guess. **Withholding the button
+   * is a courtesy, not the enforcement** — a question editor who posts to the
+   * route anyway is refused there, with a test.
+   */
+  canPublish: boolean;
 }
 
 export interface QuestionInput {
@@ -362,6 +373,7 @@ export const formAuthoringService = {
       version: draft.version,
       status: "draft",
       questions: questions.map(toDefinition),
+      canPublish: ability.can("publish", forSubject("Form", { teamId: row.teamId }) as never),
     };
   },
 

@@ -302,6 +302,58 @@ export function failNextDraftSaveWithConflict() {
 }
 
 /** Every draft save the page sent, in order, with what it carried. */
+/**
+ * A form draft the builder edits, held in memory.
+ *
+ * Mutated by the handlers the way the server mutates rows, so a test can
+ * assert that an edit *survived a reload* rather than only that a request was
+ * sent — which is the difference between the conditional-rule round trip #25
+ * asks for and a test that proves nothing.
+ */
+export interface DraftFixture {
+  formId: string;
+  versionId: string;
+  kind: "common" | "committee";
+  title: string;
+  description: string | null;
+  version: number;
+  status: "draft";
+  questions: QuestionDefinitionFixture[];
+  canPublish: boolean;
+}
+
+export const DEFAULT_DRAFT: DraftFixture = {
+  formId: "form-labrador",
+  versionId: "version-1",
+  kind: "committee",
+  title: "Labrador application",
+  description: null,
+  version: 1,
+  status: "draft",
+  questions: [],
+  canPublish: true,
+};
+
+let draft: DraftFixture = { ...DEFAULT_DRAFT, questions: [] };
+
+export function setDraft(next: Partial<DraftFixture>) {
+  draft = { ...DEFAULT_DRAFT, questions: [], ...next };
+}
+
+export function currentDraft(): DraftFixture {
+  return draft;
+}
+
+/** Every publish the builder sent. */
+export const publishCalls: string[] = [];
+
+/** How the next publish is answered - `"rules"` is the 422 from `validateFormRules`. */
+let nextPublish: "ok" | "rules" = "ok";
+
+export function setNextPublish(next: "ok" | "rules") {
+  nextPublish = next;
+}
+
 export const draftSaves: {
   target: string;
   revision: number;
@@ -313,6 +365,9 @@ export function resetCatalogue() {
   applyCalls.length = 0;
   preferenceCalls.length = 0;
   draftSaves.length = 0;
+  publishCalls.length = 0;
+  nextPublish = "ok";
+  draft = { ...DEFAULT_DRAFT, questions: [] };
   submissionCalls.length = 0;
   nextSubmission = "ok";
   uploadCalls.length = 0;
@@ -360,6 +415,91 @@ export const handlers = [
   ),
 
   http.get(`${API}/v1/me/applications`, () => HttpResponse.json(applications)),
+
+  http.get(`${API}/v1/forms/:formId/draft`, () => HttpResponse.json(draft)),
+
+  http.patch(`${API}/v1/forms/:formId/draft`, async ({ request }) => {
+    const body = (await request.json()) as { title?: string; description?: string | null };
+    if (body.title !== undefined) {
+      draft.title = body.title;
+    }
+    if (body.description !== undefined) {
+      draft.description = body.description;
+    }
+    return HttpResponse.json({ formId: draft.formId });
+  }),
+
+  http.post(`${API}/v1/forms/:formId/questions`, async ({ request }) => {
+    const body = (await request.json()) as QuestionDefinitionFixture;
+    const position = draft.questions.length + 1;
+    draft.questions = [
+      ...draft.questions,
+      {
+        ...body,
+        required: body.required ?? false,
+        config: body.config ?? null,
+        visibilityRule: body.visibilityRule ?? null,
+        position,
+      },
+    ];
+    return HttpResponse.json({ questionId: `q-${body.questionKey}`, position }, { status: 201 });
+  }),
+
+  http.patch(`${API}/v1/questions/:questionId`, async ({ params, request }) => {
+    const key = String(params["questionId"]).replace(/^q-/, "");
+    const body = (await request.json()) as Partial<QuestionDefinitionFixture>;
+    draft.questions = draft.questions.map((row) =>
+      row.questionKey === key ? { ...row, ...body } : row,
+    );
+    return HttpResponse.json({ questionId: String(params["questionId"]) });
+  }),
+
+  http.delete(`${API}/v1/questions/:questionId`, ({ params }) => {
+    const key = String(params["questionId"]).replace(/^q-/, "");
+    draft.questions = draft.questions
+      .filter((row) => row.questionKey !== key)
+      .map((row, index) => ({ ...row, position: index + 1 }));
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.post(`${API}/v1/forms/:formId/reorder`, async ({ request }) => {
+    const body = (await request.json()) as { questionIds: string[] };
+    const byId = new Map(draft.questions.map((row) => [`q-${row.questionKey}`, row]));
+    draft.questions = body.questionIds
+      .map((id, index) => {
+        const row = byId.get(id);
+        return row === undefined ? null : { ...row, position: index + 1 };
+      })
+      .filter((row): row is QuestionDefinitionFixture => row !== null);
+    return HttpResponse.json({ formId: draft.formId, versionId: draft.versionId });
+  }),
+
+  http.post(`${API}/v1/forms/:formId/publish`, ({ params }) => {
+    publishCalls.push(String(params["formId"]));
+
+    if (nextPublish === "rules") {
+      return HttpResponse.json(
+        {
+          name: "ValidationFailed",
+          message: "This form cannot be published yet.",
+          problems: [
+            {
+              questionKey: "transferFrom",
+              message: 'The rule on "transferFrom" depends on "year", which comes later.',
+            },
+          ],
+        },
+        { status: 422 },
+      );
+    }
+    draft.status = "draft";
+    return HttpResponse.json({
+      formId: draft.formId,
+      versionId: draft.versionId,
+      version: draft.version,
+      publishedAt: "2027-01-10T12:00:00.000Z",
+    });
+  }),
 
   http.get(`${API}/v1/forms/:formId/published`, ({ params }) => {
     const row = forms.find((candidate) => candidate.formId === String(params["formId"]));

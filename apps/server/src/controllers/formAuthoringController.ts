@@ -41,6 +41,26 @@ interface QuestionBody {
   visibilityRule?: VisibilityRule | null;
 }
 
+/**
+ * The patch body, declared explicitly rather than as `Partial<QuestionBody>`.
+ *
+ * tsoa flattens a `Partial<T>` mapped type and **loses `nullable: true`** on
+ * every field, so the generated client type became `string | undefined` and a
+ * caller had no way to express "clear this". Since the service treats an
+ * absent key as "keep" and an explicit null as "clear", losing null means a
+ * conditional rule can never be removed once added.
+ */
+interface QuestionPatchBody {
+  questionKey?: string;
+  type?: string;
+  label?: string;
+  description?: string | null;
+  required?: boolean;
+  config?: QuestionConfig | null;
+  /** Null clears the rule. Absent leaves it alone. */
+  visibilityRule?: VisibilityRule | null;
+}
+
 interface FormMetadataBody {
   title?: string;
   description?: string | null;
@@ -194,7 +214,7 @@ export class QuestionsController extends Controller {
   async updateQuestion(
     @Request() req: ExpressRequest,
     @Path() questionId: string,
-    @Body() body: Partial<QuestionBody>,
+    @Body() body: QuestionPatchBody,
   ) {
     const ability = await getAbilityFor(req, await cycleOfQuestion(questionId));
     return await formAuthoringService.updateQuestion(ability, questionId, body);

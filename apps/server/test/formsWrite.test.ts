@@ -161,6 +161,23 @@ describe("reading a draft", () => {
     expect(await testDb.select().from(formVersion)).toHaveLength(1);
   });
 
+  it("tells a director they may publish, and an editor they may not", async () => {
+    const boss = await director();
+    const staff = await editor();
+
+    const asDirector = await request(app).get(`/v1/forms/${labradorForm}/draft`).set(boss.headers);
+    const asEditor = await request(app).get(`/v1/forms/${labradorForm}/draft`).set(staff.headers);
+
+    /*
+     * The builder withholds the Publish button from this, rather than guessing
+     * from a role it was never told. Computed from the same ability the
+     * publish route gates on, so the two cannot disagree — and withholding is
+     * a courtesy, not the enforcement.
+     */
+    expect(asDirector.body.canPublish).toBe(true);
+    expect(asEditor.body.canPublish).toBe(false);
+  });
+
   it("refuses a caller with no grant on that committee", async () => {
     const staff = await seedStaff("jtanaka", {
       role: "committee_director",

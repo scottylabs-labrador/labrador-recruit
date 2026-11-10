@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as RecruitRouteImport } from './routes/recruit'
 import { Route as SigninRouteImport } from './routes/signin'
@@ -17,6 +18,7 @@ import { Route as AppCommitteesRouteImport } from './routes/app/committees'
 import { Route as AppDashboardRouteImport } from './routes/app/dashboard'
 import { Route as AppProfileRouteImport } from './routes/app/profile'
 import { Route as AppReviewRouteImport } from './routes/app/review'
+import { Route as AdminFormsFormIdRouteImport } from './routes/admin/forms/$formId'
 import { Route as AppApplyTeamSlugRouteImport } from './routes/app/apply/$teamSlug'
 import { Route as AppApplyCommonRouteImport } from './routes/app/apply/common'
 import { Route as AppSubmissionsIndexRouteImport } from './routes/app/submissions/index'
@@ -25,6 +27,11 @@ import { Route as AppSubmissionsApplicationIdRouteImport } from './routes/app/su
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -62,6 +69,11 @@ const AppReviewRoute = AppReviewRouteImport.update({
   path: '/review',
   getParentRoute: () => AppRoute,
 } as any)
+const AdminFormsFormIdRoute = AdminFormsFormIdRouteImport.update({
+  id: '/forms/$formId',
+  path: '/forms/$formId',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AppApplyTeamSlugRoute = AppApplyTeamSlugRouteImport.update({
   id: '/apply/$teamSlug',
   path: '/apply/$teamSlug',
@@ -86,6 +98,7 @@ const AppSubmissionsApplicationIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/app': typeof AppRouteWithChildren
   '/recruit': typeof RecruitRoute
   '/signin': typeof SigninRoute
@@ -93,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/app/dashboard': typeof AppDashboardRoute
   '/app/profile': typeof AppProfileRoute
   '/app/review': typeof AppReviewRoute
+  '/admin/forms/$formId': typeof AdminFormsFormIdRoute
   '/app/apply/$teamSlug': typeof AppApplyTeamSlugRoute
   '/app/apply/common': typeof AppApplyCommonRoute
   '/app/submissions/$applicationId': typeof AppSubmissionsApplicationIdRoute
@@ -100,6 +114,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/app': typeof AppRouteWithChildren
   '/recruit': typeof RecruitRoute
   '/signin': typeof SigninRoute
@@ -107,6 +122,7 @@ export interface FileRoutesByTo {
   '/app/dashboard': typeof AppDashboardRoute
   '/app/profile': typeof AppProfileRoute
   '/app/review': typeof AppReviewRoute
+  '/admin/forms/$formId': typeof AdminFormsFormIdRoute
   '/app/apply/$teamSlug': typeof AppApplyTeamSlugRoute
   '/app/apply/common': typeof AppApplyCommonRoute
   '/app/submissions/$applicationId': typeof AppSubmissionsApplicationIdRoute
@@ -115,6 +131,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/app': typeof AppRouteWithChildren
   '/recruit': typeof RecruitRoute
   '/signin': typeof SigninRoute
@@ -122,6 +139,7 @@ export interface FileRoutesById {
   '/app/dashboard': typeof AppDashboardRoute
   '/app/profile': typeof AppProfileRoute
   '/app/review': typeof AppReviewRoute
+  '/admin/forms/$formId': typeof AdminFormsFormIdRoute
   '/app/apply/$teamSlug': typeof AppApplyTeamSlugRoute
   '/app/apply/common': typeof AppApplyCommonRoute
   '/app/submissions/$applicationId': typeof AppSubmissionsApplicationIdRoute
@@ -131,6 +149,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/app'
     | '/recruit'
     | '/signin'
@@ -138,6 +157,7 @@ export interface FileRouteTypes {
     | '/app/dashboard'
     | '/app/profile'
     | '/app/review'
+    | '/admin/forms/$formId'
     | '/app/apply/$teamSlug'
     | '/app/apply/common'
     | '/app/submissions/$applicationId'
@@ -145,6 +165,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
     | '/app'
     | '/recruit'
     | '/signin'
@@ -152,6 +173,7 @@ export interface FileRouteTypes {
     | '/app/dashboard'
     | '/app/profile'
     | '/app/review'
+    | '/admin/forms/$formId'
     | '/app/apply/$teamSlug'
     | '/app/apply/common'
     | '/app/submissions/$applicationId'
@@ -159,6 +181,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/admin'
     | '/app'
     | '/recruit'
     | '/signin'
@@ -166,6 +189,7 @@ export interface FileRouteTypes {
     | '/app/dashboard'
     | '/app/profile'
     | '/app/review'
+    | '/admin/forms/$formId'
     | '/app/apply/$teamSlug'
     | '/app/apply/common'
     | '/app/submissions/$applicationId'
@@ -174,6 +198,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AppRoute: typeof AppRouteWithChildren
   RecruitRoute: typeof RecruitRoute
   SigninRoute: typeof SigninRoute
@@ -186,6 +211,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app': {
@@ -237,6 +269,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReviewRouteImport
       parentRoute: typeof AppRoute
     }
+    '/admin/forms/$formId': {
+      id: '/admin/forms/$formId'
+      path: '/forms/$formId'
+      fullPath: '/admin/forms/$formId'
+      preLoaderRoute: typeof AdminFormsFormIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/app/apply/$teamSlug': {
       id: '/app/apply/$teamSlug'
       path: '/apply/$teamSlug'
@@ -268,6 +307,16 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminRouteChildren {
+  AdminFormsFormIdRoute: typeof AdminFormsFormIdRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminFormsFormIdRoute: AdminFormsFormIdRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 interface AppRouteChildren {
   AppCommitteesRoute: typeof AppCommitteesRoute
   AppDashboardRoute: typeof AppDashboardRoute
@@ -294,6 +343,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRouteWithChildren,
   AppRoute: AppRouteWithChildren,
   RecruitRoute: RecruitRoute,
   SigninRoute: SigninRoute,
