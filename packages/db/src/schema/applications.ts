@@ -107,9 +107,25 @@ export const application = pgTable(
     candidateProfileId: uuid("candidate_profile_id")
       .notNull()
       .references(() => candidateProfile.id, { onDelete: "cascade" }),
-    openingId: uuid("opening_id")
-      .notNull()
-      .references(() => recruitmentOpening.id, { onDelete: "cascade" }),
+    openingId: uuid("opening_id").notNull(),
+
+    /**
+     * The committee this application is to, denormalized from its opening.
+     *
+     * Every scoped authorization rule is about a team, and a CASL condition
+     * compiles against the columns of **one** table - so without this column a
+     * rule about an application's team could not compile into the predicate at
+     * all, and team scope would move into call-site discipline. The call site
+     * that then forgets it returns every committee's applications while
+     * looking entirely correct.
+     *
+     * Derived, and **guaranteed** rather than merely maintained: the composite
+     * foreign key below ties `(opening_id, team_id)` to a real pair in
+     * `recruitment_opening`, so a mismatch is a row Postgres refuses. A
+     * denormalized column that code is trusted to keep correct is a leak
+     * waiting for one careless insert. See ADR 0006.
+     */
+    teamId: uuid("team_id").notNull(),
 
     /**
      * The internal status.
@@ -142,7 +158,21 @@ export const application = pgTable(
       .notNull(),
   },
   (table) => [
+    /*
+     * The pair must exist in `recruitment_opening`, which is what makes
+     * `team_id` safe to authorize from. Replaces the single-column reference
+     * on `opening_id`: this one covers it and adds the guarantee.
+     */
+    foreignKey({
+      name: "application_opening_team_fk",
+      columns: [table.openingId, table.teamId],
+      foreignColumns: [recruitmentOpening.id, recruitmentOpening.teamId],
+    }).onDelete("cascade"),
+
     uniqueIndex("application_profile_opening_key").on(table.candidateProfileId, table.openingId),
+
+    // Every authorization predicate on this table filters by it.
+    index("application_teamId_idx").on(table.teamId),
 
     index("application_submissionId_idx").on(table.submissionId),
 

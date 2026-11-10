@@ -296,7 +296,7 @@ export async function seedDevelopmentData(db: SeedDatabase): Promise<void> {
 
   const teamIds: Record<string, string> = { labrador: labrador!.id, design: design!.id };
 
-  const openings: { id: string; teamSlug: string }[] = [];
+  const openings: { id: string; teamSlug: string; teamId: string }[] = [];
   for (const slug of ["labrador", "design"]) {
     const [opening] = await db
       .insert(recruitmentOpening)
@@ -310,7 +310,7 @@ export async function seedDevelopmentData(db: SeedDatabase): Promise<void> {
         updatedAt: CREATED_AT,
       })
       .returning({ id: recruitmentOpening.id });
-    openings.push({ id: opening!.id, teamSlug: slug });
+    openings.push({ id: opening!.id, teamSlug: slug, teamId: teamIds[slug]! });
   }
 
   await db.insert(permissionGrant).values(
@@ -504,6 +504,9 @@ export async function seedDevelopmentData(db: SeedDatabase): Promise<void> {
         .values({
           candidateProfileId: profile!.id,
           openingId: opening.id,
+          // Denormalized so authorization rules compile from it; the composite
+          // foreign key refuses a pair that does not match the opening.
+          teamId: opening.teamId,
           status,
           preferenceRank: rank + 1,
           submittedAt: isFinal ? CREATED_AT : null,

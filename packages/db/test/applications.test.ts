@@ -28,6 +28,7 @@ const now = new Date();
 
 let cycleId: string;
 let openingId: string;
+let teamId: string;
 let profileId: string;
 
 beforeEach(async () => {
@@ -59,6 +60,7 @@ beforeEach(async () => {
     .values({ cycleId, teamId: t!.id, createdAt: now, updatedAt: now })
     .returning({ id: recruitmentOpening.id });
   openingId = opening!.id;
+  teamId = t!.id;
   const [profile] = await db
     .insert(candidateProfile)
     .values({ userId: "rjones", cycleId, createdAt: now, updatedAt: now })
@@ -71,6 +73,8 @@ async function insertApplication(overrides: Record<string, unknown> = {}) {
     .insert(application)
     .values({
       candidateProfileId: profileId,
+      // Must match the opening, or `application_opening_team_fk` refuses it.
+      teamId,
       openingId,
       createdAt: now,
       updatedAt: now,
@@ -146,10 +150,35 @@ describe("application", () => {
       .returning({ id: recruitmentOpening.id });
 
     await insertApplication();
-    await insertApplication({ openingId: other!.id });
+    // The team must travel with the opening. Passing the first team's id
+    // alongside the second opening is a mismatched pair, and
+    // `application_opening_team_fk` refuses it - which is the point of the
+    // constraint, and the reason this fixture has to be explicit.
+    await insertApplication({ openingId: other!.id, teamId: t2!.id });
 
     const rows = await db.select().from(application);
     expect(rows).toHaveLength(2);
+  });
+
+  it("rejects a team that is not the one its opening belongs to", async () => {
+    const [other] = await db
+      .insert(team)
+      .values({ slug: "design", name: "Design", createdAt: now, updatedAt: now })
+      .returning({ id: team.id });
+
+    /*
+     * The constraint the whole authorization model leans on.
+     *
+     * `application.team_id` is denormalized so CASL rules can compile from it
+     * (ADR 0006), and a denormalized column that application code is merely
+     * trusted to keep correct is a leak waiting for one careless insert: a
+     * wrong `team_id` beside a correct `opening_id` makes a row visible to the
+     * wrong committee, silently and permanently.
+     *
+     * `application_opening_team_fk` makes that pair impossible rather than
+     * unlikely. 23503 is a foreign key violation on insert.
+     */
+    await expectRejection(() => insertApplication({ teamId: other!.id }), "23503");
   });
 
   it("starts as a draft", async () => {

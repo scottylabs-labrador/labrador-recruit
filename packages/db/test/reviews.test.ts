@@ -73,6 +73,8 @@ beforeEach(async () => {
     .values({
       candidateProfileId: profile!.id,
       openingId,
+      // Must match the opening, or `application_opening_team_fk` refuses it.
+      teamId: t!.id,
       createdAt: now,
       updatedAt: now,
     })

@@ -445,6 +445,11 @@ export const applicationService = {
     const [opening] = await db
       .select({
         id: recruitmentOpening.id,
+        // Carried into the row below. `application.team_id` is denormalized so
+        // authorization rules can compile from it, and the composite foreign
+        // key means a wrong value here is a row Postgres refuses rather than a
+        // leak. See ADR 0006.
+        teamId: recruitmentOpening.teamId,
         status: recruitmentOpening.status,
         opensAt: recruitmentOpening.opensAt,
         closesAt: recruitmentOpening.closesAt,
@@ -542,6 +547,7 @@ export const applicationService = {
         .values({
           candidateProfileId: profile.id,
           openingId,
+          teamId: opening.teamId,
           createdAt: now,
           updatedAt: now,
         })

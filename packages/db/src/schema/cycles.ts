@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -141,6 +142,21 @@ export const recruitmentOpening = pgTable(
   },
   (table) => [
     uniqueIndex("recruitment_opening_cycle_team_key").on(table.cycleId, table.teamId),
+
+    /*
+     * The parent key for `application`'s composite foreign key.
+     *
+     * `id` is already the primary key, so this is trivially satisfied - it
+     * exists so that `application (opening_id, team_id)` can reference
+     * `(id, team_id)` and a mismatched pair becomes a row Postgres refuses
+     * rather than a bug to be found in review. See ADR 0006.
+     *
+     * `unique()` the **constraint**, not `uniqueIndex()`: drizzle emits
+     * constraints inline in `CREATE TABLE` but every foreign key before any
+     * index, so an index here fails at migration time. This trap has already
+     * cost two rounds on `answer` and `review`.
+     */
+    unique("recruitment_opening_id_team_key").on(table.id, table.teamId),
     index("recruitment_opening_cycleId_idx").on(table.cycleId),
     index("recruitment_opening_teamId_idx").on(table.teamId),
     check(
