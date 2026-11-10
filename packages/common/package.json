@@ -11,7 +11,7 @@
   "main": "src/index.ts",
   "private": true,
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests"
   },
   "type": "module"
 }

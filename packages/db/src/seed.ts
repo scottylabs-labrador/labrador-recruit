@@ -1,357 +1,612 @@
 /**
- * Seed a complete, synthetic recruitment cycle for local development.
+ * Synthetic development data for one complete recruitment cycle.
  *
- * Every applicant here is invented. Never seed a database from a real
- * application export, and never commit one to the repository.
+ * Every workstream develops against this, so its shape is a contract — see
+ * `test/seed.test.ts` for what callers may rely on.
  *
- * Run: bun run db:seed
+ * Two properties are deliberate and tested:
+ *
+ * - **Deterministic.** Fixed ids and fixed content, so a failing test is
+ *   reproducible. No random names, no random uuids where a stable one will do.
+ * - **Re-runnable.** It truncates first. v1's seed created its cycle outright
+ *   and died on the slug's unique constraint, which meant dropping the whole
+ *   database to re-seed. Nobody should have to learn that twice.
+ *
+ * Everything here is invented. **Never put real applicant data in this file** —
+ * `docs/product-rules.md` section 6. The essays are deliberately bland so that
+ * nobody mistakes one for a real submission.
  */
-import type { Database } from "./index.ts";
+import { sql } from "drizzle-orm";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+
 import {
-  applicant,
+  answer,
   application,
-  committee,
-  committeeCandidacy,
-  committeePreference,
-  cycleCommittee,
+  applicationStatusEvent,
+  candidateProfile,
+  form,
+  formResponse,
+  formVersion,
+  permissionGrant,
+  question,
   recruitmentCycle,
-  recruitmentMembership,
+  recruitmentOpening,
+  review,
   reviewAssignment,
+  reviewScore,
   rubric,
   rubricCriterion,
+  team,
   user,
 } from "./schema/index.ts";
 
-const CYCLE_SLUG = "fall-2026";
-
-/** Rank label to numeric rank, matching the form's own wording. */
-const RANK_LABELS = [
-  "1st Choice",
-  "2nd Choice",
-  "3rd Choice",
-  "4th Choice",
-  "5th Choice",
-  "6th Choice",
-  "7th Choice",
-];
-
-const COMMITTEES = [
-  { slug: "tech", name: "Tech", capacity: 20 },
-  { slug: "labrador", name: "Labrador", capacity: 15 },
-  { slug: "design", name: "Design", capacity: 8 },
-  { slug: "foundry", name: "Foundry", capacity: 10 },
-  { slug: "finance", name: "Finance", capacity: 8 },
-  { slug: "events", name: "Events", capacity: 10 },
-  { slug: "outreach", name: "Outreach", capacity: 8 },
-];
-
-/** The default rubric. Weights are fractions of 1 and must sum to exactly 1. */
-export const CRITERIA = [
-  {
-    key: "interest",
-    label: "Interest & Passion",
-    description: "Genuine interest in ScottyLabs and this specific committee.",
-    weight: "0.3000",
-    source: "reviewer" as const,
-  },
-  {
-    key: "initiative",
-    label: "Initiative / Evidence of Action",
-    description: "Evidence that they act on their interests and pursue things independently.",
-    weight: "0.2000",
-    source: "reviewer" as const,
-  },
-  {
-    key: "ideas",
-    label: "Ideas & Potential Contributions",
-    description: "Thoughtfulness and usefulness of the ideas they want to contribute.",
-    weight: "0.2000",
-    source: "reviewer" as const,
-  },
-  {
-    key: "experience",
-    label: "Relevant Experience / Readiness",
-    description: "Experience relevant to this committee.",
-    weight: "0.1500",
-    source: "reviewer" as const,
-  },
-  {
-    key: "growth",
-    label: "Growth Potential",
-    description: "Curiosity, willingness to learn, and potential to develop.",
-    weight: "0.1000",
-    source: "reviewer" as const,
-  },
-  {
-    key: "preference",
-    label: "Applicant Committee Preference",
-    description: "Derived from the ranking the applicant submitted. Not a human judgement.",
-    weight: "0.0500",
-    source: "application_preference" as const,
-  },
-];
-
-/** Reviewers. Ids are Andrew IDs, matching what Better Auth assigns in production. */
-const STAFF = [
-  { id: "radmin", name: "Robin Admin", role: "recruitment_admin" as const, committee: null },
-  { id: "techlead", name: "Tessa Lead", role: "committee_lead" as const, committee: "tech" },
-  { id: "lablead", name: "Lars Lead", role: "committee_lead" as const, committee: "labrador" },
-  { id: "rev1", name: "Rae Reviewer", role: "reviewer" as const, committee: "tech" },
-  { id: "rev2", name: "Ravi Reviewer", role: "reviewer" as const, committee: "tech" },
-  { id: "rev3", name: "Rosa Reviewer", role: "reviewer" as const, committee: "tech" },
-  { id: "rev4", name: "Remy Reviewer", role: "reviewer" as const, committee: "labrador" },
-  { id: "rev5", name: "Rin Reviewer", role: "reviewer" as const, committee: "labrador" },
-];
-
-/** Wholly invented applicants. Preferences are committee slugs in rank order. */
-const APPLICANTS = [
-  { name: "Ada Placeholder", year: "first_year", prefs: ["tech", "labrador", "design"] },
-  { name: "Bo Placeholder", year: "first_year", prefs: ["tech", "foundry", "labrador"] },
-  { name: "Cyd Placeholder", year: "sophomore", prefs: ["labrador", "tech", "events"] },
-  { name: "Dee Placeholder", year: "first_year", prefs: ["design", "tech", "outreach"] },
-  { name: "Eli Placeholder", year: "junior", prefs: ["finance", "foundry", "tech"] },
-  { name: "Fay Placeholder", year: "sophomore", prefs: ["tech", "design", "labrador"] },
-  { name: "Gus Placeholder", year: "first_year", prefs: ["events", "outreach", "tech"] },
-  { name: "Hal Placeholder", year: "grad", prefs: ["foundry", "finance", "labrador"] },
-  { name: "Ida Placeholder", year: "sophomore", prefs: ["labrador", "design", "tech"] },
-  { name: "Jem Placeholder", year: "first_year", prefs: ["tech", "labrador", "foundry"] },
-  { name: "Kit Placeholder", year: "senior", prefs: ["outreach", "events", "design"] },
-  { name: "Lou Placeholder", year: "first_year", prefs: ["tech", "events", "finance"] },
-] as const;
-
-export interface SeedSummary {
-  cycleId: string;
-  staffCount: number;
-  committeeCount: number;
-  applicantCount: number;
-  candidacyCount: number;
-  assignmentCount: number;
-}
+/** Fixed, so ids are stable across runs and a failing test is reproducible. */
+const CREATED_AT = new Date("2026-11-01T12:00:00Z");
+const OPENS_AT = new Date("2027-01-15T12:00:00Z");
+const CLOSES_AT = new Date("2027-02-15T12:00:00Z");
 
 /**
- * Populates a database with the synthetic cycle above.
+ * The staff personas, and what each one is for.
  *
- * Takes the database rather than creating one so the seed can be exercised
- * against PGlite in tests, which is the only way to prove it still works
- * without a running Postgres.
+ * Not a cast list. Each exists because some rule or screen cannot be exercised
+ * without it, so **sign in as the one whose situation matches what you are
+ * building** rather than as whoever is first.
+ *
+ * - `dchen` — organization admin, no team. The only one who can release
+ *   decisions, and the one to use when checking that a global grant reaches
+ *   every committee.
+ * - `mokafor` — director of Labrador. The ordinary staff case: full authority
+ *   over one committee and none anywhere else.
+ * - `jtanaka` — director of Design. Exists so "a director cannot see another
+ *   committee's applicants" has two sides. Every cross-committee refusal
+ *   should be checked as `mokafor` against `jtanaka`'s applicants.
+ * - `pvarma` — question editor on Labrador. Can change that committee's form
+ *   and **cannot read an applicant**, which is the narrowest grant in the
+ *   model and the one most likely to be widened by accident.
+ * - `lhaddad`, `osorensen` — reviewers on Labrador. Two of them, because
+ *   independent blinded review needs a reviewer who has submitted and one who
+ *   has not; see the review seeding below for which is which.
+ * - `rmbeki` — reviewer on Design. A reviewer with an assignment on a
+ *   different committee, for the assignment gate.
  */
-export async function seedRecruitmentData(
-  db: Pick<Database, "insert">,
-  now: Date = new Date(),
-): Promise<SeedSummary> {
-  const staffRows = await db
-    .insert(user)
-    .values(
-      STAFF.map((person) => ({
-        id: person.id,
-        name: person.name,
-        email: `${person.id}@andrew.cmu.edu`,
-        emailVerified: true,
-        createdAt: now,
-        updatedAt: now,
-      })),
-    )
-    .onConflictDoNothing()
-    .returning();
+const STAFF = [
+  { id: "dchen", name: "Dana Chen", role: "org_admin" as const, team: null },
+  { id: "mokafor", name: "Miriam Okafor", role: "committee_director" as const, team: "labrador" },
+  { id: "jtanaka", name: "Jun Tanaka", role: "committee_director" as const, team: "design" },
+  { id: "pvarma", name: "Priya Varma", role: "question_editor" as const, team: "labrador" },
+  { id: "lhaddad", name: "Layla Haddad", role: "reviewer" as const, team: "labrador" },
+  { id: "osorensen", name: "Ola Sorensen", role: "reviewer" as const, team: "labrador" },
+  { id: "rmbeki", name: "Ruth Mbeki", role: "reviewer" as const, team: "design" },
+];
+
+/**
+ * The applicant personas.
+ *
+ * Twelve, so the statuses below spread across them without two screens
+ * fighting over one row. They are otherwise interchangeable by design — an
+ * applicant's *situation* comes from `APPLICATION_STATUSES`, not from who they
+ * are, which is the whole point of a platform that does not treat applicants
+ * differently.
+ *
+ * The ones worth knowing by name:
+ *
+ * - `aquinn` — first in the list, so the first status in
+ *   `APPLICATION_STATUSES` is theirs: a **draft**. Use them for anything about
+ *   an unfinished application.
+ * - `bmorales` — the second, and therefore **submitted**. The applicant to use
+ *   when you need somebody whose answers are locked.
+ * - `gadeyemi` — lands on **withdrawn**, which is the state most code forgets.
+ *
+ * Every name and every essay here is invented. **Never put real applicant data
+ * in this file** — `docs/product-rules.md` section 6.
+ */
+const APPLICANTS = [
+  { id: "aquinn", name: "Avery Quinn", major: "Computer Science", year: 2029 },
+  { id: "bmorales", name: "Blair Morales", major: "Design", year: 2028 },
+  { id: "cokonkwo", name: "Chidi Okonkwo", major: "Information Systems", year: 2029 },
+  { id: "dlindqvist", name: "Dag Lindqvist", major: "Statistics", year: 2027 },
+  { id: "efitzgerald", name: "Eilish Fitzgerald", major: "Computer Science", year: 2030 },
+  { id: "fnakamura", name: "Fumiko Nakamura", major: "Human-Computer Interaction", year: 2028 },
+  { id: "gadeyemi", name: "Gbemi Adeyemi", major: "Electrical Engineering", year: 2029 },
+  { id: "hpetrov", name: "Hana Petrov", major: "Mathematics", year: 2027 },
+  { id: "ireyes", name: "Ines Reyes", major: "Design", year: 2030 },
+  { id: "jsvensson", name: "Johan Svensson", major: "Computer Science", year: 2028 },
+  { id: "kbanerjee", name: "Kiran Banerjee", major: "Business Administration", year: 2029 },
+  { id: "lmwangi", name: "Lydia Mwangi", major: "Computer Science", year: 2028 },
+];
+
+/**
+ * The statuses to spread applications across.
+ *
+ * Every screen somebody is about to build needs at least one row in its own
+ * state, so the list is exhaustive rather than representative.
+ */
+const APPLICATION_STATUSES = [
+  "draft",
+  "submitted",
+  "submitted",
+  "under_review",
+  "under_review",
+  "shortlisted",
+  "withdrawn",
+] as const;
+
+const COMMON_QUESTIONS = [
+  {
+    questionKey: "full-name",
+    type: "short_text" as const,
+    label: "Full name",
+    required: true,
+  },
+  {
+    questionKey: "major",
+    type: "short_text" as const,
+    label: "What is your major?",
+    required: true,
+  },
+  {
+    questionKey: "graduation-year",
+    type: "number" as const,
+    label: "Expected graduation year",
+    required: true,
+  },
+  {
+    questionKey: "interest-area",
+    type: "single_select" as const,
+    label: "Which area interests you most?",
+    required: true,
+    configJson: {
+      choices: ["Software", "Design", "AI / Machine Learning", "Operations"],
+    },
+  },
+  {
+    questionKey: "ai-project",
+    type: "long_text" as const,
+    label: "Describe an AI-related project you have worked on.",
+    required: true,
+    /**
+     * The conditional question the renderer and the evaluator develop against.
+     *
+     * Structured data, never code. It references `interest-area`, which sits
+     * earlier in position order — a forward reference could not be resolved in
+     * the single pass the evaluator makes, and is refused at publish time.
+     */
+    visibilityRuleJson: {
+      equals: { questionKey: "interest-area", value: "AI / Machine Learning" },
+    },
+  },
+  {
+    questionKey: "motivation",
+    type: "long_text" as const,
+    label: "Why do you want to join ScottyLabs?",
+    required: true,
+  },
+  {
+    questionKey: "github",
+    type: "url" as const,
+    label: "GitHub profile, if you have one",
+    required: false,
+  },
+];
+
+const CRITERIA = [
+  { name: "Motivation", position: 1 },
+  { name: "Relevant Experience", position: 2 },
+  { name: "Interest in Committee", position: 3 },
+  { name: "Collaboration", position: 4 },
+];
+
+/**
+ * Any drizzle Postgres instance.
+ *
+ * Written against the shared base rather than one driver, so the same seed runs
+ * against PGlite in the test suite and against a real Postgres from the command
+ * line. Those two have different driver types and are otherwise incompatible.
+ */
+type SeedDatabase = PgDatabase<PgQueryResultHKT>;
+
+/**
+ * Empties every table, discovered from the catalogue.
+ *
+ * A hand-maintained list is the thing somebody forgets when they add a table,
+ * and the symptom is a seed that half-succeeds.
+ */
+async function truncateAll(db: SeedDatabase): Promise<void> {
+  const result = await db.execute(sql`
+    SELECT tablename FROM pg_tables
+    WHERE schemaname = 'public' AND tablename <> '__drizzle_migrations'
+  `);
+  // `execute` is typed loosely across drivers, so the row shape is asserted once
+  // here rather than threaded through a generic the two drivers disagree about.
+  const rows = (result as { rows: { tablename: string }[] }).rows;
+  const names = rows.map((row) => `"${row.tablename}"`).join(", ");
+  if (names.length > 0) {
+    await db.execute(sql.raw(`TRUNCATE TABLE ${names} CASCADE`));
+  }
+}
+
+export async function seedDevelopmentData(db: SeedDatabase): Promise<void> {
+  await truncateAll(db);
+
+  const everyone = [...STAFF, ...APPLICANTS];
+  await db.insert(user).values(
+    everyone.map((person) => ({
+      id: person.id,
+      name: person.name,
+      email: `${person.id}@andrew.cmu.edu`,
+      emailVerified: true,
+      createdAt: CREATED_AT,
+      updatedAt: CREATED_AT,
+    })),
+  );
 
   const [cycle] = await db
     .insert(recruitmentCycle)
     .values({
-      slug: CYCLE_SLUG,
-      name: "Fall 2026",
-      status: "reviewing",
-      minimumReviews: 3,
-      candidacyTopN: 3,
-      preferenceScoreMap: { "1": 5, "2": 4.5, "3": 4, "4": 3, "5": 2.5, "6": 2, "7": 1 },
-      createdAt: now,
-      updatedAt: now,
+      slug: "spring-2027",
+      name: "Spring 2027",
+      description: "Spring 2027 recruitment for every participating committee.",
+      status: "open",
+      timeZone: "America/New_York",
+      opensAt: OPENS_AT,
+      closesAt: CLOSES_AT,
+      maxCommitteesPerApplicant: 3,
+      requirePreferenceRanking: true,
+      createdBy: "dchen",
+      createdAt: CREATED_AT,
+      updatedAt: CREATED_AT,
     })
-    .returning();
+    .returning({ id: recruitmentCycle.id });
+  const cycleId = cycle!.id;
 
-  if (!cycle) {
-    throw new Error("Failed to create the recruitment cycle");
+  const [labrador] = await db
+    .insert(team)
+    .values({
+      slug: "labrador",
+      name: "Labrador",
+      description: "Product teams building for the CMU community.",
+      displayOrder: 1,
+      createdAt: CREATED_AT,
+      updatedAt: CREATED_AT,
+    })
+    .returning({ id: team.id });
+  const [design] = await db
+    .insert(team)
+    .values({
+      slug: "design",
+      name: "Design",
+      description: "Brand, product design, and the design system.",
+      displayOrder: 2,
+      createdAt: CREATED_AT,
+      updatedAt: CREATED_AT,
+    })
+    .returning({ id: team.id });
+
+  // A subteam, so the parent/child grant rules have something real to run
+  // against: a grant on Labrador must convey nothing about Labrador Infra.
+  await db.insert(team).values({
+    slug: "labrador-infra",
+    name: "Labrador Infrastructure",
+    description: "Deployment, observability, and developer tooling.",
+    parentTeamId: labrador!.id,
+    displayOrder: 3,
+    createdAt: CREATED_AT,
+    updatedAt: CREATED_AT,
+  });
+
+  const teamIds: Record<string, string> = { labrador: labrador!.id, design: design!.id };
+
+  const openings: { id: string; teamSlug: string; teamId: string }[] = [];
+  for (const slug of ["labrador", "design"]) {
+    const [opening] = await db
+      .insert(recruitmentOpening)
+      .values({
+        cycleId,
+        teamId: teamIds[slug]!,
+        status: "open",
+        capacity: 8,
+        minimumReviews: 2,
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
+      })
+      .returning({ id: recruitmentOpening.id });
+    openings.push({ id: opening!.id, teamSlug: slug, teamId: teamIds[slug]! });
   }
 
-  const committeeRows = await db
-    .insert(committee)
-    .values(
-      COMMITTEES.map((entry, index) => ({
-        slug: entry.slug,
-        name: entry.name,
-        displayOrder: index,
-        createdAt: now,
-        updatedAt: now,
-      })),
-    )
-    .returning();
-
-  const bySlug = new Map(committeeRows.map((row) => [row.slug, row]));
-
-  await db.insert(cycleCommittee).values(
-    COMMITTEES.map((entry) => {
-      const row = bySlug.get(entry.slug);
-      if (!row) throw new Error(`Missing committee ${entry.slug}`);
-      return {
-        cycleId: cycle.id,
-        committeeId: row.id,
-        capacity: entry.capacity,
-        createdAt: now,
-        updatedAt: now,
-      };
-    }),
-  );
-
-  await db.insert(recruitmentMembership).values(
+  await db.insert(permissionGrant).values(
     STAFF.map((person) => ({
-      cycleId: cycle.id,
       userId: person.id,
       role: person.role,
-      committeeId: person.committee ? (bySlug.get(person.committee)?.id ?? null) : null,
-      createdAt: now,
-      updatedAt: now,
+      scope: person.team === null ? ("organization" as const) : ("team" as const),
+      teamId: person.team === null ? null : teamIds[person.team]!,
+      cycleId: person.role === "org_admin" ? null : cycleId,
+      grantedBy: "dchen",
+      createdAt: CREATED_AT,
     })),
   );
 
-  const [rubricRow] = await db
-    .insert(rubric)
+  // The common form, published, with the conditional question.
+  const [commonForm] = await db
+    .insert(form)
     .values({
-      cycleId: cycle.id,
-      version: 1,
-      name: "Fall 2026 default rubric",
-      createdAt: now,
-      updatedAt: now,
+      cycleId,
+      kind: "common",
+      title: "ScottyLabs Common Application",
+      description: "Answered once. Every committee you apply to sees these answers.",
+      createdAt: CREATED_AT,
+      updatedAt: CREATED_AT,
     })
-    .returning();
+    .returning({ id: form.id });
+  const [commonVersion] = await db
+    .insert(formVersion)
+    .values({
+      formId: commonForm!.id,
+      version: 1,
+      status: "published",
+      publishedAt: CREATED_AT,
+      createdBy: "dchen",
+      createdAt: CREATED_AT,
+      updatedAt: CREATED_AT,
+    })
+    .returning({ id: formVersion.id });
+  const commonVersionId = commonVersion!.id;
 
-  if (!rubricRow) {
-    throw new Error("Failed to create the rubric");
+  const commonQuestionIds: Record<string, string> = {};
+  for (const [index, spec] of COMMON_QUESTIONS.entries()) {
+    const [row] = await db
+      .insert(question)
+      .values({ ...spec, formVersionId: commonVersionId, position: index + 1 })
+      .returning({ id: question.id });
+    commonQuestionIds[spec.questionKey] = row!.id;
   }
 
-  await db.insert(rubricCriterion).values(
-    CRITERIA.map((criterion, index) => ({
-      rubricId: rubricRow.id,
-      key: criterion.key,
-      label: criterion.label,
-      description: criterion.description,
-      weight: criterion.weight,
-      source: criterion.source,
-      displayOrder: index,
-      createdAt: now,
-      updatedAt: now,
-    })),
-  );
-
-  let candidacyCount = 0;
-  let assignmentCount = 0;
-
-  for (const [index, person] of APPLICANTS.entries()) {
-    const email = `applicant${index + 1}@andrew.cmu.edu`;
-
-    const [applicantRow] = await db
-      .insert(applicant)
+  // One committee form per opening, published.
+  const committeeVersions: Record<string, { versionId: string; questionId: string }> = {};
+  for (const opening of openings) {
+    const [committeeForm] = await db
+      .insert(form)
       .values({
-        email,
-        rawEmail: email,
-        fullName: person.name,
-        createdAt: now,
-        updatedAt: now,
+        cycleId,
+        teamId: teamIds[opening.teamSlug]!,
+        openingId: opening.id,
+        kind: "committee",
+        title: `${opening.teamSlug === "labrador" ? "Labrador" : "Design"} Application`,
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
       })
-      .returning();
-
-    if (!applicantRow) throw new Error(`Failed to create applicant ${person.name}`);
-
-    const [applicationRow] = await db
-      .insert(application)
+      .returning({ id: form.id });
+    const [version] = await db
+      .insert(formVersion)
       .values({
-        cycleId: cycle.id,
-        applicantId: applicantRow.id,
-        year: person.year,
-        major: "Undeclared",
-        rankingExplanation: `Synthetic seed row for ${person.name}.`,
-        rawResponse: { seeded: true },
-        submittedAt: now,
-        sourceRowNumber: index + 2,
-        createdAt: now,
-        updatedAt: now,
+        formId: committeeForm!.id,
+        version: 1,
+        status: "published",
+        publishedAt: CREATED_AT,
+        createdBy: opening.teamSlug === "labrador" ? "mokafor" : "jtanaka",
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
       })
-      .returning();
+      .returning({ id: formVersion.id });
+    const [committeeQuestion] = await db
+      .insert(question)
+      .values({
+        formVersionId: version!.id,
+        questionKey: "why-this-committee",
+        type: "long_text",
+        label: `Why this committee in particular?`,
+        required: true,
+        position: 1,
+      })
+      .returning({ id: question.id });
+    committeeVersions[opening.teamSlug] = {
+      versionId: version!.id,
+      questionId: committeeQuestion!.id,
+    };
+  }
 
-    if (!applicationRow) throw new Error(`Failed to create application for ${person.name}`);
+  // A rubric per opening.
+  const rubricIds: Record<string, { rubricId: string; criterionIds: string[] }> = {};
+  for (const opening of openings) {
+    const [row] = await db
+      .insert(rubric)
+      .values({
+        openingId: opening.id,
+        version: 1,
+        status: "active",
+        createdBy: opening.teamSlug === "labrador" ? "mokafor" : "jtanaka",
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
+      })
+      .returning({ id: rubric.id });
+    const criterionIds: string[] = [];
+    for (const criterion of CRITERIA) {
+      const [inserted] = await db
+        .insert(rubricCriterion)
+        .values({
+          rubricId: row!.id,
+          name: criterion.name,
+          minimumScore: 1,
+          maximumScore: 5,
+          position: criterion.position,
+        })
+        .returning({ id: rubricCriterion.id });
+      criterionIds.push(inserted!.id);
+    }
+    rubricIds[opening.teamSlug] = { rubricId: row!.id, criterionIds };
+  }
 
-    // Rank every committee: the three stated preferences first, then the rest,
-    // because the real form makes applicants rank all seven.
-    const ranked = [
-      ...person.prefs,
-      ...COMMITTEES.map((c) => c.slug).filter((s) => !person.prefs.includes(s as never)),
+  // Applicants: a profile, a common response, and one or two applications each.
+  const reviewableApplications: { id: string; teamSlug: string }[] = [];
+
+  for (const [index, applicant] of APPLICANTS.entries()) {
+    const status = APPLICATION_STATUSES[index % APPLICATION_STATUSES.length]!;
+    const isFinal = status !== "draft";
+
+    const [profile] = await db
+      .insert(candidateProfile)
+      .values({
+        userId: applicant.id,
+        cycleId,
+        commonLockedAt: isFinal ? CREATED_AT : null,
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
+      })
+      .returning({ id: candidateProfile.id });
+
+    const [commonResponse] = await db
+      .insert(formResponse)
+      .values({
+        formVersionId: commonVersionId,
+        candidateProfileId: profile!.id,
+        status: isFinal ? "submitted" : "draft",
+        submittedAt: isFinal ? CREATED_AT : null,
+        revision: isFinal ? 3 : 1,
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
+      })
+      .returning({ id: formResponse.id });
+
+    const interestArea = index % 3 === 0 ? "AI / Machine Learning" : "Software";
+    const commonAnswers: { questionKey: string; value: unknown }[] = [
+      { questionKey: "full-name", value: applicant.name },
+      { questionKey: "major", value: applicant.major },
+      { questionKey: "graduation-year", value: applicant.year },
+      { questionKey: "interest-area", value: interestArea },
+      { questionKey: "motivation", value: `${applicant.name} would like to build things here.` },
+      { questionKey: "github", value: `https://github.com/example-${applicant.id}` },
     ];
+    // The conditional answer exists only where the rule says the question is
+    // visible, which is the state the submission validator has to handle.
+    if (interestArea === "AI / Machine Learning") {
+      commonAnswers.push({
+        questionKey: "ai-project",
+        value: "A classifier for an undergraduate course project.",
+      });
+    }
 
-    await db.insert(committeePreference).values(
-      ranked.map((slug, rankIndex) => {
-        const row = bySlug.get(slug);
-        if (!row) throw new Error(`Missing committee ${slug}`);
-        return {
-          applicationId: applicationRow.id,
-          committeeId: row.id,
-          rank: rankIndex + 1,
-          rawRankLabel: RANK_LABELS[rankIndex] ?? null,
-          createdAt: now,
-          updatedAt: now,
-        };
-      }),
+    await db.insert(answer).values(
+      commonAnswers.map((entry) => ({
+        formResponseId: commonResponse!.id,
+        formVersionId: commonVersionId,
+        questionId: commonQuestionIds[entry.questionKey]!,
+        valueJsonb: entry.value,
+        updatedAt: CREATED_AT,
+      })),
     );
 
-    // Candidacies for the applicant's top three, matching the cycle default.
-    for (const slug of person.prefs) {
-      const committeeRow = bySlug.get(slug);
-      if (!committeeRow) continue;
-
-      const [candidacy] = await db
-        .insert(committeeCandidacy)
+    // Everybody applies to Labrador; every third applicant also applies to
+    // Design, so one person holding two applications is represented.
+    const targets = index % 3 === 0 ? ["labrador", "design"] : ["labrador"];
+    for (const [rank, teamSlug] of targets.entries()) {
+      const opening = openings.find((o) => o.teamSlug === teamSlug)!;
+      const [app] = await db
+        .insert(application)
         .values({
-          applicationId: applicationRow.id,
-          committeeId: committeeRow.id,
-          source: "top_preference",
-          status: "in_review",
-          createdAt: now,
-          updatedAt: now,
+          candidateProfileId: profile!.id,
+          openingId: opening.id,
+          // Denormalized so authorization rules compile from it; the composite
+          // foreign key refuses a pair that does not match the opening.
+          teamId: opening.teamId,
+          status,
+          preferenceRank: rank + 1,
+          submittedAt: isFinal ? CREATED_AT : null,
+          withdrawnAt: status === "withdrawn" ? CREATED_AT : null,
+          createdAt: CREATED_AT,
+          updatedAt: CREATED_AT,
         })
-        .returning();
+        .returning({ id: application.id });
 
-      if (!candidacy) continue;
-      candidacyCount += 1;
+      const committee = committeeVersions[teamSlug]!;
+      const [committeeResponse] = await db
+        .insert(formResponse)
+        .values({
+          formVersionId: committee.versionId,
+          applicationId: app!.id,
+          status: isFinal ? "submitted" : "draft",
+          submittedAt: isFinal ? CREATED_AT : null,
+          revision: isFinal ? 2 : 1,
+          createdAt: CREATED_AT,
+          updatedAt: CREATED_AT,
+        })
+        .returning({ id: formResponse.id });
+      await db.insert(answer).values({
+        formResponseId: committeeResponse!.id,
+        formVersionId: committee.versionId,
+        questionId: committee.questionId,
+        valueJsonb: `${applicant.name} is interested in this committee's work.`,
+        updatedAt: CREATED_AT,
+      });
 
-      // Three reviewers drawn from that committee's pool, rotated so the load
-      // spreads evenly across the seeded staff. The recruitment admin holds a
-      // cycle-wide membership with a null committee, so matching on the slug
-      // already excludes them.
-      const pool = STAFF.filter((member) => member.committee === slug);
-      if (pool.length === 0) continue;
-
-      const chosen = [0, 1, 2]
-        .map((offset) => pool[(index + offset) % pool.length])
-        .filter((value, position, all) => value !== undefined && all.indexOf(value) === position);
-
-      for (const reviewer of chosen) {
-        if (!reviewer) continue;
-        await db.insert(reviewAssignment).values({
-          candidacyId: candidacy.id,
-          reviewerUserId: reviewer.id,
-          assignedAt: now,
-          createdBy: "radmin",
-          createdAt: now,
-          updatedAt: now,
+      if (isFinal) {
+        await db.insert(applicationStatusEvent).values({
+          applicationId: app!.id,
+          oldStatus: "draft",
+          newStatus: "submitted",
+          event: "submitted",
+          createdAt: CREATED_AT,
         });
-        assignmentCount += 1;
+      }
+      if (status === "under_review" || status === "shortlisted") {
+        reviewableApplications.push({ id: app!.id, teamSlug });
       }
     }
   }
 
-  return {
-    cycleId: cycle.id,
-    staffCount: staffRows.length || STAFF.length,
-    committeeCount: committeeRows.length,
-    applicantCount: APPLICANTS.length,
-    candidacyCount,
-    assignmentCount,
+  /*
+   * Reviews, deliberately in both states.
+   *
+   * Track B needs a submitted review and an unsubmitted one to see the
+   * unblinding rule work — a reviewer sees peers only once their own review is
+   * submitted — without writing fixtures of their own.
+   */
+  const reviewersByTeam: Record<string, string[]> = {
+    labrador: ["lhaddad", "osorensen"],
+    design: ["rmbeki"],
   };
+
+  for (const [index, target] of reviewableApplications.entries()) {
+    const reviewers = reviewersByTeam[target.teamSlug]!;
+    for (const [offset, reviewerId] of reviewers.entries()) {
+      const [assignment] = await db
+        .insert(reviewAssignment)
+        .values({
+          applicationId: target.id,
+          reviewerId,
+          assignedBy: target.teamSlug === "labrador" ? "mokafor" : "jtanaka",
+          status: (index + offset) % 2 === 0 ? "submitted" : "in_progress",
+          assignedAt: CREATED_AT,
+        })
+        .returning({ id: reviewAssignment.id });
+
+      const isSubmitted = (index + offset) % 2 === 0;
+      const { rubricId, criterionIds } = rubricIds[target.teamSlug]!;
+      const [reviewRow] = await db
+        .insert(review)
+        .values({
+          assignmentId: assignment!.id,
+          rubricId,
+          status: isSubmitted ? "submitted" : "draft",
+          recommendation: isSubmitted ? "yes" : null,
+          confidence: isSubmitted ? "medium" : null,
+          comments: isSubmitted ? "Clear motivation, some relevant experience." : null,
+          submittedAt: isSubmitted ? CREATED_AT : null,
+          createdAt: CREATED_AT,
+          updatedAt: CREATED_AT,
+        })
+        .returning({ id: review.id });
+
+      if (isSubmitted) {
+        await db.insert(reviewScore).values(
+          criterionIds.map((criterionId, position) => ({
+            reviewId: reviewRow!.id,
+            rubricId,
+            criterionId,
+            // Fixed per position rather than random, so an aggregate a developer
+            // computes by hand matches what the platform reports.
+            score: 3 + ((position + index) % 3),
+          })),
+        );
+      }
+    }
+  }
 }

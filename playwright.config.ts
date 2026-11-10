@@ -18,6 +18,8 @@ export default defineConfig({
     command: "bun e2e/stack.ts",
     url: WEB_URL,
     reuseExistingServer: false,
-    timeout: 120_000,
+    // Longer than `waitFor`'s own 180s ceiling in `e2e/stack.ts`, or Playwright
+    // kills the stack before it can report which process failed to come up.
+    timeout: 240_000,
   },
 });

@@ -5,64 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1772916777231,
-      "tag": "0000_aromatic_zeigeist",
+      "when": 1793813935790,
+      "tag": "0000_grey_baron_zemo",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1788239545757,
-      "tag": "0001_recruitment_domain",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1788368579963,
-      "tag": "0002_add_user_role",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1788396054667,
-      "tag": "0003_review_committee_scope",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1788418833053,
-      "tag": "0004_decision_cutoffs",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1788537314887,
-      "tag": "0005_fuzzy_bruce_banner",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1788540043548,
-      "tag": "0006_strong_shaman",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1788885021090,
-      "tag": "0007_github_language_and_commits",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1788971182332,
-      "tag": "0008_reviewer_target",
+      "when": 1794281315668,
+      "tag": "0001_amused_leo",
       "breakpoints": true
     }
   ]

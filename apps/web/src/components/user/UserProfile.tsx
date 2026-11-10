@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router";
 import { User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -47,15 +46,6 @@ export function UserProfile() {
           <div className="px-4 py-3">
             <p className="truncate text-sm font-medium text-white">{user.name}</p>
             <p className="mt-0.5 truncate text-sm text-gray-300">{user.email}</p>
-            {user.role === "admin" && (
-              <Link
-                to="/dashboard"
-                onClick={() => setOpen(false)}
-                className="mt-2 flex h-7 w-full items-center justify-center whitespace-nowrap rounded-lg border border-white/30 bg-white px-2.5 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-100"
-              >
-                Admin Dashboard
-              </Link>
-            )}
             <SignOutButton onSuccess={() => setOpen(false)} />
           </div>
         </div>

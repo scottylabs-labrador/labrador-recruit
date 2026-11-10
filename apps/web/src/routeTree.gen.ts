@@ -10,204 +10,198 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as DashboardRouteImport } from './routes/dashboard'
-import { Route as RecruitmentRouteImport } from './routes/recruitment'
-import { Route as RecruitmentCycleIdIndexRouteImport } from './routes/recruitment.$cycleId.index'
-import { Route as RecruitmentCycleIdApplicantsRouteImport } from './routes/recruitment.$cycleId.applicants'
-import { Route as RecruitmentCycleIdDisagreementsRouteImport } from './routes/recruitment.$cycleId.disagreements'
-import { Route as RecruitmentCycleIdExportsRouteImport } from './routes/recruitment.$cycleId.exports'
-import { Route as RecruitmentCycleIdImportRouteImport } from './routes/recruitment.$cycleId.import'
-import { Route as RecruitmentCycleIdQueueRouteImport } from './routes/recruitment.$cycleId.queue'
-import { Route as RecruitmentCycleIdRankingRouteImport } from './routes/recruitment.$cycleId.ranking'
-import { Route as RecruitmentCycleIdRubricRouteImport } from './routes/recruitment.$cycleId.rubric'
-import { Route as RecruitmentCycleIdSettingsRouteImport } from './routes/recruitment.$cycleId.settings'
-import { Route as RecruitmentCycleIdApplicantApplicationIdRouteImport } from './routes/recruitment.$cycleId.applicant.$applicationId'
-import { Route as RecruitmentCycleIdReviewAssignmentIdRouteImport } from './routes/recruitment.$cycleId.review.$assignmentId'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AppRouteImport } from './routes/app'
+import { Route as RecruitRouteImport } from './routes/recruit'
+import { Route as SigninRouteImport } from './routes/signin'
+import { Route as AppCommitteesRouteImport } from './routes/app/committees'
+import { Route as AppDashboardRouteImport } from './routes/app/dashboard'
+import { Route as AppProfileRouteImport } from './routes/app/profile'
+import { Route as AppReviewRouteImport } from './routes/app/review'
+import { Route as AdminFormsFormIdRouteImport } from './routes/admin/forms/$formId'
+import { Route as AppApplyTeamSlugRouteImport } from './routes/app/apply/$teamSlug'
+import { Route as AppApplyCommonRouteImport } from './routes/app/apply/common'
+import { Route as AppSubmissionsIndexRouteImport } from './routes/app/submissions/index'
+import { Route as AppSubmissionsApplicationIdRouteImport } from './routes/app/submissions/$applicationId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardRoute = DashboardRouteImport.update({
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecruitRoute = RecruitRouteImport.update({
+  id: '/recruit',
+  path: '/recruit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SigninRoute = SigninRouteImport.update({
+  id: '/signin',
+  path: '/signin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppCommitteesRoute = AppCommitteesRouteImport.update({
+  id: '/committees',
+  path: '/committees',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const RecruitmentRoute = RecruitmentRouteImport.update({
-  id: '/recruitment',
-  path: '/recruitment',
-  getParentRoute: () => rootRouteImport,
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
 } as any)
-const RecruitmentCycleIdIndexRoute = RecruitmentCycleIdIndexRouteImport.update({
-  id: '/$cycleId/',
-  path: '/$cycleId/',
-  getParentRoute: () => RecruitmentRoute,
+const AppReviewRoute = AppReviewRouteImport.update({
+  id: '/review',
+  path: '/review',
+  getParentRoute: () => AppRoute,
 } as any)
-const RecruitmentCycleIdApplicantsRoute =
-  RecruitmentCycleIdApplicantsRouteImport.update({
-    id: '/$cycleId/applicants',
-    path: '/$cycleId/applicants',
-    getParentRoute: () => RecruitmentRoute,
-  } as any)
-const RecruitmentCycleIdDisagreementsRoute =
-  RecruitmentCycleIdDisagreementsRouteImport.update({
-    id: '/$cycleId/disagreements',
-    path: '/$cycleId/disagreements',
-    getParentRoute: () => RecruitmentRoute,
-  } as any)
-const RecruitmentCycleIdExportsRoute =
-  RecruitmentCycleIdExportsRouteImport.update({
-    id: '/$cycleId/exports',
-    path: '/$cycleId/exports',
-    getParentRoute: () => RecruitmentRoute,
-  } as any)
-const RecruitmentCycleIdImportRoute =
-  RecruitmentCycleIdImportRouteImport.update({
-    id: '/$cycleId/import',
-    path: '/$cycleId/import',
-    getParentRoute: () => RecruitmentRoute,
-  } as any)
-const RecruitmentCycleIdQueueRoute = RecruitmentCycleIdQueueRouteImport.update({
-  id: '/$cycleId/queue',
-  path: '/$cycleId/queue',
-  getParentRoute: () => RecruitmentRoute,
+const AdminFormsFormIdRoute = AdminFormsFormIdRouteImport.update({
+  id: '/forms/$formId',
+  path: '/forms/$formId',
+  getParentRoute: () => AdminRoute,
 } as any)
-const RecruitmentCycleIdRankingRoute =
-  RecruitmentCycleIdRankingRouteImport.update({
-    id: '/$cycleId/ranking',
-    path: '/$cycleId/ranking',
-    getParentRoute: () => RecruitmentRoute,
-  } as any)
-const RecruitmentCycleIdRubricRoute =
-  RecruitmentCycleIdRubricRouteImport.update({
-    id: '/$cycleId/rubric',
-    path: '/$cycleId/rubric',
-    getParentRoute: () => RecruitmentRoute,
-  } as any)
-const RecruitmentCycleIdSettingsRoute =
-  RecruitmentCycleIdSettingsRouteImport.update({
-    id: '/$cycleId/settings',
-    path: '/$cycleId/settings',
-    getParentRoute: () => RecruitmentRoute,
-  } as any)
-const RecruitmentCycleIdApplicantApplicationIdRoute =
-  RecruitmentCycleIdApplicantApplicationIdRouteImport.update({
-    id: '/$cycleId/applicant/$applicationId',
-    path: '/$cycleId/applicant/$applicationId',
-    getParentRoute: () => RecruitmentRoute,
-  } as any)
-const RecruitmentCycleIdReviewAssignmentIdRoute =
-  RecruitmentCycleIdReviewAssignmentIdRouteImport.update({
-    id: '/$cycleId/review/$assignmentId',
-    path: '/$cycleId/review/$assignmentId',
-    getParentRoute: () => RecruitmentRoute,
+const AppApplyTeamSlugRoute = AppApplyTeamSlugRouteImport.update({
+  id: '/apply/$teamSlug',
+  path: '/apply/$teamSlug',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppApplyCommonRoute = AppApplyCommonRouteImport.update({
+  id: '/apply/common',
+  path: '/apply/common',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSubmissionsIndexRoute = AppSubmissionsIndexRouteImport.update({
+  id: '/submissions/',
+  path: '/submissions/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSubmissionsApplicationIdRoute =
+  AppSubmissionsApplicationIdRouteImport.update({
+    id: '/submissions/$applicationId',
+    path: '/submissions/$applicationId',
+    getParentRoute: () => AppRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
-  '/recruitment': typeof RecruitmentRouteWithChildren
-  '/recruitment/$cycleId/applicants': typeof RecruitmentCycleIdApplicantsRoute
-  '/recruitment/$cycleId/disagreements': typeof RecruitmentCycleIdDisagreementsRoute
-  '/recruitment/$cycleId/exports': typeof RecruitmentCycleIdExportsRoute
-  '/recruitment/$cycleId/import': typeof RecruitmentCycleIdImportRoute
-  '/recruitment/$cycleId/queue': typeof RecruitmentCycleIdQueueRoute
-  '/recruitment/$cycleId/ranking': typeof RecruitmentCycleIdRankingRoute
-  '/recruitment/$cycleId/rubric': typeof RecruitmentCycleIdRubricRoute
-  '/recruitment/$cycleId/settings': typeof RecruitmentCycleIdSettingsRoute
-  '/recruitment/$cycleId/': typeof RecruitmentCycleIdIndexRoute
-  '/recruitment/$cycleId/applicant/$applicationId': typeof RecruitmentCycleIdApplicantApplicationIdRoute
-  '/recruitment/$cycleId/review/$assignmentId': typeof RecruitmentCycleIdReviewAssignmentIdRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/app': typeof AppRouteWithChildren
+  '/recruit': typeof RecruitRoute
+  '/signin': typeof SigninRoute
+  '/app/committees': typeof AppCommitteesRoute
+  '/app/dashboard': typeof AppDashboardRoute
+  '/app/profile': typeof AppProfileRoute
+  '/app/review': typeof AppReviewRoute
+  '/admin/forms/$formId': typeof AdminFormsFormIdRoute
+  '/app/apply/$teamSlug': typeof AppApplyTeamSlugRoute
+  '/app/apply/common': typeof AppApplyCommonRoute
+  '/app/submissions/$applicationId': typeof AppSubmissionsApplicationIdRoute
+  '/app/submissions/': typeof AppSubmissionsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
-  '/recruitment': typeof RecruitmentRouteWithChildren
-  '/recruitment/$cycleId/applicants': typeof RecruitmentCycleIdApplicantsRoute
-  '/recruitment/$cycleId/disagreements': typeof RecruitmentCycleIdDisagreementsRoute
-  '/recruitment/$cycleId/exports': typeof RecruitmentCycleIdExportsRoute
-  '/recruitment/$cycleId/import': typeof RecruitmentCycleIdImportRoute
-  '/recruitment/$cycleId/queue': typeof RecruitmentCycleIdQueueRoute
-  '/recruitment/$cycleId/ranking': typeof RecruitmentCycleIdRankingRoute
-  '/recruitment/$cycleId/rubric': typeof RecruitmentCycleIdRubricRoute
-  '/recruitment/$cycleId/settings': typeof RecruitmentCycleIdSettingsRoute
-  '/recruitment/$cycleId': typeof RecruitmentCycleIdIndexRoute
-  '/recruitment/$cycleId/applicant/$applicationId': typeof RecruitmentCycleIdApplicantApplicationIdRoute
-  '/recruitment/$cycleId/review/$assignmentId': typeof RecruitmentCycleIdReviewAssignmentIdRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/app': typeof AppRouteWithChildren
+  '/recruit': typeof RecruitRoute
+  '/signin': typeof SigninRoute
+  '/app/committees': typeof AppCommitteesRoute
+  '/app/dashboard': typeof AppDashboardRoute
+  '/app/profile': typeof AppProfileRoute
+  '/app/review': typeof AppReviewRoute
+  '/admin/forms/$formId': typeof AdminFormsFormIdRoute
+  '/app/apply/$teamSlug': typeof AppApplyTeamSlugRoute
+  '/app/apply/common': typeof AppApplyCommonRoute
+  '/app/submissions/$applicationId': typeof AppSubmissionsApplicationIdRoute
+  '/app/submissions': typeof AppSubmissionsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
-  '/recruitment': typeof RecruitmentRouteWithChildren
-  '/recruitment/$cycleId/applicants': typeof RecruitmentCycleIdApplicantsRoute
-  '/recruitment/$cycleId/disagreements': typeof RecruitmentCycleIdDisagreementsRoute
-  '/recruitment/$cycleId/exports': typeof RecruitmentCycleIdExportsRoute
-  '/recruitment/$cycleId/import': typeof RecruitmentCycleIdImportRoute
-  '/recruitment/$cycleId/queue': typeof RecruitmentCycleIdQueueRoute
-  '/recruitment/$cycleId/ranking': typeof RecruitmentCycleIdRankingRoute
-  '/recruitment/$cycleId/rubric': typeof RecruitmentCycleIdRubricRoute
-  '/recruitment/$cycleId/settings': typeof RecruitmentCycleIdSettingsRoute
-  '/recruitment/$cycleId/': typeof RecruitmentCycleIdIndexRoute
-  '/recruitment/$cycleId/applicant/$applicationId': typeof RecruitmentCycleIdApplicantApplicationIdRoute
-  '/recruitment/$cycleId/review/$assignmentId': typeof RecruitmentCycleIdReviewAssignmentIdRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/app': typeof AppRouteWithChildren
+  '/recruit': typeof RecruitRoute
+  '/signin': typeof SigninRoute
+  '/app/committees': typeof AppCommitteesRoute
+  '/app/dashboard': typeof AppDashboardRoute
+  '/app/profile': typeof AppProfileRoute
+  '/app/review': typeof AppReviewRoute
+  '/admin/forms/$formId': typeof AdminFormsFormIdRoute
+  '/app/apply/$teamSlug': typeof AppApplyTeamSlugRoute
+  '/app/apply/common': typeof AppApplyCommonRoute
+  '/app/submissions/$applicationId': typeof AppSubmissionsApplicationIdRoute
+  '/app/submissions/': typeof AppSubmissionsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/dashboard'
-    | '/recruitment'
-    | '/recruitment/$cycleId/applicants'
-    | '/recruitment/$cycleId/disagreements'
-    | '/recruitment/$cycleId/exports'
-    | '/recruitment/$cycleId/import'
-    | '/recruitment/$cycleId/queue'
-    | '/recruitment/$cycleId/ranking'
-    | '/recruitment/$cycleId/rubric'
-    | '/recruitment/$cycleId/settings'
-    | '/recruitment/$cycleId/'
-    | '/recruitment/$cycleId/applicant/$applicationId'
-    | '/recruitment/$cycleId/review/$assignmentId'
+    | '/admin'
+    | '/app'
+    | '/recruit'
+    | '/signin'
+    | '/app/committees'
+    | '/app/dashboard'
+    | '/app/profile'
+    | '/app/review'
+    | '/admin/forms/$formId'
+    | '/app/apply/$teamSlug'
+    | '/app/apply/common'
+    | '/app/submissions/$applicationId'
+    | '/app/submissions/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/dashboard'
-    | '/recruitment'
-    | '/recruitment/$cycleId/applicants'
-    | '/recruitment/$cycleId/disagreements'
-    | '/recruitment/$cycleId/exports'
-    | '/recruitment/$cycleId/import'
-    | '/recruitment/$cycleId/queue'
-    | '/recruitment/$cycleId/ranking'
-    | '/recruitment/$cycleId/rubric'
-    | '/recruitment/$cycleId/settings'
-    | '/recruitment/$cycleId'
-    | '/recruitment/$cycleId/applicant/$applicationId'
-    | '/recruitment/$cycleId/review/$assignmentId'
+    | '/admin'
+    | '/app'
+    | '/recruit'
+    | '/signin'
+    | '/app/committees'
+    | '/app/dashboard'
+    | '/app/profile'
+    | '/app/review'
+    | '/admin/forms/$formId'
+    | '/app/apply/$teamSlug'
+    | '/app/apply/common'
+    | '/app/submissions/$applicationId'
+    | '/app/submissions'
   id:
     | '__root__'
     | '/'
-    | '/dashboard'
-    | '/recruitment'
-    | '/recruitment/$cycleId/applicants'
-    | '/recruitment/$cycleId/disagreements'
-    | '/recruitment/$cycleId/exports'
-    | '/recruitment/$cycleId/import'
-    | '/recruitment/$cycleId/queue'
-    | '/recruitment/$cycleId/ranking'
-    | '/recruitment/$cycleId/rubric'
-    | '/recruitment/$cycleId/settings'
-    | '/recruitment/$cycleId/'
-    | '/recruitment/$cycleId/applicant/$applicationId'
-    | '/recruitment/$cycleId/review/$assignmentId'
+    | '/admin'
+    | '/app'
+    | '/recruit'
+    | '/signin'
+    | '/app/committees'
+    | '/app/dashboard'
+    | '/app/profile'
+    | '/app/review'
+    | '/admin/forms/$formId'
+    | '/app/apply/$teamSlug'
+    | '/app/apply/common'
+    | '/app/submissions/$applicationId'
+    | '/app/submissions/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  DashboardRoute: typeof DashboardRoute
-  RecruitmentRoute: typeof RecruitmentRouteWithChildren
+  AdminRoute: typeof AdminRouteWithChildren
+  AppRoute: typeof AppRouteWithChildren
+  RecruitRoute: typeof RecruitRoute
+  SigninRoute: typeof SigninRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -219,138 +213,140 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard': {
-      id: '/dashboard'
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recruit': {
+      id: '/recruit'
+      path: '/recruit'
+      fullPath: '/recruit'
+      preLoaderRoute: typeof RecruitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signin': {
+      id: '/signin'
+      path: '/signin'
+      fullPath: '/signin'
+      preLoaderRoute: typeof SigninRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/committees': {
+      id: '/app/committees'
+      path: '/committees'
+      fullPath: '/app/committees'
+      preLoaderRoute: typeof AppCommitteesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/dashboard': {
+      id: '/app/dashboard'
       path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/app/dashboard'
+      preLoaderRoute: typeof AppDashboardRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/recruitment': {
-      id: '/recruitment'
-      path: '/recruitment'
-      fullPath: '/recruitment'
-      preLoaderRoute: typeof RecruitmentRouteImport
-      parentRoute: typeof rootRouteImport
+    '/app/profile': {
+      id: '/app/profile'
+      path: '/profile'
+      fullPath: '/app/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/recruitment/$cycleId/': {
-      id: '/recruitment/$cycleId/'
-      path: '/$cycleId'
-      fullPath: '/recruitment/$cycleId/'
-      preLoaderRoute: typeof RecruitmentCycleIdIndexRouteImport
-      parentRoute: typeof RecruitmentRoute
+    '/app/review': {
+      id: '/app/review'
+      path: '/review'
+      fullPath: '/app/review'
+      preLoaderRoute: typeof AppReviewRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/recruitment/$cycleId/applicants': {
-      id: '/recruitment/$cycleId/applicants'
-      path: '/$cycleId/applicants'
-      fullPath: '/recruitment/$cycleId/applicants'
-      preLoaderRoute: typeof RecruitmentCycleIdApplicantsRouteImport
-      parentRoute: typeof RecruitmentRoute
+    '/admin/forms/$formId': {
+      id: '/admin/forms/$formId'
+      path: '/forms/$formId'
+      fullPath: '/admin/forms/$formId'
+      preLoaderRoute: typeof AdminFormsFormIdRouteImport
+      parentRoute: typeof AdminRoute
     }
-    '/recruitment/$cycleId/disagreements': {
-      id: '/recruitment/$cycleId/disagreements'
-      path: '/$cycleId/disagreements'
-      fullPath: '/recruitment/$cycleId/disagreements'
-      preLoaderRoute: typeof RecruitmentCycleIdDisagreementsRouteImport
-      parentRoute: typeof RecruitmentRoute
+    '/app/apply/$teamSlug': {
+      id: '/app/apply/$teamSlug'
+      path: '/apply/$teamSlug'
+      fullPath: '/app/apply/$teamSlug'
+      preLoaderRoute: typeof AppApplyTeamSlugRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/recruitment/$cycleId/exports': {
-      id: '/recruitment/$cycleId/exports'
-      path: '/$cycleId/exports'
-      fullPath: '/recruitment/$cycleId/exports'
-      preLoaderRoute: typeof RecruitmentCycleIdExportsRouteImport
-      parentRoute: typeof RecruitmentRoute
+    '/app/apply/common': {
+      id: '/app/apply/common'
+      path: '/apply/common'
+      fullPath: '/app/apply/common'
+      preLoaderRoute: typeof AppApplyCommonRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/recruitment/$cycleId/import': {
-      id: '/recruitment/$cycleId/import'
-      path: '/$cycleId/import'
-      fullPath: '/recruitment/$cycleId/import'
-      preLoaderRoute: typeof RecruitmentCycleIdImportRouteImport
-      parentRoute: typeof RecruitmentRoute
+    '/app/submissions/': {
+      id: '/app/submissions/'
+      path: '/submissions'
+      fullPath: '/app/submissions/'
+      preLoaderRoute: typeof AppSubmissionsIndexRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/recruitment/$cycleId/queue': {
-      id: '/recruitment/$cycleId/queue'
-      path: '/$cycleId/queue'
-      fullPath: '/recruitment/$cycleId/queue'
-      preLoaderRoute: typeof RecruitmentCycleIdQueueRouteImport
-      parentRoute: typeof RecruitmentRoute
-    }
-    '/recruitment/$cycleId/ranking': {
-      id: '/recruitment/$cycleId/ranking'
-      path: '/$cycleId/ranking'
-      fullPath: '/recruitment/$cycleId/ranking'
-      preLoaderRoute: typeof RecruitmentCycleIdRankingRouteImport
-      parentRoute: typeof RecruitmentRoute
-    }
-    '/recruitment/$cycleId/rubric': {
-      id: '/recruitment/$cycleId/rubric'
-      path: '/$cycleId/rubric'
-      fullPath: '/recruitment/$cycleId/rubric'
-      preLoaderRoute: typeof RecruitmentCycleIdRubricRouteImport
-      parentRoute: typeof RecruitmentRoute
-    }
-    '/recruitment/$cycleId/settings': {
-      id: '/recruitment/$cycleId/settings'
-      path: '/$cycleId/settings'
-      fullPath: '/recruitment/$cycleId/settings'
-      preLoaderRoute: typeof RecruitmentCycleIdSettingsRouteImport
-      parentRoute: typeof RecruitmentRoute
-    }
-    '/recruitment/$cycleId/applicant/$applicationId': {
-      id: '/recruitment/$cycleId/applicant/$applicationId'
-      path: '/$cycleId/applicant/$applicationId'
-      fullPath: '/recruitment/$cycleId/applicant/$applicationId'
-      preLoaderRoute: typeof RecruitmentCycleIdApplicantApplicationIdRouteImport
-      parentRoute: typeof RecruitmentRoute
-    }
-    '/recruitment/$cycleId/review/$assignmentId': {
-      id: '/recruitment/$cycleId/review/$assignmentId'
-      path: '/$cycleId/review/$assignmentId'
-      fullPath: '/recruitment/$cycleId/review/$assignmentId'
-      preLoaderRoute: typeof RecruitmentCycleIdReviewAssignmentIdRouteImport
-      parentRoute: typeof RecruitmentRoute
+    '/app/submissions/$applicationId': {
+      id: '/app/submissions/$applicationId'
+      path: '/submissions/$applicationId'
+      fullPath: '/app/submissions/$applicationId'
+      preLoaderRoute: typeof AppSubmissionsApplicationIdRouteImport
+      parentRoute: typeof AppRoute
     }
   }
 }
 
-interface RecruitmentRouteChildren {
-  RecruitmentCycleIdApplicantsRoute: typeof RecruitmentCycleIdApplicantsRoute
-  RecruitmentCycleIdDisagreementsRoute: typeof RecruitmentCycleIdDisagreementsRoute
-  RecruitmentCycleIdExportsRoute: typeof RecruitmentCycleIdExportsRoute
-  RecruitmentCycleIdImportRoute: typeof RecruitmentCycleIdImportRoute
-  RecruitmentCycleIdQueueRoute: typeof RecruitmentCycleIdQueueRoute
-  RecruitmentCycleIdRankingRoute: typeof RecruitmentCycleIdRankingRoute
-  RecruitmentCycleIdRubricRoute: typeof RecruitmentCycleIdRubricRoute
-  RecruitmentCycleIdSettingsRoute: typeof RecruitmentCycleIdSettingsRoute
-  RecruitmentCycleIdIndexRoute: typeof RecruitmentCycleIdIndexRoute
-  RecruitmentCycleIdApplicantApplicationIdRoute: typeof RecruitmentCycleIdApplicantApplicationIdRoute
-  RecruitmentCycleIdReviewAssignmentIdRoute: typeof RecruitmentCycleIdReviewAssignmentIdRoute
+interface AdminRouteChildren {
+  AdminFormsFormIdRoute: typeof AdminFormsFormIdRoute
 }
 
-const RecruitmentRouteChildren: RecruitmentRouteChildren = {
-  RecruitmentCycleIdApplicantsRoute: RecruitmentCycleIdApplicantsRoute,
-  RecruitmentCycleIdDisagreementsRoute: RecruitmentCycleIdDisagreementsRoute,
-  RecruitmentCycleIdExportsRoute: RecruitmentCycleIdExportsRoute,
-  RecruitmentCycleIdImportRoute: RecruitmentCycleIdImportRoute,
-  RecruitmentCycleIdQueueRoute: RecruitmentCycleIdQueueRoute,
-  RecruitmentCycleIdRankingRoute: RecruitmentCycleIdRankingRoute,
-  RecruitmentCycleIdRubricRoute: RecruitmentCycleIdRubricRoute,
-  RecruitmentCycleIdSettingsRoute: RecruitmentCycleIdSettingsRoute,
-  RecruitmentCycleIdIndexRoute: RecruitmentCycleIdIndexRoute,
-  RecruitmentCycleIdApplicantApplicationIdRoute:
-    RecruitmentCycleIdApplicantApplicationIdRoute,
-  RecruitmentCycleIdReviewAssignmentIdRoute:
-    RecruitmentCycleIdReviewAssignmentIdRoute,
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminFormsFormIdRoute: AdminFormsFormIdRoute,
 }
 
-const RecruitmentRouteWithChildren = RecruitmentRoute._addFileChildren(
-  RecruitmentRouteChildren,
-)
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
+interface AppRouteChildren {
+  AppCommitteesRoute: typeof AppCommitteesRoute
+  AppDashboardRoute: typeof AppDashboardRoute
+  AppProfileRoute: typeof AppProfileRoute
+  AppReviewRoute: typeof AppReviewRoute
+  AppApplyTeamSlugRoute: typeof AppApplyTeamSlugRoute
+  AppApplyCommonRoute: typeof AppApplyCommonRoute
+  AppSubmissionsApplicationIdRoute: typeof AppSubmissionsApplicationIdRoute
+  AppSubmissionsIndexRoute: typeof AppSubmissionsIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppCommitteesRoute: AppCommitteesRoute,
+  AppDashboardRoute: AppDashboardRoute,
+  AppProfileRoute: AppProfileRoute,
+  AppReviewRoute: AppReviewRoute,
+  AppApplyTeamSlugRoute: AppApplyTeamSlugRoute,
+  AppApplyCommonRoute: AppApplyCommonRoute,
+  AppSubmissionsApplicationIdRoute: AppSubmissionsApplicationIdRoute,
+  AppSubmissionsIndexRoute: AppSubmissionsIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  DashboardRoute: DashboardRoute,
-  RecruitmentRoute: RecruitmentRouteWithChildren,
+  AdminRoute: AdminRouteWithChildren,
+  AppRoute: AppRouteWithChildren,
+  RecruitRoute: RecruitRoute,
+  SigninRoute: SigninRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

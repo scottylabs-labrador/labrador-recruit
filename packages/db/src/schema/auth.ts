@@ -1,9 +1,6 @@
 import { relations } from "drizzle-orm";
 import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
-import { recruitmentMembership } from "./recruitment.ts";
-import { reviewAssignment } from "./reviews.ts";
-
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -12,24 +9,30 @@ export const user = pgTable("user", {
   image: text("image"),
 
   /**
-   * Global role, as opposed to the per-cycle roles in `recruitment_membership`.
+   * Global role, as opposed to the per-cycle authority in `permission_grant`.
    *
-   * It used to be derived entirely from the `groups` claim of a Keycloak access
-   * token. Local password accounts have no such token, so the role has to live
-   * somewhere the database can answer for. When an identity provider is
-   * configured its groups still win, and this is the fallback - which keeps a
-   * later move back to Keycloak a configuration change rather than a migration.
+   * The identity provider's `groups` claim wins whenever there is a token to
+   * read it from; this is the fallback for an account with no provider token,
+   * which is what a local password account is.
+   *
+   * TODO(track-b): #15 decides whether password sign-in survives at all. If it
+   * does not, this column and `must_change_password` go with it.
    */
   role: text("role").notNull().default("user"),
 
   /**
-   * Set when an administrator issued a temporary password. The interface makes
-   * the user choose their own before it will let them go anywhere else, so an
-   * account can never sit indefinitely on a password somebody else knows.
+   * Set when an administrator issued a temporary password.
+   *
+   * The interface makes the person choose their own before it will let them
+   * anywhere else, so an account never sits indefinitely on a password somebody
+   * else knows.
+   *
+   * TODO(track-b): see #15.
    */
   mustChangePassword: boolean("must_change_password").notNull().default(false),
-  createdAt: timestamp("created_at").notNull(),
-  updatedAt: timestamp("updated_at")
+
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
     .$onUpdate(() => new Date())
     .notNull(),
 });
@@ -38,10 +41,10 @@ export const session = pgTable(
   "session",
   {
     id: text("id").primaryKey(),
-    expiresAt: timestamp("expires_at").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     token: text("token").notNull().unique(),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
     ipAddress: text("ip_address"),
@@ -65,12 +68,12 @@ export const account = pgTable(
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
     idToken: text("id_token"),
-    accessTokenExpiresAt: timestamp("access_token_expires_at"),
-    refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
     scope: text("scope"),
     password: text("password"),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },
@@ -83,9 +86,9 @@ export const verification = pgTable(
     id: text("id").primaryKey(),
     identifier: text("identifier").notNull(),
     value: text("value").notNull(),
-    expiresAt: timestamp("expires_at").notNull(),
-    createdAt: timestamp("created_at").notNull(),
-    updatedAt: timestamp("updated_at")
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .$onUpdate(() => new Date())
       .notNull(),
   },
@@ -95,8 +98,6 @@ export const verification = pgTable(
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
-  recruitmentMemberships: many(recruitmentMembership),
-  reviewAssignments: many(reviewAssignment),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({

@@ -1,115 +1,113 @@
 /**
  * Access-control value types.
  *
- * This package imports types from `@recruit/db/schema` but never the database
- * client, so the identical predicates run in the browser and on the server.
+ * This package imports types from `@recruit/db/schema` but **never the database
+ * client**, so the identical predicates run in the browser and on the server.
+ * That is what stops one rule becoming two implementations that drift.
  */
 
-import type {
-  Application as DatabaseApplication,
-  CommitteeCandidacy as DatabaseCandidacy,
-  CommitteeDecision as DatabaseDecision,
-  ReviewAssignment as DatabaseAssignment,
-} from "@recruit/db/schema";
-
-/** The global role derived from Keycloak JWT groups. */
+/**
+ * The global role, derived from the identity provider's `groups` claim.
+ *
+ * Deliberately coarse. It decides whether somebody can bootstrap — create the
+ * first cycle, the first teams, the first grants — and nothing else. Authority
+ * over applicant data comes from `permission_grant` rows, not from here.
+ */
 export type Role = "admin" | "user" | "guest";
 
-/** The authenticated caller, as every existing ScottyStack service expects it. */
+/** The authenticated caller, before any cycle-scoped grants are resolved. */
 export type User = { id: string; role: Role };
 
-/** A recruitment role held within one cycle. */
-export type RecruitmentRole = "reviewer" | "committee_lead" | "recruitment_admin";
-
-/** One `recruitment_membership` row reduced to what the rules need. */
-export interface Membership {
-  role: RecruitmentRole;
-  /** Null for a cycle-wide membership, which is how admins are represented. */
-  committeeId: string | null;
-}
-
 /**
- * Everything the ability builder needs beyond the caller's identity.
+ * A role somebody holds over some scope, from a live `permission_grant` row.
  *
- * Built per request by the server. Two fields deserve explanation:
- *
- * `unblindedCandidacyIds` carries the candidacies where the caller has already
- * submitted their own review. Reviewer blindness depends on the state of a
- * *different* row, which a plain column comparison cannot express, so the
- * server resolves that set once and the rule then becomes an ordinary `$in`
- * condition that compiles to SQL like any other.
- *
- * `blindReviewEnabled` mirrors the cycle setting and hides applicant identity
- * from ordinary reviewers.
+ * "Live" is decided when the row is read — `revoked_at IS NULL` and
+ * (`expires_at IS NULL` or `expires_at > now()`), against the server clock.
+ * Nothing here is cached and nothing is embedded in a session, so revocation
+ * takes effect on the next request. See `docs/authorization.md` section 5.
  */
-export interface RecruitmentContext {
+export type GrantRole = "org_admin" | "committee_director" | "question_editor" | "reviewer";
+
+export interface Grant {
+  role: GrantRole;
+  scope: "organization" | "team";
+  /** Null for organization scope, required for team scope. The DB enforces it. */
+  teamId: string | null;
+  /** Null for a grant that is not tied to one recruitment cycle. */
   cycleId: string | null;
-  memberships: Membership[];
-  unblindedCandidacyIds?: string[];
-  blindReviewEnabled?: boolean;
 }
-
-/** The caller together with their recruitment standing in one cycle. */
-export interface RecruitmentUser extends User {
-  recruitment: RecruitmentContext;
-}
-
-export type ApplicationSubject = Pick<DatabaseApplication, "cycleId">;
-
-export type CandidacySubject = Pick<DatabaseCandidacy, "committeeId" | "active">;
 
 /**
- * Reviews and assignments share a subject shape because a review's visibility
- * is decided by its assignment's columns. Services join `review` to
- * `review_assignment` and apply the compiled predicate to the assignment table.
- */
-export interface AssignmentSubject {
-  reviewerUserId: DatabaseAssignment["reviewerUserId"];
-  candidacyId: DatabaseAssignment["candidacyId"];
-}
-
-export type ReviewSubject = AssignmentSubject;
-
-/**
- * A decision, and the committee whose decision it is.
+ * The caller, their live grants, and the two sets no column comparison can
+ * express.
  *
- * `committeeId` is not on the decision row itself - it reaches this through the
- * candidacy - but the rule cannot be committee-scoped without it, and a rule
- * that cannot be scoped is a rule that applies everywhere. A committee lead who
- * also reviews for another committee could otherwise record that committee's
- * decisions, because the only narrowing was the visibility predicate, and that
- * is the union of what someone leads and what they review.
+ * Resolved per request. The two id sets are the technique that turns cross-row
+ * rules into ordinary conditions the compiler can handle:
+ *
+ * - `assignedApplicationIds` — a team-scoped reviewer grant conveys **standing,
+ *   not content**. Assignment is a separate and necessary condition, and it is
+ *   the row of `docs/authorization.md` section 2's table that people get wrong.
+ * - `unblindedApplicationIds` — applications where *this* caller's own review is
+ *   `submitted`. A draft does not unblind. Whether somebody may read a peer's
+ *   scores depends on the state of a different row, which is why it cannot be a
+ *   column comparison.
  */
-export type DecisionSubject = Pick<DatabaseDecision, "candidacyId"> & {
-  committeeId: string;
-};
-
-/** Applicant identity fields, gated separately from the application body. */
-export interface IdentitySubject {
-  cycleId: string;
+export interface ScopedUser extends User {
+  /** The cycle these grants were resolved for. Null outside any cycle. */
+  cycleId: string | null;
+  grants: readonly Grant[];
+  assignedApplicationIds: readonly string[];
+  unblindedApplicationIds: readonly string[];
 }
 
-export type RecruitmentAction =
-  | "read"
-  | "readIdentity"
-  | "readLeadershipContext"
-  | "readPeerReview"
-  | "create"
-  | "update"
-  | "submit"
-  | "reopen"
-  | "assign"
-  | "decide"
-  | "configure"
-  | "import"
-  | "delete";
+/**
+ * Everything authorization is asked about, enumerated.
+ *
+ * Closed on purpose. A subject absent from this union is a subject with no
+ * rules, and `drizzleWhere` throws `NotPermittedError` rather than returning
+ * "no filter" — so a typo in a subject name fails loudly instead of quietly
+ * authorizing everything.
+ */
+export const SUBJECTS = [
+  "RecruitmentCycle",
+  "Team",
+  "RecruitmentOpening",
+  "Form",
+  "FormVersion",
+  "CandidateProfile",
+  "Application",
+  "Rubric",
+  "ReviewAssignment",
+  "Review",
+  "Decision",
+  "PermissionGrant",
+  "Invitation",
+  "File",
+] as const;
 
-export type RecruitmentSubjectName =
-  | "Application"
-  | "Identity"
-  | "Candidacy"
-  | "Assignment"
-  | "Review"
-  | "Decision"
-  | "Placement"
-  | "Cycle";
+export type Subject = (typeof SUBJECTS)[number];
+
+/**
+ * The actions, enumerated.
+ *
+ * `publish`, `assign`, `release` and `readPeerReview` are separate from the four
+ * CRUD verbs because each is a distinct authority somebody can hold without the
+ * others. A `question_editor` may `update` a form and must never `publish` one;
+ * a reviewer may `read` a `Review` of their own and must not `readPeerReview`
+ * until they have submitted. Collapsing either pair into "write" or "read" is
+ * how those distinctions get lost.
+ */
+export const ACTIONS = [
+  "read",
+  "create",
+  "update",
+  "delete",
+  "publish",
+  "assign",
+  "release",
+  "readPeerReview",
+  "export",
+  "grant",
+] as const;
+
+export type Action = (typeof ACTIONS)[number];

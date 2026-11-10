@@ -1,0 +1,146 @@
+/**
+ * The local file storage adapter.
+ *
+ * `#21` puts storage behind a port so the whole upload path can be built and
+ * tested before anyone has provisioned an R2 bucket (`#11`). This adapter is
+ * what the tests and `bun run dev` use.
+ *
+ * The thing worth testing here is the **signature**, because the local
+ * adapter's presigned URL has exactly the property the real one must have: the
+ * object key alone gets you nothing. A key is not a capability. If this
+ * adapter happily served any key it was handed, every test built on it would
+ * be proving the wrong thing.
+ */
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { LocalFileStorage } from "../src/lib/fileStorage.ts";
+
+let root: string;
+let storage: LocalFileStorage;
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), "recruit-files-"));
+  storage = new LocalFileStorage({
+    root,
+    publicBaseUrl: "http://localhost:3001",
+    secret: "test-secret-for-local-storage-only",
+  });
+});
+
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true });
+});
+
+describe("presigned URLs", () => {
+  it("issues a PUT url carrying the key, an expiry and a signature", async () => {
+    const presigned = await storage.presignPut("uploads/abc", {
+      contentType: "application/pdf",
+      expiresInSeconds: 600,
+    });
+
+    const url = new URL(presigned.url);
+    expect(url.searchParams.get("key")).toBe("uploads/abc");
+    expect(url.searchParams.get("exp")).toBeTruthy();
+    expect(url.searchParams.get("sig")).toBeTruthy();
+    expect(presigned.expiresAt.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("accepts a url it just issued", async () => {
+    const presigned = await storage.presignPut("uploads/abc", {
+      contentType: "application/pdf",
+      expiresInSeconds: 600,
+    });
+
+    expect(storage.verify(new URL(presigned.url).search, "put")).toEqual({
+      ok: true,
+      key: "uploads/abc",
+    });
+  });
+
+  it("refuses a url whose expiry has passed", async () => {
+    // Expiry is the whole reason a presigned URL is safe to hand to a browser:
+    // a leaked one stops working. A test asserting it is in the definition of
+    // done for a reason.
+    const presigned = await storage.presignPut("uploads/abc", {
+      contentType: "application/pdf",
+      expiresInSeconds: -1,
+    });
+
+    expect(storage.verify(new URL(presigned.url).search, "put").ok).toBe(false);
+  });
+
+  it("refuses a url whose key was swapped for another", async () => {
+    /*
+     * The signature covers the key, so the object key is **not** a capability.
+     * This is the property that makes a private bucket meaningful: knowing
+     * somebody else's key gets you nothing without a signature the backend
+     * issued for it.
+     */
+    const presigned = await storage.presignPut("uploads/mine", {
+      contentType: "application/pdf",
+      expiresInSeconds: 600,
+    });
+    const tampered = new URL(presigned.url);
+    tampered.searchParams.set("key", "uploads/theirs");
+
+    expect(storage.verify(tampered.search, "put").ok).toBe(false);
+  });
+
+  it("refuses a url whose expiry was extended", async () => {
+    const presigned = await storage.presignPut("uploads/abc", {
+      contentType: "application/pdf",
+      expiresInSeconds: 1,
+    });
+    const tampered = new URL(presigned.url);
+    tampered.searchParams.set("exp", String(Date.now() + 86_400_000));
+
+    expect(storage.verify(tampered.search, "put").ok).toBe(false);
+  });
+
+  it("does not accept a PUT signature for a GET", async () => {
+    // Otherwise an upload URL doubles as a download URL for the same key, and
+    // the write grant silently becomes a read grant.
+    const presigned = await storage.presignPut("uploads/abc", {
+      contentType: "application/pdf",
+      expiresInSeconds: 600,
+    });
+
+    expect(storage.verify(new URL(presigned.url).search, "get").ok).toBe(false);
+  });
+
+  it("refuses a url with no signature at all", () => {
+    expect(storage.verify("?key=uploads/abc&exp=99999999999", "get").ok).toBe(false);
+  });
+});
+
+describe("storing and reading bytes", () => {
+  it("round-trips an object", async () => {
+    await storage.put("uploads/abc", new Uint8Array([1, 2, 3, 4]));
+
+    const head = await storage.head("uploads/abc");
+    expect(head).toEqual({ sizeBytes: 4 });
+    expect(await storage.readPrefix("uploads/abc", 2)).toEqual(new Uint8Array([1, 2]));
+  });
+
+  it("reports nothing for a key that was never written", async () => {
+    // A `pending` row whose PUT never happened is the ordinary abandoned
+    // upload, so this is a state to report rather than an error to throw.
+    expect(await storage.head("uploads/never")).toBeNull();
+    expect(await storage.readPrefix("uploads/never", 4)).toBeNull();
+  });
+
+  it("refuses a key that tries to escape the storage root", async () => {
+    /*
+     * Keys are generated by us, so this should be unreachable — which is
+     * exactly why it is worth a test. The day somebody derives a key from an
+     * `original_filename`, this is the line that stops it being a write to
+     * anywhere on the disk.
+     */
+    await expect(storage.put("../../escaped", new Uint8Array([1]))).rejects.toThrow();
+    await expect(storage.head("../../escaped")).rejects.toThrow();
+  });
+});

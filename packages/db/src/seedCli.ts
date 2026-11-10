@@ -1,39 +1,29 @@
-//
-// Runnable entry point for `bun run db:seed`.
-//
-// Kept separate from `seed.ts` so that module stays importable from anywhere,
-// including Playwright, which transpiles its test files to CommonJS and rejects
-// the `import.meta` guard a self-executing script would need.
-//
+/**
+ * Runs the development seed against whatever `DATABASE_URL` points at.
+ *
+ * Deliberately a script rather than an endpoint. It truncates every table, and
+ * a deployment that could be made to do that over HTTP would be one
+ * misconfiguration away from erasing a live cycle.
+ */
+import process from "node:process";
 
 import { createDb } from "./index.ts";
-import { CRITERIA, seedRecruitmentData } from "./seed.ts";
+import { seedDevelopmentData } from "./seed.ts";
 
-async function main() {
-  const databaseUrl = process.env["DATABASE_URL"];
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is required");
-  }
-
-  const db = createDb(databaseUrl);
-  const summary = await seedRecruitmentData(db);
-
-  console.log(
-    [
-      `Seeded cycle ${summary.cycleId}`,
-      `  ${summary.staffCount} staff users`,
-      `  ${summary.committeeCount} committees`,
-      `  ${CRITERIA.length} rubric criteria`,
-      `  ${summary.applicantCount} synthetic applicants`,
-      `  ${summary.candidacyCount} candidacies`,
-      `  ${summary.assignmentCount} review assignments`,
-    ].join("\n"),
-  );
-
-  await db.$client.end();
+const databaseUrl = process.env["DATABASE_URL"];
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL is required");
 }
 
-main().catch((error: unknown) => {
-  console.error("Seed failed:", error);
-  process.exit(1);
-});
+if (/\b(prod|production)\b/.test(databaseUrl)) {
+  // A refusal rather than a prompt: this is run from a terminal, often from
+  // muscle memory, and the cost of being wrong is every row in the cycle.
+  throw new Error(
+    "DATABASE_URL looks like a production database. The seed truncates every table; refusing.",
+  );
+}
+
+const db = createDb(databaseUrl);
+await seedDevelopmentData(db);
+console.log("Seeded one open cycle, 2 committees, 12 applicants, and their reviews.");
+await db.$client.end();

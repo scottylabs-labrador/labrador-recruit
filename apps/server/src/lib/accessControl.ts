@@ -28,7 +28,19 @@ export async function getAcUserFromRequest(req: ExpressRequest): Promise<User> {
 
     const dbUser = rows[0]?.user;
     if (!dbUser) {
-      throw new Error("User not found");
+      /*
+       * A valid token for somebody we have never seen.
+       *
+       * Not an error: it is what a first sign-in looks like before the auth
+       * callback has written the account row, and it is also what a token from
+       * another realm looks like. Throwing here made it a 500 — a server fault
+       * for a request that was simply not authenticated, and one that reached
+       * the generic error branch.
+       *
+       * A guest with an empty id is the honest answer, and every caller already
+       * has to handle it.
+       */
+      return { id: "", role: "guest" };
     }
 
     return { id: dbUser.id, role: getRoleFromJwt(jwtPayload) };

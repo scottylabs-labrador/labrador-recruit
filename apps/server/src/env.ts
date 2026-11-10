@@ -62,6 +62,42 @@ const envSchema = z.object({
    * than inheriting it.
    */
   GITHUB_ENRICHMENT: z.enum(["on", "off"]).default("off"),
+  /*
+   * Object storage for applicant uploads.
+   *
+   * All optional, because `#11` has not provisioned a bucket yet and a
+   * deployment without one still has to boot. When the four `R2_*` values are
+   * present the R2 adapter is used; otherwise storage falls back to the local
+   * filesystem adapter, which `lib/storage.ts` refuses to do in production.
+   */
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET: z.string().optional(),
+  /** Where the local adapter writes. Development and tests only. */
+  FILE_STORAGE_ROOT: z.string().optional(),
+  /**
+   * Signs the local adapter's presigned URLs.
+   *
+   * No default. The first version shipped a published placeholder, reasoning
+   * that the adapter could never run in production - and the guard that was
+   * supposed to guarantee that was itself fail-open. Two mistakes that only
+   * bite together are still two mistakes, so this is optional and
+   * `lib/storage.ts` generates a random per-boot value when it is unset. A
+   * secret in the repository is a secret.
+   */
+  FILE_STORAGE_SECRET: z.string().optional(),
+  /**
+   * Opt in to the filesystem storage adapter.
+   *
+   * Required for it to be used at all, rather than inferred from `NODE_ENV`
+   * not being "production". An unset or misspelled `NODE_ENV` is an ordinary
+   * deployment mistake - `#11` records two variables that have already gone
+   * wrong that way on Railway - and inferring from its absence means the
+   * failure mode is "silently store applicant resumes on a container disk",
+   * which nobody notices until somebody asks for a file back.
+   */
+  ALLOW_LOCAL_FILE_STORAGE: z.enum(["on", "off"]).default("off"),
   SENTRY_DSN: z.string().optional(),
   SERVER_URL: z.url(),
   SERVER_PORT: z.coerce.number().default(80),

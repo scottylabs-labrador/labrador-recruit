@@ -20,11 +20,17 @@ export async function renderApp(path = "/") {
     isRefetching: false,
   });
 
+  /*
+   * The real client, with its real retry policy.
+   *
+   * This used to force `retry: false` for every query, and that is exactly how
+   * two defects reached the end-to-end suite unseen: the production client
+   * retried an expected 404 with backoff, so a page that should explain itself
+   * instantly sat on a skeleton, and the global error toast then reported
+   * "Something went wrong" over the explanation. A harness that is kinder than
+   * production tests a product that does not exist.
+   */
   const queryClient = getQueryClient();
-  queryClient.setDefaultOptions({
-    queries: { retry: false },
-    mutations: { retry: false },
-  });
 
   const router = createRouter({
     routeTree,

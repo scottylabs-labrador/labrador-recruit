@@ -1,14 +1,17 @@
+/**
+ * An in-process PostgreSQL for API tests.
+ *
+ * Runs the real migrations from `packages/db/drizzle`, so a schema mistake
+ * surfaces here rather than at deploy time, and a constraint behaves exactly as
+ * it will in production.
+ */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { PGlite } from "@electric-sql/pglite";
-import { account, user } from "@recruit/db/schema";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
-import jwt from "jsonwebtoken";
-
-import { privateKeyPem } from "./keys.ts";
 
 const migrationsFolder = path.resolve(
   fileURLToPath(new URL("../../../packages/db/drizzle", import.meta.url)),
@@ -20,77 +23,18 @@ export const testDb = drizzle({ client: pglite });
 await migrate(testDb, { migrationsFolder });
 
 /**
- * Every table must be listed here, or state leaks between tests. CASCADE makes
- * the order irrelevant, but a missing table is silent, so keep this in sync
- * with `packages/db/src/schema` (and with `e2e/db.ts`) whenever one is added.
+ * Empties every table, discovered from the catalogue.
+ *
+ * A hand-maintained list is the thing somebody forgets when they add a table,
+ * and the symptom is order-dependent failures in a suite nobody changed.
  */
-export async function resetDb() {
-  await testDb.execute(sql`
-    TRUNCATE TABLE
-      "audit_event",
-      "applicant_github_profile",
-      "import_row",
-      "import_batch",
-      "final_placement",
-      "committee_decision",
-      "review_score",
-      "review",
-      "review_assignment",
-      "rubric_criterion",
-      "rubric",
-      "committee_candidacy",
-      "committee_preference",
-      "application_answer",
-      "question_definition",
-      "application",
-      "applicant",
-      "recruitment_membership",
-      "cycle_committee",
-      "committee",
-      "recruitment_cycle",
-      "session",
-      "account",
-      "verification",
-      "user"
-    CASCADE
+export async function resetDb(): Promise<void> {
+  const result = await testDb.execute<{ tablename: string }>(sql`
+    SELECT tablename FROM pg_tables
+    WHERE schemaname = 'public' AND tablename <> '__drizzle_migrations'
   `);
-}
-
-export async function seedUser(opts: {
-  id: string;
-  name: string;
-  email: string;
-  accountId: string;
-}) {
-  const now = new Date();
-  await testDb.insert(user).values({
-    id: opts.id,
-    name: opts.name,
-    email: opts.email,
-    emailVerified: true,
-    createdAt: now,
-    updatedAt: now,
-  });
-  await testDb.insert(account).values({
-    id: `${opts.id}-account`,
-    accountId: opts.accountId,
-    providerId: "keycloak",
-    userId: opts.id,
-    createdAt: now,
-    updatedAt: now,
-  });
-}
-
-export function bearerToken(opts: { sub: string; groups?: string[] }) {
-  return jwt.sign({ sub: opts.sub, groups: opts.groups }, privateKeyPem, {
-    algorithm: "RS256",
-    issuer: process.env["AUTH_ISSUER"],
-    audience: process.env["AUTH_CLIENT_ID"],
-    keyid: "test-kid",
-    expiresIn: "1h",
-  });
-}
-
-export function authHeader(opts: { sub: string; groups?: string[] }) {
-  return { Authorization: `Bearer ${bearerToken(opts)}` };
+  const names = result.rows.map((row) => `"${row.tablename}"`).join(", ");
+  if (names.length > 0) {
+    await testDb.execute(sql.raw(`TRUNCATE TABLE ${names} CASCADE`));
+  }
 }

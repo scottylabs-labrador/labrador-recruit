@@ -77,4 +77,18 @@ function Checkbox({ className, ...props }: React.ComponentProps<"input">) {
   );
 }
 
-export { Checkbox, FieldError, FieldHint, Input, Label, Select, Textarea };
+function Radio({ className, ...props }: React.ComponentProps<"input">) {
+  return (
+    <input
+      type="radio"
+      data-slot="radio"
+      className={cn(
+        "size-4 shrink-0 border border-input accent-primary outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export { Checkbox, FieldError, FieldHint, Input, Label, Radio, Select, Textarea };

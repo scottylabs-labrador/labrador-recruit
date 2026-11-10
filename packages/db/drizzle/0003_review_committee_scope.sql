@@ -1,2 +1,0 @@
-ALTER TABLE "recruitment_cycle" ADD COLUMN "review_committee_id" uuid;--> statement-breakpoint
-ALTER TABLE "recruitment_cycle" ADD CONSTRAINT "recruitment_cycle_review_committee_id_committee_id_fk" FOREIGN KEY ("review_committee_id") REFERENCES "public"."committee"("id") ON DELETE set null ON UPDATE no action;
