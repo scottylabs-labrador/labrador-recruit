@@ -115,9 +115,24 @@ describe("an organization admin", () => {
     expect(ability.can("create", "RecruitmentOpening")).toBe(true);
   });
 
-  it("owns the common form", () => {
+  it("owns the common form, publishing included", () => {
     expect(ability.can("update", on("Form", { teamId: null }))).toBe(true);
-    expect(ability.can("publish", "FormVersion")).toBe(true);
+    /*
+     * `publish` on **`Form`** is the gate the route actually checks, and the
+     * first version of these rules granted it on `FormVersion` only - so an
+     * organization admin could edit the common form and not publish it, which
+     * no test caught until the route existed. Asserting the subject the gate
+     * uses, not the one that reads well.
+     */
+    expect(ability.can("publish", on("Form", { teamId: null }))).toBe(true);
+    expect(ability.can("publish", on("FormVersion", { teamId: null }))).toBe(true);
+  });
+
+  it("does not own a committee's form", () => {
+    // Running the cycle is not running a committee. A director owns their own
+    // questions, and an org admin who needs to change them asks or grants.
+    expect(ability.can("update", on("Form", { teamId: LABRADOR }))).toBe(false);
+    expect(ability.can("publish", on("Form", { teamId: LABRADOR }))).toBe(false);
   });
 
   it("releases decisions, which nobody else may do", () => {

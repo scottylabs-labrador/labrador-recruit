@@ -1,4 +1,4 @@
-import { account, user } from "@recruit/db/schema";
+import { account, permissionGrant, user } from "@recruit/db/schema";
 import jwt from "jsonwebtoken";
 
 import { testDb } from "./harness.ts";
@@ -55,4 +55,43 @@ export async function seedApplicant(
     updatedAt: now,
   });
   return { andrewId, headers: authHeader({ sub: `${andrewId}-sub` }) };
+}
+
+/**
+ * A signed-in staff member holding one live grant.
+ *
+ * Built on `seedApplicant`, because the identity half is identical: everybody
+ * here is a CMU account, and authority is a `permission_grant` row rather than
+ * anything about the account. That is the whole shape of this platform's
+ * authorization, so the fixture mirrors it instead of inventing a shortcut.
+ */
+export async function seedStaff(
+  andrewId: string,
+  opts: {
+    role: "org_admin" | "committee_director" | "question_editor" | "reviewer";
+    teamId?: string | null;
+    cycleId?: string | null;
+    grantedBy?: string;
+    expiresAt?: Date | null;
+    revokedAt?: Date | null;
+  },
+): Promise<{ andrewId: string; headers: Record<string, string> }> {
+  const seeded = await seedApplicant(andrewId);
+  const organization = opts.role === "org_admin";
+
+  await testDb.insert(permissionGrant).values({
+    userId: andrewId,
+    role: opts.role,
+    scope: organization ? "organization" : "team",
+    // The database refuses the other combinations, so the fixture cannot
+    // construct a grant the product could not.
+    teamId: organization ? null : (opts.teamId ?? null),
+    cycleId: opts.cycleId ?? null,
+    grantedBy: opts.grantedBy ?? andrewId,
+    expiresAt: opts.expiresAt ?? null,
+    revokedAt: opts.revokedAt ?? null,
+    createdAt: new Date(),
+  });
+
+  return seeded;
 }

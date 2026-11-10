@@ -1,5 +1,5 @@
 import type { MongoAbility } from "@casl/ability";
-import { AbilityBuilder, createMongoAbility } from "@casl/ability";
+import { AbilityBuilder, createMongoAbility, subject } from "@casl/ability";
 
 import type { Action, Grant, GrantRole, ScopedUser, Subject } from "./types.ts";
 
@@ -28,6 +28,20 @@ export interface SubjectAttributes {
 }
 
 export type AppAbility = MongoAbility<[Action, Subject | SubjectAttributes]>;
+
+/**
+ * Tags a row's attributes with the subject they belong to.
+ *
+ * Exported so callers never import CASL directly: this package owns the
+ * mechanism, and a server or browser that reached past it for `subject()`
+ * would be one upgrade away from a different problem. It also removes the
+ * easiest mistake with this API — CASL's third `can` argument is a *field
+ * name*, so passing a plain object there throws rather than evaluating the
+ * condition.
+ */
+export function forSubject(type: Subject, attributes: SubjectAttributes): unknown {
+  return subject(type, attributes as never);
+}
 
 /**
  * Whether a grant applies in the cycle being acted in.
@@ -120,8 +134,8 @@ export function defineAbilityFor(user: ScopedUser): AppAbility {
      * with a check constraint — so this condition is the same statement the
      * schema makes.
      */
-    can(["read", "create", "update"], "Form", { teamId: null });
-    can(["read", "create", "update", "publish"], "FormVersion");
+    can(["read", "create", "update", "publish"], "Form", { teamId: null });
+    can(["read", "create", "update", "publish"], "FormVersion", { teamId: null });
 
     // Releasing decisions is the organization's act and nobody else's: it is
     // what turns a recorded outcome into something an applicant can see.
